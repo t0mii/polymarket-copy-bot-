@@ -381,7 +381,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 price_tracker.subscribe_condition(cid)
                 logger.info("[DIFF] Neuer Trade #%d (via Position-Diff): %s @ %.0fc (%s)",
                             trade_id, pos["market_question"][:40], entry_price * 100, pos["side"])
-                db.log_activity("buy", "BUY", "Copied trade from %s" % username,
+                db.log_activity("buy", "BUY", "Copied position from %s" % username,
                                 "#%d %s @ %dc" % (trade_id, pos["market_question"][:40], entry_price * 100))
         return new_trades
     except Exception as e:
@@ -803,7 +803,7 @@ def copy_followed_wallets():
                 )
                 # Activity Log + Dashboard Notification
                 try:
-                    db.log_activity("buy", "BUY", "Copied trade from %s" % username,
+                    db.log_activity("buy", "BUY", "Copied position from %s" % username,
                                     "#%d %s @ %dc — $%.2f" % (trade_id, question[:45], round(entry_price*100), size))
                     from dashboard.app import broadcast_event
                     broadcast_event("new_trade", {

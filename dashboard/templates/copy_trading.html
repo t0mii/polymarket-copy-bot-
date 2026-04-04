@@ -252,8 +252,8 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="card fi d4"><div class="card-lbl">In Positions</div><div class="card-val neu" id="v-active">$---</div><div class="card-sub" id="v-open-detail"></div></div>
     <div class="card fi d1"><div class="card-lbl">Pending Payout</div><div class="card-val neu" id="v-pending">$---</div><div class="card-sub">won, auto-redeeming</div></div>
     <div class="card fi d2"><div class="card-lbl">Return</div><div class="card-val neu" id="v-roi">---</div><div class="card-sub" id="v-roi-detail"></div></div>
-    <div class="card fi d3"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-pnl-sub"></div></div>
-    <div class="card fi d4"><div class="card-lbl">Open P&L</div><div class="card-val neu" id="v-pnl-main">---</div><div class="card-sub">from active positions</div></div>
+    <div class="card fi d3"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-open-sub"></div></div>
+    <div class="card fi d4"><div class="card-lbl">Open P&L</div><div class="card-val neu" id="v-pnl-main">---</div><div class="card-sub" id="v-pnl-sub"></div></div>
     <div class="card fi d1"><div class="card-lbl">Record</div><div class="card-val-sm" id="v-record-line1">---</div><div class="card-val-sm" id="v-record-line2">---</div><div class="card-sub" id="v-record-detail"></div></div>
     <div class="card fi d2"><div class="card-lbl">Win Rate</div><div class="card-val neu" id="v-wr">---</div><div class="card-sub" id="v-wr-detail"></div></div>
   </div>
@@ -381,8 +381,11 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('v-pending').className='card-val '+(pv>0.5?'up':'neu');
 
   // Row 2: Your Trades
-  $('v-open').textContent=s.open_trades;$('v-open').className='card-val '+(s.open_trades>0?'gld':'neu');
-  $('v-open-detail').textContent='';
+  const activeCount=D.open_trades?D.open_trades.filter(t=>t.current_price>0.01&&t.current_price<0.99).length:0;
+  const pendingCount=D.open_trades?D.open_trades.filter(t=>t.current_price>=0.99).length:0;
+  const lostCount=D.open_trades?D.open_trades.filter(t=>t.current_price<=0.01).length:0;
+  $('v-open').textContent=activeCount;$('v-open').className='card-val '+(activeCount>0?'gld':'neu');
+  $('v-open-sub').innerHTML='<span style="color:var(--green)">'+pendingCount+' pending</span> · <span style="color:var(--red)">'+lostCount+' lost</span>';
   $('v-pnl-main').textContent=(openPnl>=0?'+':'-')+'$'+fm(Math.abs(openPnl));
   $('v-pnl-main').className='card-val '+pc(openPnl);
   $('v-pnl-sub').textContent='';
