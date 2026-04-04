@@ -712,20 +712,18 @@ def copy_followed_wallets():
                 continue
 
             # No-rebuy: don't re-enter a market we recently closed/sold
-            if cid:
-                _recently_sold = [ct for ct in _cached_open_trades
-                                  if ct.get("condition_id") == cid and ct.get("status") == "closed"]
-                if not _recently_sold:
-                    try:
-                        from database.db import get_connection as _gc
-                        with _gc() as _rc:
-                            _was_closed = _rc.execute(
-                                "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
-                                "AND closed_at > datetime('now', '-1 hour')", (cid,)
-                            ).fetchone()
-                            if _was_closed:
-                                logger.info("[SKIP] Recently closed (no-rebuy 1h): %s", question[:40])
-                                continue
+            if cid and config.NO_REBUY_MINUTES > 0:
+                try:
+                    from database.db import get_connection as _gc
+                    with _gc() as _rc:
+                        _was_closed = _rc.execute(
+                            "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
+                            "AND closed_at > datetime('now', '-%d minutes')" % config.NO_REBUY_MINUTES, (cid,)
+                        ).fetchone()
+                        if _was_closed:
+                            logger.info("[SKIP] Recently closed (no-rebuy %dmin): %s",
+                                        config.NO_REBUY_MINUTES, question[:40])
+                            continue
                     except Exception:
                         pass
 

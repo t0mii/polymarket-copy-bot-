@@ -40,6 +40,7 @@ MAX_SPREAD = float(os.getenv("MAX_SPREAD", "0.05"))
 MAX_COPIES_PER_MARKET = int(os.getenv("MAX_COPIES_PER_MARKET", "1"))
 ENTRY_TRADE_SEC = int(os.getenv("ENTRY_TRADE_SEC", "300"))
 MAX_HOURS_BEFORE_EVENT = float(os.getenv("MAX_HOURS_BEFORE_EVENT", "0"))  # Only buy X hours before event starts (0=disabled)
+NO_REBUY_MINUTES = int(os.getenv("NO_REBUY_MINUTES", "0"))  # Don't re-enter closed markets for X min (0=disabled)
 
 # --- Hedge Detection ---
 HEDGE_WAIT_SECS = int(os.getenv("HEDGE_WAIT_SECS", "60"))
