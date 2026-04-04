@@ -348,18 +348,26 @@ def api_settings():
     """Current bot settings (read-only)."""
     followed = db.get_followed_wallets()
     settings = [
-        {"key": "LIVE_MODE", "value": str(config.LIVE_MODE), "desc": "Real money mode"},
-        {"key": "STARTING_BALANCE", "value": "$" + str(config.STARTING_BALANCE), "desc": "Total deposited (for profit calculation)"},
-        {"key": "BET_SIZE_PCT", "value": str(config.BET_SIZE_PCT), "desc": "% of portfolio per position"},
-        {"key": "MAX_POSITION_SIZE", "value": "$" + str(config.MAX_POSITION_SIZE), "desc": "Max $ per position"},
-        {"key": "MIN_TRADER_USD", "value": "$" + str(config.MIN_TRADER_USD), "desc": "Only positions where trader spends $X+"},
-        {"key": "MIN_ENTRY_PRICE", "value": str(int(config.MIN_ENTRY_PRICE * 100)) + "c", "desc": "Skip trash farming below this"},
-        {"key": "MAX_ENTRY_PRICE", "value": str(int(config.MAX_ENTRY_PRICE * 100)) + "c", "desc": "Skip hedges above this"},
-        {"key": "MAX_COPIES_PER_MARKET", "value": str(config.MAX_COPIES_PER_MARKET), "desc": "Max copies of same market"},
-        {"key": "MAX_OPEN_POSITIONS", "value": str(config.MAX_OPEN_POSITIONS), "desc": "Max simultaneous positions"},
-        {"key": "COPY_SCAN_INTERVAL", "value": str(config.COPY_SCAN_INTERVAL) + "s", "desc": "Seconds between scans"},
-        {"key": "CASH_FLOOR", "value": "$" + str(config.CASH_FLOOR), "desc": "Stop buying below this"},
-        {"key": "MAX_SPREAD", "value": str(int(config.MAX_SPREAD * 100)) + "%", "desc": "Max bid/ask spread"},
+        {"key": "LIVE_MODE", "value": str(config.LIVE_MODE), "desc": "Real money trading enabled"},
+        {"key": "STARTING_BALANCE", "value": "$" + str(config.STARTING_BALANCE), "desc": "Deposit amount for P&L calculation"},
+        {"key": "COPY_SCAN_INTERVAL", "value": str(config.COPY_SCAN_INTERVAL) + "s", "desc": "Seconds between trader scans"},
+        {"key": "BET_SIZE_PCT", "value": str(int(config.BET_SIZE_PCT * 100)) + "%", "desc": "Base bet size as % of portfolio"},
+        {"key": "MAX_POSITION_SIZE", "value": "$" + str(config.MAX_POSITION_SIZE), "desc": "Hard cap per single position"},
+        {"key": "RATIO_MIN", "value": str(config.RATIO_MIN) + "x", "desc": "Min conviction multiplier (small trader bet)"},
+        {"key": "RATIO_MAX", "value": str(config.RATIO_MAX) + "x", "desc": "Max conviction multiplier (large trader bet)"},
+        {"key": "MIN_TRADER_USD", "value": "$" + str(config.MIN_TRADER_USD), "desc": "Ignore trader buys below this amount"},
+        {"key": "MIN_ENTRY_PRICE", "value": str(int(config.MIN_ENTRY_PRICE * 100)) + "¢", "desc": "Skip trash farming below this"},
+        {"key": "MAX_ENTRY_PRICE", "value": str(int(config.MAX_ENTRY_PRICE * 100)) + "¢", "desc": "Skip near-certain bets above this"},
+        {"key": "MAX_COPIES_PER_MARKET", "value": str(config.MAX_COPIES_PER_MARKET), "desc": "One copy per market, no doubling up"},
+        {"key": "MAX_PER_EVENT", "value": "$" + str(config.MAX_PER_EVENT), "desc": "Max $ per event/game (caps multiple bets on same game)"},
+        {"key": "MAX_EXPOSURE_PER_TRADER", "value": str(int(config.MAX_EXPOSURE_PER_TRADER * 100)) + "%", "desc": "Default max % of portfolio per trader"},
+        {"key": "TRADER_EXPOSURE_MAP", "value": config.TRADER_EXPOSURE_MAP or "default", "desc": "Per-trader exposure overrides"},
+        {"key": "HEDGE_WAIT_SECS", "value": str(config.HEDGE_WAIT_SECS) + "s", "desc": "Default hedge detection wait time"},
+        {"key": "HEDGE_WAIT_TRADERS", "value": config.HEDGE_WAIT_TRADERS or "none", "desc": "Traders with hedge detection enabled"},
+        {"key": "NO_REBUY_MINUTES", "value": str(config.NO_REBUY_MINUTES) + " min", "desc": "Block re-entry after close (0=disabled)"},
+        {"key": "MAX_OPEN_POSITIONS", "value": str(config.MAX_OPEN_POSITIONS), "desc": "Max simultaneous open positions"},
+        {"key": "CASH_FLOOR", "value": "$" + str(config.CASH_FLOOR), "desc": "Stop buying below this cash level"},
+        {"key": "MAX_SPREAD", "value": str(int(config.MAX_SPREAD * 100)) + "%", "desc": "Max bid/ask spread tolerance"},
     ]
     traders = []
     for w in followed:
@@ -574,9 +582,6 @@ def api_copy_chart():
     })
 
 
-@app.route("/copy/history")
-def copy_history():
-    return render_template("history.html")
 
 
 @app.route("/api/copy/history")

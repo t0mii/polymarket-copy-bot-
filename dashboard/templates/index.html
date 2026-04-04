@@ -3,73 +3,124 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — Poly Copybot</title>
+<title>Settings — Poly CopyBot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#06060a;--bg2:#0c0c12;--bg3:#12121c;--border:#1e1e30;--gold:#c9a84c;--gold-dim:rgba(201,168,76,0.2);--green:#34d399;--red:#f87171;--text:#e8e4dc;--text-dim:#5c5a6a;--text-mid:#8a889a;--font:'Manrope',system-ui,sans-serif;--mono:'Fira Code',monospace}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-weight:300;line-height:1.65;min-height:100vh}
+.app{max-width:900px;margin:0 auto;padding:20px 5% 40px}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px}
+.hd-left{display:flex;align-items:center;gap:8px}
+.logo{font-size:1.2rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.logo-sub{font-size:.7rem;color:var(--text-dim);letter-spacing:.12em}
+.nav a{font-size:.78rem;color:var(--text-mid);text-decoration:none;padding:8px 16px;letter-spacing:.1em;text-transform:uppercase;border:1px solid transparent;transition:all .25s}
+.nav a:hover,.nav a.act{color:var(--gold);border-color:var(--gold-dim)}
+.sec{margin-bottom:24px}
+.sec-t{font-size:.75rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);display:block}
+table{width:100%;border-collapse:collapse}
+th{background:var(--bg3);color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:.12em;font-size:.65rem;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid rgba(30,30,48,0.5);font-size:.85rem}
+tr:hover{background:rgba(201,168,76,0.02)}
+.k{color:var(--gold);font-family:var(--mono);font-size:.82rem;font-weight:500}
+.v{font-family:var(--mono);font-weight:600;font-size:.85rem}
+.d{color:var(--text-dim);font-size:.82rem}
+.cat{font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:2px;display:inline-block;margin-bottom:2px}
+.cat-size{background:rgba(52,211,153,.1);color:var(--green)}
+.cat-filter{background:rgba(201,168,76,.1);color:var(--gold)}
+.cat-hedge{background:rgba(248,113,113,.1);color:var(--red)}
+.cat-risk{background:rgba(138,136,154,.15);color:var(--text-mid)}
+.cat-core{background:rgba(201,168,76,.15);color:var(--gold)}
+.trader-link{color:var(--gold);text-decoration:none;font-weight:600}
+.trader-link:hover{opacity:.7}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.off{background:var(--red);box-shadow:0 0 4px var(--red)}
+.foot{margin-top:20px;padding-top:12px;border-top:1px solid var(--border);font-size:.75rem;color:var(--text-dim)}
+</style>
 </head>
 <body>
-<div class="container">
-    <header>
-        <div style="display:flex;align-items:center;gap:8px"><img src="/static/logo.png" alt="SSC" style="height:36px"><div><h1>Poly Copybot</h1><div style="font-size:.8rem;color:#5c5a6a;letter-spacing:.12em;font-weight:300">by Super Sauna Club</div></div></div>
-        <div class="nav">
-            <a href="/copy">Terminal</a>
-            <a href="/wallets">Settings</a>
-            <a href="/copy/history">History</a>
-        </div>
-    </header>
-
-    <div class="section">
-        <h2>Bot Settings</h2>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Setting</th><th>Value</th><th>Description</th></tr></thead>
-                <tbody id="settingsBody">
-                    <tr><td colspan="3" style="color:var(--text-dim)">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+<div class="app">
+  <div class="hd">
+    <div class="hd-left">
+      <div><div class="logo">POLY COPYBOT</div><div class="logo-sub">by Super Sauna Club</div></div>
     </div>
-
-    <div class="section">
-        <h2>Followed Traders</h2>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Trader</th><th>PnL</th><th>Win Rate</th><th>Domain</th></tr></thead>
-                <tbody id="tradersBody">
-                    <tr><td colspan="4" style="color:var(--text-dim)">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+    <div class="nav">
+      <a href="/copy">Dashboard</a>
+      <a href="/wallets" class="act">Settings</a>
     </div>
+  </div>
 
-    <div class="section">
-        <h2>System Status</h2>
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Service</th><th>Status</th></tr></thead>
-                <tbody id="statusBody">
-                    <tr><td colspan="2" style="color:var(--text-dim)">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+  <div class="sec">
+    <span class="sec-t">Bot Configuration</span>
+    <table>
+      <thead><tr><th style="width:30%">Setting</th><th style="width:20%">Value</th><th>Description</th></tr></thead>
+      <tbody id="settingsBody"><tr><td colspan="3" class="d">Loading...</td></tr></tbody>
+    </table>
+  </div>
 
-    <footer>To change settings: ssh walter@10.0.0.17 "nano ~/polymarketscanner/.env"</footer>
+  <div class="sec">
+    <span class="sec-t">Followed Traders</span>
+    <table>
+      <thead><tr><th>Trader</th><th>Address</th><th>PnL (All Time)</th><th>Exposure Limit</th></tr></thead>
+      <tbody id="tradersBody"><tr><td colspan="4" class="d">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="sec">
+    <span class="sec-t">System Status</span>
+    <table>
+      <thead><tr><th>Service</th><th>Status</th></tr></thead>
+      <tbody id="statusBody"><tr><td colspan="2" class="d">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="foot">All settings are read-only. To change: edit <code style="color:var(--gold)">.env</code> on the server and restart the bot.</div>
 </div>
 <script>
+const cats={
+  'LIVE_MODE':'core','STARTING_BALANCE':'core','COPY_SCAN_INTERVAL':'core',
+  'BET_SIZE_PCT':'size','MAX_POSITION_SIZE':'size','RATIO_MIN':'size','RATIO_MAX':'size',
+  'MIN_TRADER_USD':'filter','MIN_ENTRY_PRICE':'filter','MAX_ENTRY_PRICE':'filter',
+  'MAX_COPIES_PER_MARKET':'filter','MAX_PER_EVENT':'filter','MAX_SPREAD':'filter','NO_REBUY_MINUTES':'filter',
+  'MAX_EXPOSURE_PER_TRADER':'risk','TRADER_EXPOSURE_MAP':'risk','MAX_OPEN_POSITIONS':'risk','CASH_FLOOR':'risk',
+  'HEDGE_WAIT_SECS':'hedge','HEDGE_WAIT_TRADERS':'hedge'
+};
+const catLabels={core:'Core',size:'Position Sizing',filter:'Trade Filters',risk:'Risk Management',hedge:'Hedge Detection'};
+const catCls={core:'cat-core',size:'cat-size',filter:'cat-filter',risk:'cat-risk',hedge:'cat-hedge'};
+
 fetch('/api/settings').then(r=>r.json()).then(d=>{
-    document.getElementById('settingsBody').innerHTML=d.settings.map(s=>
-        `<tr><td style="color:var(--gold);font-family:'Fira Code',monospace">${s.key}</td>
-         <td style="font-weight:600;font-family:'Fira Code',monospace">${s.value}</td>
-         <td style="color:var(--text-dim)">${s.desc}</td></tr>`).join('');
-    document.getElementById('tradersBody').innerHTML=d.traders.map(t=>
-        `<tr><td><a href="https://polymarket.com/profile/${t.address}" target="_blank">${t.username}</a></td>
-         <td class="${t.pnl>=0?'positive':'negative'}">$${Number(t.pnl).toLocaleString()}</td>
-         <td>${t.win_rate}%</td><td>${t.domain}</td></tr>`).join('')||'<tr><td colspan="4">No traders followed</td></tr>';
-    document.getElementById('statusBody').innerHTML=d.status.map(s=>
-        `<tr><td>${s.name}</td><td style="color:${s.ok?'var(--green)':'var(--red)'}">${s.label}</td></tr>`).join('');
-}).catch(()=>{document.getElementById('settingsBody').innerHTML='<tr><td colspan="3" style="color:var(--red)">Failed to load</td></tr>'});
+  // Group settings by category
+  let lastCat='';
+  document.getElementById('settingsBody').innerHTML=d.settings.map(s=>{
+    const c=cats[s.key]||'core';
+    const label=catLabels[c]||c;
+    let catHtml='';
+    if(c!==lastCat){catHtml=`<tr><td colspan="3" style="padding:12px 12px 4px"><span class="cat ${catCls[c]}">${label}</span></td></tr>`;lastCat=c}
+    return catHtml+`<tr><td class="k">${s.key}</td><td class="v">${s.value}</td><td class="d">${s.desc}</td></tr>`;
+  }).join('');
+
+  // Parse exposure map for per-trader limits
+  const expMap={};
+  const mapSetting=d.settings.find(s=>s.key==='TRADER_EXPOSURE_MAP');
+  if(mapSetting&&mapSetting.value!=='default'){
+    mapSetting.value.split(',').forEach(e=>{const[n,v]=e.split(':');if(n&&v)expMap[n.trim()]=Math.round(parseFloat(v)*100)+'%'});
+  }
+  const defaultExp=d.settings.find(s=>s.key==='MAX_EXPOSURE_PER_TRADER');
+  const defPct=defaultExp?defaultExp.value:'33%';
+
+  document.getElementById('tradersBody').innerHTML=d.traders.map(t=>
+    `<tr><td><a class="trader-link" href="https://polymarket.com/profile/${t.address}" target="_blank">${t.username}</a></td>
+     <td class="d" style="font-family:var(--mono);font-size:.75rem">${t.address.substring(0,8)}...${t.address.substring(38)}</td>
+     <td class="${t.pnl>=0?'pos':'neg'}" style="font-family:var(--mono);font-weight:600">$${Number(t.pnl||0).toLocaleString()}</td>
+     <td style="font-family:var(--mono)">${expMap[t.username]||defPct}</td></tr>`
+  ).join('')||'<tr><td colspan="4" class="d">No traders followed</td></tr>';
+
+  document.getElementById('statusBody').innerHTML=d.status.map(s=>
+    `<tr><td>${s.name}</td><td><span class="dot ${s.ok?'on':'off'}"></span>${s.label}</td></tr>`).join('');
+}).catch(()=>{document.getElementById('settingsBody').innerHTML='<tr><td colspan="3" style="color:var(--red)">Failed to load settings</td></tr>'});
 </script>
 </body>
 </html>
