@@ -98,10 +98,11 @@ def update_prices():
                             from database.db import get_connection
                             _cid_lost = _p.get("conditionId", "")
                             with get_connection() as _conn:
+                                _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _updated = _conn.execute(
-                                    "UPDATE copy_trades SET status='closed', pnl_realized=? "
+                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=? "
                                     "WHERE condition_id=? AND status='open'",
-                                    (round(-_iv, 2), _cid_lost)).rowcount
+                                    (round(-_iv, 2), _now, _cid_lost)).rowcount
                                 if _updated:
                                     logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, (_p.get("title") or "")[:40])
                                     _db.log_activity("resolved", "LOSS", "Position lost",
@@ -124,11 +125,12 @@ def update_prices():
                             # Close matching copy_trade in DB
                             try:
                                 from database.db import get_connection
+                                _now2 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 with get_connection() as _conn:
                                     _conn.execute(
-                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=? "
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=?, closed_at=? "
                                         "WHERE condition_id=? AND status='open'",
-                                        (_pnl, _cp, _cid))
+                                        (_pnl, _cp, _now2, _cid))
                             except Exception:
                                 pass
         except Exception:

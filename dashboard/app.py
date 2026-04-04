@@ -103,16 +103,19 @@ def api_live_data():
     # Build trader + timestamp lookup from copy_trades DB
     _trader_by_cid = {}
     _time_by_cid = {}
+    _closed_at_by_cid = {}
     try:
         from database.db import get_connection
         with get_connection() as _conn:
             for _row in _conn.execute(
-                "SELECT condition_id, wallet_username, created_at FROM copy_trades "
+                "SELECT condition_id, wallet_username, created_at, closed_at FROM copy_trades "
                 "WHERE condition_id != '' AND status != 'baseline' "
                 "ORDER BY created_at DESC"
             ).fetchall():
                 _trader_by_cid[_row["condition_id"]] = _row["wallet_username"]
                 _time_by_cid[_row["condition_id"]] = _row["created_at"] or ""
+                if _row["closed_at"]:
+                    _closed_at_by_cid[_row["condition_id"]] = _row["closed_at"]
     except Exception:
         pass
 
@@ -238,7 +241,7 @@ def api_live_data():
                 "market_slug": bv.get("slug", ""),
                 "event_slug": bv.get("eventSlug", ""),
                 "sport": _csport,
-                "closed_at": datetime.fromtimestamp(sv["timestamp"]).strftime("%Y-%m-%d %H:%M") if sv.get("timestamp") else "",
+                "closed_at": _closed_at_by_cid.get(cid, datetime.fromtimestamp(sv["timestamp"]).strftime("%Y-%m-%d %H:%M") if sv.get("timestamp") else ""),
                 "created_at": "",
             })
     except Exception:
