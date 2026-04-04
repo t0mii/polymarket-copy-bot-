@@ -655,7 +655,15 @@ function fmtReport(t){
     .replace(/(\d+c>)(\d+c)/g,'<span style="font-family:var(--mono);font-size:.82em;color:var(--text-mid)">$1$2</span>')
     // Trader name before [open]/[closed] tag
     .replace(/\s(\w+)\s(<span[^>]*>(?:open|closed)<\/span>)/g,' <span style="color:var(--gold);font-size:.82em;font-weight:500">$1</span> $2')
-    // Indented position lines: dim the market name
+    // Position lines as grid: $PnL | Market | Price | Trader | Status
+    .replace(/(  )(\$[+-][\d.]+)\s+([^<\d][^<]*?)\s+(\d+c>\d+c)\s+(\w+)\s+(<span[^>]*>(?:open|closed)<\/span>)/g,
+      '$1<span style="display:inline-grid;grid-template-columns:65px 1fr 80px 70px 50px;gap:4px;width:100%;align-items:center;font-size:.88em">' +
+      '<span style="font-family:var(--mono);font-weight:600">$2</span>' +
+      '<span style="color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">$3</span>' +
+      '<span style="font-family:var(--mono);color:var(--text-mid);font-size:.9em">$4</span>' +
+      '<span style="color:var(--gold);font-size:.9em">$5</span>' +
+      '$6</span>')
+    // Fallback for lines without trader name
     .replace(/(  )(\$[+-][\d.]+\s+)([^<\d][^<]*?)(\s+\d+c>)/g,'$1$2<span style="color:var(--text-dim)">$3</span>$4');
 }
 function buildPreview(raw){
@@ -688,15 +696,15 @@ function buildPreview(raw){
     // Best/worst
     const bHtml=best?'<span style="color:var(--green)"><span style="font-size:.82em;opacity:.6">best:</span> '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">WIN</span>')+'</span>':'';
     const wHtml=worst?'<span style="color:var(--red)"><span style="font-size:.82em;opacity:.6">worst:</span> '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">LOSS</span>')+'</span>':'';
-    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;gap:8px;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:12px;min-width:0">
-        <span style="color:var(--gold);font-weight:700;font-size:1.1em">${name}</span>
-        <span style="color:${pnlCol};font-weight:700;font-size:1.25em;font-family:var(--mono)">\$${pnlStr}</span>
-        <span style="font-size:.9em">${recHtml}</span>
-        <span style="color:${vc};font-weight:700;font-size:.78em;letter-spacing:.08em;background:${vBg};padding:3px 10px;border-radius:3px;text-transform:uppercase;white-space:nowrap">${verdict}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:1em">
-        ${lastPnl?'<span style="color:var(--text-dim)">'+lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>')+'</span><span style="color:var(--border-h);margin:0 4px">·</span>':''}${bHtml}${wHtml?'<span style="color:var(--border-h);margin:0 1px">·</span>'+wHtml:''}
+    return`<div style="display:grid;grid-template-columns:90px 80px 70px auto;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--gold);font-weight:700;font-size:1.05em;overflow:hidden;text-overflow:ellipsis">${name}</span>
+      <span style="color:${pnlCol};font-weight:700;font-size:1.15em;font-family:var(--mono)">\$${pnlStr}</span>
+      <span style="font-size:.88em">${recHtml}</span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="color:${vc};font-weight:700;font-size:.75em;letter-spacing:.08em;background:${vBg};padding:2px 8px;border-radius:3px;text-transform:uppercase;white-space:nowrap">${verdict}</span>
+        ${lastPnl?'<span style="color:var(--text-dim);font-size:.88em">'+lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>')+'</span>':''}
+        ${bHtml?'<span style="font-size:.88em">'+bHtml+'</span>':''}
+        ${wHtml?'<span style="font-size:.88em">'+wHtml+'</span>':''}
       </div>
     </div>`;
   }).join('');
