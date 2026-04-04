@@ -3,81 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — Poly CopyBot</title>
+<title>Poly CopyBot by Super Sauna Club</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Fira+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#06060a;--bg2:#0c0c12;--bg3:#12121c;--border:#1e1e30;--gold:#c9a84c;--gold-dim:rgba(201,168,76,0.2);--green:#34d399;--red:#f87171;--text:#e8e4dc;--text-dim:#5c5a6a;--text-mid:#8a889a;--font:'Manrope',system-ui,sans-serif;--mono:'Fira Code',monospace}
-body{background:var(--bg);color:var(--text);font-family:var(--font);font-weight:300;line-height:1.65;min-height:100vh}
-.app{max-width:900px;margin:0 auto;padding:20px 5% 40px}
-.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px}
-.hd-left{display:flex;align-items:center;gap:8px}
-.logo{font-size:1.2rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
-.logo-sub{font-size:.7rem;color:var(--text-dim);letter-spacing:.12em}
-.nav a{font-size:.78rem;color:var(--text-mid);text-decoration:none;padding:8px 16px;letter-spacing:.1em;text-transform:uppercase;border:1px solid transparent;transition:all .25s}
-.nav a:hover,.nav a.act{color:var(--gold);border-color:var(--gold-dim)}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#06060a;--bg2:#0c0c12;--bg3:#12121c;--bg4:#1a1a28;
+  --border:#1e1e30;--border-h:#2e2e48;
+  --gold:#c9a84c;--gold-bright:#e4c868;--gold-dim:rgba(201,168,76,0.2);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.15);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.15);
+  --text:#e8e4dc;--text-dim:#5c5a6a;--text-mid:#8a889a;
+  --font:'Manrope',system-ui,sans-serif;--mono:'Fira Code','Courier New',monospace;
+}
+html{font-size:15px}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-weight:300;line-height:1.65;min-height:100vh;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(201,168,76,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.03) 1px,transparent 1px);
+  background-size:80px 80px;animation:gridDrift 60s linear infinite}
+@keyframes gridDrift{to{background-position:80px 80px}}
+.app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 5% 40px}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.logo{font-size:1.25rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);text-shadow:0 0 30px rgba(201,168,76,0.2)}
+.logo-sub{font-size:.68rem;color:var(--text-dim);letter-spacing:.12em;font-weight:300}
+.nav a{font-size:.78rem;color:var(--text-mid);text-decoration:none;padding:8px 18px;border:1px solid transparent;letter-spacing:0.12em;text-transform:uppercase;font-weight:400;transition:all .25s}
+.nav a:hover,.nav a.act{color:var(--gold);border-color:rgba(201,168,76,0.35)}
+
 .sec{margin-bottom:24px}
-.sec-t{font-size:.75rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);display:block}
+.sec-hd{font-size:.72rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+.tw{overflow-x:auto;border:1px solid var(--border);background:var(--bg2)}
 table{width:100%;border-collapse:collapse}
-th{background:var(--bg3);color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:.12em;font-size:.65rem;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
-td{padding:10px 12px;border-bottom:1px solid rgba(30,30,48,0.5);font-size:.85rem}
+th{background:var(--bg3);color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.14em;font-size:.68rem;padding:12px 14px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:10px 14px;border-bottom:1px solid rgba(30,30,48,0.6);font-weight:300;font-size:.86rem}
 tr:hover{background:rgba(201,168,76,0.02)}
-.k{color:var(--gold);font-family:var(--mono);font-size:.82rem;font-weight:500}
-.v{font-family:var(--mono);font-weight:600;font-size:.85rem}
-.d{color:var(--text-dim);font-size:.82rem}
-.cat{font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:2px;display:inline-block;margin-bottom:2px}
+
+.k{color:var(--gold);font-family:var(--mono);font-size:.8rem;font-weight:500}
+.v{font-family:var(--mono);font-weight:600;font-size:.84rem;white-space:nowrap}
+.d{color:var(--text-mid);font-size:.83rem}
+
+.cat{font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:2px;display:inline-block}
+.cat-core{background:rgba(201,168,76,.12);color:var(--gold)}
 .cat-size{background:rgba(52,211,153,.1);color:var(--green)}
-.cat-filter{background:rgba(201,168,76,.1);color:var(--gold)}
-.cat-hedge{background:rgba(248,113,113,.1);color:var(--red)}
-.cat-risk{background:rgba(138,136,154,.15);color:var(--text-mid)}
-.cat-core{background:rgba(201,168,76,.15);color:var(--gold)}
-.trader-link{color:var(--gold);text-decoration:none;font-weight:600}
+.cat-filter{background:rgba(138,136,154,.12);color:var(--text-mid)}
+.cat-risk{background:rgba(248,113,113,.1);color:var(--red)}
+.cat-hedge{background:rgba(201,168,76,.08);color:var(--gold-bright)}
+
+.trader-link{color:var(--gold);text-decoration:none;font-weight:600;letter-spacing:.03em}
 .trader-link:hover{opacity:.7}
-.pos{color:var(--green)}.neg{color:var(--red)}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.pos{color:var(--green);font-weight:600}.neg{color:var(--red);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px}
 .dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 .dot.off{background:var(--red);box-shadow:0 0 4px var(--red)}
-.foot{margin-top:20px;padding-top:12px;border-top:1px solid var(--border);font-size:.75rem;color:var(--text-dim)}
+.foot{margin-top:16px;font-size:.75rem;color:var(--text-dim);font-family:var(--mono)}
+.foot code{color:var(--gold)}
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="hd">
-    <div class="hd-left">
+  <header class="hd">
+    <div style="display:flex;align-items:center;gap:8px">
       <div><div class="logo">POLY COPYBOT</div><div class="logo-sub">by Super Sauna Club</div></div>
     </div>
-    <div class="nav">
-      <a href="/copy">Dashboard</a>
+    <nav class="nav">
+      <a href="/copy">Terminal</a>
       <a href="/wallets" class="act">Settings</a>
-    </div>
-  </div>
+    </nav>
+  </header>
 
   <div class="sec">
-    <span class="sec-t">Bot Configuration</span>
-    <table>
-      <thead><tr><th style="width:200px">Setting</th><th style="width:100px">Value</th><th>Description</th></tr></thead>
+    <div class="sec-hd">Bot Configuration</div>
+    <div class="tw"><table>
+      <thead><tr><th style="width:190px">Setting</th><th style="width:90px">Value</th><th>Description</th></tr></thead>
       <tbody id="settingsBody"><tr><td colspan="3" class="d">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="sec">
-    <span class="sec-t">Followed Traders</span>
-    <table>
+    <div class="sec-hd">Followed Traders</div>
+    <div class="tw"><table>
       <thead><tr><th>Trader</th><th>Address</th><th>PnL (All Time)</th><th>Exposure Limit</th></tr></thead>
       <tbody id="tradersBody"><tr><td colspan="4" class="d">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="sec">
-    <span class="sec-t">System Status</span>
-    <table>
+    <div class="sec-hd">System Status</div>
+    <div class="tw"><table>
       <thead><tr><th>Service</th><th>Status</th></tr></thead>
       <tbody id="statusBody"><tr><td colspan="2" class="d">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
   </div>
 
-  <div class="foot">All settings are read-only. To change: edit <code style="color:var(--gold)">.env</code> on the server and restart the bot.</div>
+  <div class="foot">Read-only. To change settings: edit <code>.env</code> and restart the bot.</div>
 </div>
 <script>
 const cats={
@@ -92,17 +111,14 @@ const catLabels={core:'Core',size:'Position Sizing',filter:'Trade Filters',risk:
 const catCls={core:'cat-core',size:'cat-size',filter:'cat-filter',risk:'cat-risk',hedge:'cat-hedge'};
 
 fetch('/api/settings').then(r=>r.json()).then(d=>{
-  // Group settings by category
   let lastCat='';
   document.getElementById('settingsBody').innerHTML=d.settings.map(s=>{
     const c=cats[s.key]||'core';
-    const label=catLabels[c]||c;
     let catHtml='';
-    if(c!==lastCat){catHtml=`<tr><td colspan="3" style="padding:12px 12px 4px"><span class="cat ${catCls[c]}">${label}</span></td></tr>`;lastCat=c}
+    if(c!==lastCat){catHtml=`<tr><td colspan="3" style="padding:14px 14px 4px;border:0"><span class="cat ${catCls[c]}">${catLabels[c]||c}</span></td></tr>`;lastCat=c}
     return catHtml+`<tr><td class="k">${s.key}</td><td class="v">${s.value}</td><td class="d">${s.desc}</td></tr>`;
   }).join('');
 
-  // Parse exposure map for per-trader limits
   const expMap={};
   const mapSetting=d.settings.find(s=>s.key==='TRADER_EXPOSURE_MAP');
   if(mapSetting&&mapSetting.value!=='default'){
@@ -114,13 +130,13 @@ fetch('/api/settings').then(r=>r.json()).then(d=>{
   document.getElementById('tradersBody').innerHTML=d.traders.map(t=>
     `<tr><td><a class="trader-link" href="https://polymarket.com/profile/${t.address}" target="_blank">${t.username}</a></td>
      <td class="d" style="font-family:var(--mono);font-size:.75rem">${t.address.substring(0,8)}...${t.address.substring(38)}</td>
-     <td class="${t.pnl>=0?'pos':'neg'}" style="font-family:var(--mono);font-weight:600">$${Number(t.pnl||0).toLocaleString()}</td>
-     <td style="font-family:var(--mono)">${expMap[t.username]||defPct}</td></tr>`
+     <td class="${(t.pnl||0)>=0?'pos':'neg'}" style="font-family:var(--mono)">$${Number(t.pnl||0).toLocaleString()}</td>
+     <td style="font-family:var(--mono);font-weight:600">${expMap[t.username]||defPct}</td></tr>`
   ).join('')||'<tr><td colspan="4" class="d">No traders followed</td></tr>';
 
   document.getElementById('statusBody').innerHTML=d.status.map(s=>
     `<tr><td>${s.name}</td><td><span class="dot ${s.ok?'on':'off'}"></span>${s.label}</td></tr>`).join('');
-}).catch(()=>{document.getElementById('settingsBody').innerHTML='<tr><td colspan="3" style="color:var(--red)">Failed to load settings</td></tr>'});
+}).catch(()=>{document.getElementById('settingsBody').innerHTML='<tr><td colspan="3" style="color:var(--red)">Failed to load</td></tr>'});
 </script>
 </body>
 </html>
