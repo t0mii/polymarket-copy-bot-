@@ -123,6 +123,9 @@ def api_live_data():
     except Exception:
         pass
 
+    # Build open trades lookup by condition_id
+    _open_by_cid = {t.get("condition_id", ""): t for t in _db_open_trades if t.get("condition_id")}
+
     # Real open positions — fetch directly with currentValue/initialValue
     open_positions = []
     try:
@@ -161,15 +164,20 @@ def api_live_data():
             _sport = _detect_sport(rp.get("slug", ""), rp.get("title", ""))
 
             _cid = rp.get("conditionId", "")
-            # Use DB values for size/entry if available (accurate for bot copies)
             _db_size = None
             _db_entry = None
+            _db_side = None
+            _open_match = _open_by_cid.get(_cid)
             if _cid in _trader_by_cid:
-                for _dbt in _db_open_trades:
-                    if _dbt["condition_id"] == _cid:
-                        _db_size = _dbt["size"]
-                        _db_entry = _dbt["entry_price"]
-                        break
+                if not _open_match:
+                    continue  # known cid but closed → skip
+                _db_size = _open_match.get("size")
+                _db_entry = _open_match.get("entry_price")
+                _db_side = _open_match.get("side", "")
+                # Skip the opposite outcome (we only hold one side)
+                if _db_side and _db_side.lower() != (outcome or "").lower() and _db_side.lower() != side.lower():
+                    continue
+                side = _db_side or side
             _show_size = round(_db_size, 2) if _db_size else round(iv, 2)
             _show_entry = _db_entry if _db_entry else ap
             # PnL: shares × (current_price - entry_price)
