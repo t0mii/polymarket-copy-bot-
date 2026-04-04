@@ -667,14 +667,13 @@ function fmtReport(t){
     .replace(/(  )(\$[+-][\d.]+\s+)([^<\d][^<]*?)(\s+\d+c>)/g,'$1$2<span style="color:var(--text-dim)">$3</span>$4');
 }
 function buildPreview(raw){
-  // Parse preview lines: "Name total: $PnL | record | verdict | last X: $PnL | best: ... | worst: ..."
-  return raw.split('\n').filter(l=>l.trim()).map(line=>{
+  // Parse all lines first, then render as one table
+  const lines=raw.split('\n').filter(l=>l.trim());
+  const parsed=[];
+  for(const line of lines){
     const m=line.match(/^(\w+) total: \$([\+\-][\d.]+)\s*\|\s*(.+)$/);
-    if(!m)return'<div style="color:var(--text-dim)">'+line+'</div>';
+    if(!m){parsed.push(null);continue}
     const[,name,pnlStr,rest]=m;
-    const pnl=parseFloat(pnlStr);
-    const pnlCol=pnl>=0?'var(--green)':'var(--red)';
-    // Parse segments
     const segs=rest.split(/\s*\|\s*/);
     let record='',verdict='',best='',worst='',lastPnl='';
     for(const s of segs){
@@ -684,27 +683,31 @@ function buildPreview(raw){
       else if(s.startsWith('worst:'))worst=s.replace('worst: ','');
       else if(s.startsWith('last '))lastPnl=s;
     }
-    // Verdict badge
+    parsed.push({name,pnlStr,pnl:parseFloat(pnlStr),record,verdict,best,worst,lastPnl});
+  }
+  return'<table style="width:100%;border-collapse:collapse">'+parsed.filter(Boolean).map(p=>{
+    const{name,pnlStr,pnl,record,verdict,best,worst,lastPnl}=p;
+    const pnlCol=pnl>=0?'var(--green)':'var(--red)';
+    const recHtml=record.replace(/(\d+)W/g,'<span style="color:var(--green);font-weight:600">$1W</span>')
+                        .replace(/(\d+)L/g,'<span style="color:var(--red);font-weight:600">$1L</span>')
+                        .replace(/(\d+ open)/g,'<span style="color:var(--text-dim)">$1</span>');
     const vc=verdict.includes('profitable')||verdict.includes('winning')?'var(--green)':
              verdict.includes('losing')?'var(--red)':verdict==='mixed'?'var(--gold)':'var(--text-dim)';
     const vBg=verdict.includes('profitable')||verdict.includes('winning')?'rgba(52,211,153,.12)':
               verdict.includes('losing')?'rgba(248,113,113,.12)':verdict==='mixed'?'rgba(201,168,76,.1)':'rgba(92,90,106,.1)';
-    // Record coloring
-    const recHtml=record.replace(/(\d+)W/g,'<span style="color:var(--green);font-weight:600">$1W</span>')
-                        .replace(/(\d+)L/g,'<span style="color:var(--red);font-weight:600">$1L</span>')
-                        .replace(/(\d+ open)/g,'<span style="color:var(--text-dim)">$1</span>');
-    // Best/worst
-    const bHtml=best?'<span style="color:var(--green)"><span style="font-size:.82em;opacity:.6">best:</span> '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">WIN</span>')+'</span>':'';
-    const wHtml=worst?'<span style="color:var(--red)"><span style="font-size:.82em;opacity:.6">worst:</span> '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">LOSS</span>')+'</span>':'';
-    return`<table style="width:100%;border-bottom:1px solid var(--border);border-collapse:collapse"><tr>
-      <td style="color:var(--gold);font-weight:700;font-size:1.05em;padding:8px 0;width:90px">${name}</td>
-      <td style="color:${pnlCol};font-weight:700;font-size:1.1em;font-family:var(--mono);width:80px">\$${pnlStr}</td>
-      <td style="font-size:.88em;width:65px">${recHtml}</td>
-      <td style="width:100px"><span style="color:${vc};font-weight:700;font-size:.7em;letter-spacing:.06em;background:${vBg};padding:2px 7px;border-radius:3px;text-transform:uppercase">${verdict}</span></td>
-      <td style="font-size:.88em;color:var(--text-dim);width:100px">${lastPnl?lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>'):''}</td>
-      <td style="font-size:.88em">${bHtml||''}</td>
-      <td style="font-size:.88em">${wHtml||''}</td>
-    </tr></table>`;
+    const bH=best?'<span style="color:var(--green)">▲ '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;font-size:.8em;padding:0 3px;border-radius:2px;font-weight:700">WIN</span>')+'</span>':'';
+    const wH=worst?'<span style="color:var(--red)">▼ '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;font-size:.8em;padding:0 3px;border-radius:2px;font-weight:700">LOSS</span>')+'</span>':'';
+    const lH=lastPnl?lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>'):'';
+    return`<tr style="border-bottom:1px solid var(--border)">
+      <td style="color:var(--gold);font-weight:700;font-size:1.05em;padding:8px 4px">${name}</td>
+      <td style="color:${pnlCol};font-weight:700;font-size:1.1em;font-family:var(--mono);padding:8px 4px">\$${pnlStr}</td>
+      <td style="font-size:.88em;padding:8px 4px">${recHtml}</td>
+      <td style="padding:8px 4px"><span style="color:${vc};font-weight:700;font-size:.7em;letter-spacing:.06em;background:${vBg};padding:2px 7px;border-radius:3px;text-transform:uppercase">${verdict}</span></td>
+      <td style="font-size:.88em;color:var(--text-dim);padding:8px 4px">${lH}</td>
+      <td style="font-size:.88em;padding:8px 4px">${bH}</td>
+      <td style="font-size:.88em;padding:8px 4px">${wH}</td>
+    </tr>`;
+  }).join('')+'</table>';
   }).join('');
 }
 function loadReport(){
