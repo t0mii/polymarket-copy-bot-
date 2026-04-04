@@ -366,7 +366,7 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||t.title
     ['coventry','\u26BD','EFL'],['derby','\u26BD','EFL'],['sporting','\u26BD','SOC'],['santa clara','\u26BD','SOC'],['rayo','\u26BD','SOC'],['elche','\u26BD','SOC'],['coquimbo','\u26BD','SOC'],['cobresal','\u26BD','SOC'],['uni\u00F3n','\u26BD','SOC'],['riestra','\u26BD','SOC'],['estudiante','\u26BD','SOC'],['san lorenzo','\u26BD','SOC'],['toulouse','\u26BD','SOC'],['paris','\u26BD','SOC'],['psg','\u26BD','SOC'],
     ['shelton','\uD83C\uDFBE','ATP'],['ficovich','\uD83C\uDFBE','ATP'],['san luis potosi','\uD83C\uDFBE','ATP'],
     ['lol','\uD83C\uDFAE','LOL'],['ncaa','\uD83C\uDFC0','NCAA']];
-  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'',l:''}}
+  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'\uD83C\uDFAF',l:'BET'}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
     const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
