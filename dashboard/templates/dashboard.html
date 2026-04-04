@@ -626,22 +626,22 @@ function fmtReport(t){
     .replace(/(  )(\$[+-][\d.]+\s+)([^<\d][^<]*?)(\s+\d+c>)/g,'$1$2<span style="color:var(--text-dim)">$3</span>$4');
 }
 function buildPreview(raw){
-  // Parse preview lines: "Last X from Name: $PnL | record | verdict | best: ... | worst: ..."
+  // Parse preview lines: "Name total: $PnL | record | verdict | last X: $PnL | best: ... | worst: ..."
   return raw.split('\n').filter(l=>l.trim()).map(line=>{
-    const m=line.match(/^Last (\d+) from (\w+): \$([\+\-][\d.]+)\s*\|\s*(.+)$/);
+    const m=line.match(/^(\w+) total: \$([\+\-][\d.]+)\s*\|\s*(.+)$/);
     if(!m)return'<div style="color:var(--text-dim)">'+line+'</div>';
-    const[,count,name,pnlStr,rest]=m;
+    const[,name,pnlStr,rest]=m;
     const pnl=parseFloat(pnlStr);
     const pnlCol=pnl>=0?'var(--green)':'var(--red)';
     // Parse segments
     const segs=rest.split(/\s*\|\s*/);
-    let record='',verdict='',best='',worst='',totalPnl='';
+    let record='',verdict='',best='',worst='',lastPnl='';
     for(const s of segs){
       if(s.match(/^\d+[WL]/))record=s;
       else if(s.match(/^(all |mostly |mixed|no )/))verdict=s;
       else if(s.startsWith('best:'))best=s.replace('best: ','');
       else if(s.startsWith('worst:'))worst=s.replace('worst: ','');
-      else if(s.startsWith('total:'))totalPnl=s.replace('total: ','');
+      else if(s.startsWith('last '))lastPnl=s;
     }
     // Verdict badge
     const vc=verdict.includes('profitable')||verdict.includes('winning')?'var(--green)':
@@ -663,7 +663,7 @@ function buildPreview(raw){
         <span style="color:${vc};font-weight:700;font-size:.78em;letter-spacing:.08em;background:${vBg};padding:3px 10px;border-radius:3px;text-transform:uppercase;white-space:nowrap">${verdict}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:1em">
-        ${totalPnl?'<span style="font-size:.82em;color:var(--text-dim)">total:</span> <span style="font-weight:600;color:'+(totalPnl.includes('-')?'var(--red)':'var(--green)')+'">'+totalPnl+'</span><span style="color:var(--border-h);margin:0 4px">·</span>':''}${bHtml}${wHtml?'<span style="color:var(--border-h);margin:0 1px">·</span>'+wHtml:''}
+        ${lastPnl?'<span style="font-size:.82em;color:var(--text-dim)">'+lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+'">$'+v+'</span>')+'</span><span style="color:var(--border-h);margin:0 4px">·</span>':''}${bHtml}${wHtml?'<span style="color:var(--border-h);margin:0 1px">·</span>'+wHtml:''}
       </div>
     </div>`;
   }).join('');

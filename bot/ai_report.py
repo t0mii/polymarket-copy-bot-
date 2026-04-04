@@ -231,7 +231,9 @@ def generate_report() -> str:
         worst = min(trades, key=lambda t: t["pnl"]) if trades else None
 
         total_pnl = cp["realized"] + cp["unrealized"]
-        parts = ["Last %d from %s: $%+.2f" % (n, cp["name"], pnl)]
+        total_trades = cp["open"] + cp["closed"]
+        # Total first (the real number), then last 10 for trend
+        parts = ["%s total: $%+.2f" % (cp["name"], total_pnl)]
         rec = []
         if wins_n: rec.append("%dW" % wins_n)
         if loss_n: rec.append("%dL" % loss_n)
@@ -239,7 +241,8 @@ def generate_report() -> str:
         if rec:
             parts.append("/".join(rec))
         parts.append(_verdict(wins_n, loss_n))
-        parts.append("total: $%+.2f" % total_pnl)
+        if n < total_trades:
+            parts.append("last %d: $%+.2f" % (n, pnl))
         if best and best["pnl"] > 0.20:
             tag = " W" if best["current"] >= 0.99 else ""
             parts.append("best: %s +$%.2f%s" % (_short(best["market"], 18), best["pnl"], tag))
