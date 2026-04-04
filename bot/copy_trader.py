@@ -711,6 +711,24 @@ def copy_followed_wallets():
                 logger.info("[SKIP] Empty question")
                 continue
 
+            # No-rebuy: don't re-enter a market we recently closed/sold
+            if cid:
+                _recently_sold = [ct for ct in _cached_open_trades
+                                  if ct.get("condition_id") == cid and ct.get("status") == "closed"]
+                if not _recently_sold:
+                    try:
+                        from database.db import get_connection as _gc
+                        with _gc() as _rc:
+                            _was_closed = _rc.execute(
+                                "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
+                                "AND closed_at > datetime('now', '-1 hour')", (cid,)
+                            ).fetchone()
+                            if _was_closed:
+                                logger.info("[SKIP] Recently closed (no-rebuy 1h): %s", question[:40])
+                                continue
+                    except Exception:
+                        pass
+
             # === RN1 SMART-FILTER ===
             # 1) Min Trader USD: Nur echte Conviction-Trades kopieren, Noise ignorieren
             dollar_value = t.get("usdc_size", 0)
