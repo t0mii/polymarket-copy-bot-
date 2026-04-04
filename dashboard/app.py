@@ -100,6 +100,21 @@ def api_live_data():
     except Exception:
         pass
 
+    # Build trader + timestamp lookup from copy_trades DB
+    _trader_by_cid = {}
+    _time_by_cid = {}
+    try:
+        from database.db import get_connection
+        with get_connection() as _conn:
+            for _row in _conn.execute(
+                "SELECT condition_id, wallet_username, created_at FROM copy_trades "
+                "WHERE condition_id != '' GROUP BY condition_id"
+            ).fetchall():
+                _trader_by_cid[_row["condition_id"]] = _row["wallet_username"]
+                _time_by_cid[_row["condition_id"]] = _row["created_at"] or ""
+    except Exception:
+        pass
+
     # Real open positions — fetch directly with currentValue/initialValue
     open_positions = []
     try:
@@ -134,9 +149,10 @@ def api_live_data():
 
             _sport = _detect_sport(rp.get("slug", ""), rp.get("title", ""))
 
+            _cid = rp.get("conditionId", "")
             open_positions.append({
-                "id": hash(rp.get("conditionId", "")) % 10000,
-                "wallet_username": "RN1",
+                "id": hash(_cid) % 10000,
+                "wallet_username": _trader_by_cid.get(_cid, "—"),
                 "wallet_address": funder,
                 "market_question": rp.get("title") or rp.get("question", ""),
                 "market_slug": rp.get("slug", ""),
@@ -148,8 +164,8 @@ def api_live_data():
                 "current_price": cp,
                 "size": round(cv, 2),
                 "pnl_unrealized": round(cv - float(rp.get("initialValue", 0) or 0), 2),
-                "condition_id": rp.get("conditionId", ""),
-                "created_at": "",
+                "condition_id": _cid,
+                "created_at": _time_by_cid.get(_cid, ""),
             })
     except Exception:
         pass
@@ -165,10 +181,10 @@ def api_live_data():
         cashpnl = float(rp.get("cashPnl", 0) or 0)
         if cp >= 0.99 and iv > 0.01:  # won
             wins += 1
-            resolved_list.append({"q": rp.get("title", ""), "pnl": cashpnl, "status": "won"})
+            resolved_list.append({"q": rp.get("title", ""), "pnl": cashpnl, "status": "won", "cid": rp.get("conditionId", "")})
         elif cp < 0.01 and iv > 0.01:  # lost
             losses += 1
-            resolved_list.append({"q": rp.get("title", ""), "pnl": cashpnl, "status": "lost"})
+            resolved_list.append({"q": rp.get("title", ""), "pnl": cashpnl, "status": "lost", "cid": rp.get("conditionId", "")})
 
     # Sells W/L from buy vs sell comparison + build closed_positions list
     sell_wins = 0
@@ -208,7 +224,7 @@ def api_live_data():
             _csport = _detect_sport(bv.get("slug", ""), bv["title"])
             closed_positions.append({
                 "id": hash(cid) % 10000,
-                "wallet_username": "RN1",
+                "wallet_username": _trader_by_cid.get(cid, "—"),
                 "wallet_address": funder,
                 "market_question": bv["title"],
                 "side": side,
@@ -221,7 +237,7 @@ def api_live_data():
                 "market_slug": bv.get("slug", ""),
                 "event_slug": bv.get("eventSlug", ""),
                 "sport": _csport,
-                "closed_at": "",
+                "closed_at": datetime.fromtimestamp(sv["timestamp"]).strftime("%Y-%m-%d %H:%M") if sv.get("timestamp") else "",
                 "created_at": "",
             })
     except Exception:
@@ -230,7 +246,7 @@ def api_live_data():
     # Add resolved positions (won/lost at 0c/100c)
     for rl in resolved_list:
         closed_positions.append({
-            "id": 0, "wallet_username": "RN1",
+            "id": 0, "wallet_username": _trader_by_cid.get(rl.get("cid", ""), "—"),
             "wallet_address": funder,
             "market_question": rl["q"], "side": "", "outcome_label": "",
             "entry_price": 0, "current_price": 1.0 if rl["status"] == "won" else 0,
@@ -240,12 +256,12 @@ def api_live_data():
             "closed_at": "", "created_at": "",
         })
 
-    closed_positions.sort(key=lambda x: abs(x.get("pnl_realized", 0)), reverse=True)
+    closed_positions.sort(key=lambda x: x.get("closed_at", "") or "", reverse=True)
     total_closed = wins + losses + sell_wins + sell_losses
     wins += sell_wins
     losses += sell_losses
 
-    # Polymarket values
+    # Polymarket values (use ALL positions for accurate totals)
     open_value = sum(p["size"] for p in open_positions)
     active_value = sum(p["size"] for p in open_positions if 0.01 < p.get("current_price", 0) < 0.99)
     redeemable_value = sum(p["size"] for p in open_positions if p.get("current_price", 0) >= 0.99)
@@ -273,11 +289,15 @@ def api_live_data():
 
     followed = db.get_followed_wallets()
 
+    # Filter out unattributed old positions from display (keep values in summary)
+    display_open = [p for p in open_positions if p["wallet_username"] != "—"]
+    display_closed = [p for p in closed_positions if p["wallet_username"] != "—"]
+
     return jsonify({
         "summary": summary,
         "starting_balance": DEPOSIT,
-        "open_trades": open_positions,
-        "closed_trades": closed_positions[:50],
+        "open_trades": display_open,
+        "closed_trades": display_closed[:50],
         "followed": [dict(w) for w in followed],
         "trader_stats": [{"username": "RN1",
                           "address": funder,

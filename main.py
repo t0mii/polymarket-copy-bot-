@@ -61,6 +61,17 @@ def copy_scan():
 
 _update_counter = 0
 
+
+def auto_generate_report():
+    """Auto-generate performance report every 10 minutes."""
+    from bot.ai_report import generate_report
+    try:
+        report = generate_report()
+        logger.info("[REPORT] Auto-generated performance report (%d chars)", len(report))
+    except Exception as e:
+        logger.debug("Auto-report error: %s", e)
+
+
 def update_prices():
     """Update copy trade prices (every 30s), auto-sell wins, save snapshot every 5 min."""
     global _update_counter
@@ -313,6 +324,14 @@ def main():
         seconds=30,
         id="price_update",
         next_run_time=datetime.now(),
+    )
+    # Auto-generate performance report (every 5 min, only if 5+ new activities)
+    scheduler.add_job(
+        auto_generate_report,
+        "interval",
+        minutes=10,
+        id="auto_report",
+        next_run_time=datetime.now() + timedelta(minutes=2),
     )
     scheduler.start()
     logger.info("Scheduler started (copy scan every %ds, prices every 30s).", config.COPY_SCAN_INTERVAL)

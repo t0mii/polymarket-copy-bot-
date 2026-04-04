@@ -103,138 +103,191 @@ def _gather_data() -> dict:
                 pass
         trader_stats.append(ts)
 
+    # Per-trader copy performance + open positions from DB
+    copy_perf = []
+    trader_positions = {}  # address -> list of open positions
+    try:
+        from database.db import get_connection
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT wallet_username, wallet_address, "
+                "COUNT(*) as total, "
+                "SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_ct, "
+                "SUM(CASE WHEN status='closed' THEN 1 ELSE 0 END) as closed_ct, "
+                "SUM(CASE WHEN status='closed' AND pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
+                "SUM(CASE WHEN status='closed' AND pnl_realized < 0 THEN 1 ELSE 0 END) as losses, "
+                "ROUND(SUM(CASE WHEN status='closed' THEN COALESCE(pnl_realized,0) ELSE 0 END), 2) as realized, "
+                "ROUND(SUM(CASE WHEN status='open' THEN COALESCE(pnl_unrealized,0) ELSE 0 END), 2) as unrealized "
+                "FROM copy_trades GROUP BY wallet_address"
+            ).fetchall()
+            for r in rows:
+                copy_perf.append({
+                    "name": r["wallet_username"],
+                    "address": r["wallet_address"],
+                    "open": r["open_ct"] or 0,
+                    "closed": r["closed_ct"] or 0,
+                    "wins": r["wins"] or 0,
+                    "losses": r["losses"] or 0,
+                    "realized": r["realized"] or 0,
+                    "unrealized": r["unrealized"] or 0,
+                })
+            # Last 10 trades per trader (recent copies, not baselines)
+            pos_rows = conn.execute(
+                "SELECT wallet_username, wallet_address, market_question, side, "
+                "entry_price, current_price, size, pnl_unrealized, pnl_realized, status "
+                "FROM copy_trades WHERE status != 'baseline' "
+                "ORDER BY created_at DESC"
+            ).fetchall()
+            for p in pos_rows:
+                addr = p["wallet_address"]
+                if addr not in trader_positions:
+                    trader_positions[addr] = []
+                if len(trader_positions[addr]) >= 50:
+                    continue
+                pnl = p["pnl_realized"] if p["status"] == "closed" else (p["pnl_unrealized"] or 0)
+                trader_positions[addr].append({
+                    "market": (p["market_question"] or "")[:50],
+                    "side": p["side"] or "",
+                    "entry": p["entry_price"] or 0,
+                    "current": p["current_price"] or 0,
+                    "size": p["size"] or 0,
+                    "pnl": round(pnl, 2),
+                    "status": p["status"],
+                })
+    except Exception:
+        pass
+
     return {
         "wallet": wallet,
         "positions": positions,
         "closed": closed,
         "traders": trader_stats,
+        "copy_perf": copy_perf,
+        "trader_positions": trader_positions,
         "deposit": config.STARTING_BALANCE,
     }
 
 
+def _short(name, maxlen=25):
+    """Shorten market name."""
+    name = (name.replace("Counter-Strike: ", "CS: ").replace("League of Legends: ", "LoL: ")
+            .replace("Dota 2: ", "Dota: ").replace("Valorant: ", "VAL: "))
+    for cut in [" - ", " (BO", ": Both", ": Spread"]:
+        if cut in name:
+            name = name[:name.index(cut)]
+            break
+    return name[:maxlen] if len(name) > maxlen else name
+
+
+def _verdict(wins, losses):
+    if wins + losses == 0:
+        return "no results yet"
+    if losses == 0:
+        return "all profitable"
+    if wins == 0:
+        return "all losing"
+    if wins >= losses * 2:
+        return "mostly winning"
+    if losses >= wins * 2:
+        return "mostly losing"
+    return "mixed"
+
+
+def _trade_line(t, maxname=30):
+    tag = " W" if t["current"] >= 0.99 else " L" if t["current"] <= 0.01 else ""
+    st = "[closed]" if t.get("status") == "closed" else "[open]"
+    return "$%+.2f %s %dc>%dc %s %s%s" % (
+        t["pnl"], _short(t["market"], maxname), round(t["entry"] * 100),
+        round(t["current"] * 100), t["trader"], st, tag)
+
+
 def generate_report() -> str:
-    """Generate smart performance report."""
+    """Generate performance report: last positions per trader + recommendation."""
     d = _gather_data()
-    lines = []
 
-    # === PORTFOLIO STATUS ===
-    active = [p for p in d["positions"] if 0.01 < p["current"] < 0.99]
-    pending = [p for p in d["positions"] if p["current"] >= 0.99]
-    lost = [p for p in d["positions"] if p["current"] <= 0.01]
+    followed_addrs_set = {w["address"] for w in db.get_followed_wallets()}
+    current_copy = sorted(
+        [cp for cp in d["copy_perf"] if cp["address"] in followed_addrs_set],
+        key=lambda x: x["realized"] + x["unrealized"], reverse=True)
 
-    total_value = d["wallet"] + sum(p["value"] for p in d["positions"])
-    profit = total_value - d["deposit"]
-    profit_pct = (profit / d["deposit"] * 100) if d["deposit"] > 0 else 0
+    # Collect all trades with trader name
+    all_trades = []
+    for cp in current_copy:
+        for t in d.get("trader_positions", {}).get(cp["address"], []):
+            t["trader"] = cp["name"]
+            all_trades.append(t)
 
-    if profit >= 0:
-        lines.append("Portfolio is profitable at $%.2f (+$%.2f / +%.1f%%)." % (total_value, profit, profit_pct))
+    # ═══ PREVIEW (2 lines — last 10 per trader) ═══
+    preview = []
+    for cp in current_copy:
+        trades = d.get("trader_positions", {}).get(cp["address"], [])[:10]
+        n = len(trades)
+        pnl = sum(t["pnl"] for t in trades)
+        wins_n = sum(1 for t in trades if t["pnl"] > 0.10)
+        loss_n = sum(1 for t in trades if t["pnl"] < -0.10)
+        open_n = sum(1 for t in trades if t.get("status") == "open" and -0.10 <= t["pnl"] <= 0.10)
+        closed_n = sum(1 for t in trades if t.get("status") == "closed")
+        best = max(trades, key=lambda t: t["pnl"]) if trades else None
+        worst = min(trades, key=lambda t: t["pnl"]) if trades else None
+
+        parts = ["Last %d from %s: $%+.2f" % (n, cp["name"], pnl)]
+        rec = []
+        if wins_n: rec.append("%dW" % wins_n)
+        if loss_n: rec.append("%dL" % loss_n)
+        if open_n: rec.append("%d open" % open_n)
+        if rec:
+            parts.append("/".join(rec))
+        parts.append(_verdict(wins_n, loss_n))
+        if best and best["pnl"] > 0.20:
+            tag = " W" if best["current"] >= 0.99 else ""
+            parts.append("best: %s +$%.2f%s" % (_short(best["market"], 18), best["pnl"], tag))
+        if worst and worst["pnl"] < -0.20:
+            tag = " L" if worst["current"] <= 0.01 else ""
+            parts.append("worst: %s $%.2f%s" % (_short(worst["market"], 18), worst["pnl"], tag))
+        preview.append(" | ".join(parts))
+
+    # ═══ FULL REPORT (per trader, most recent first) ═══
+    full = []
+
+    for cp in current_copy:
+        trades = d.get("trader_positions", {}).get(cp["address"], [])
+        n = len(trades)
+        pnl = sum(t["pnl"] for t in trades)
+        w = sum(1 for t in trades if t["pnl"] > 0.10)
+        l = sum(1 for t in trades if t["pnl"] < -0.10)
+        wr = round(w / max(w + l, 1) * 100)
+        avg_w = sum(t["pnl"] for t in trades if t["pnl"] > 0.10) / max(w, 1)
+        avg_l = sum(t["pnl"] for t in trades if t["pnl"] < -0.10) / max(l, 1)
+
+        full.append("%s — %d positions $%+.2f | %dW/%dL %d%% | avg win $%.2f avg loss $%.2f" % (
+            cp["name"], n, pnl, w, l, wr, avg_w, abs(avg_l)))
+        for t in trades:
+            t["trader"] = cp["name"]
+            full.append("  " + _trade_line(t))
+        full.append("")
+
+    # Recommendation
+    current_total = sum(t["pnl"] for t in all_trades)
+    total_w = sum(1 for t in all_trades if t["pnl"] > 0.10)
+    total_l = sum(1 for t in all_trades if t["pnl"] < -0.10)
+    full.append("")
+    if current_total > 20:
+        full.append("Recommendation: Performing well ($%+.2f). Keep running." % current_total)
+    elif current_total > 5:
+        full.append("Recommendation: Solid start ($%+.2f). Let positions develop." % current_total)
+    elif current_total > -5:
+        full.append("Recommendation: Early phase ($%+.2f). Let positions play out." % current_total)
+    elif current_total > -20:
+        full.append("Recommendation: Slightly down ($%+.2f). Normal variance." % current_total)
     else:
-        lines.append("Portfolio is at $%.2f (down $%.2f / %.1f%%)." % (total_value, abs(profit), profit_pct))
+        full.append("Recommendation: Under pressure ($%+.2f). Monitor closely." % current_total)
 
-    lines.append("Wallet: $%.2f available. %d active positions ($%.2f), %d pending payout ($%.2f)." % (
-        d["wallet"], len(active), sum(p["value"] for p in active),
-        len(pending), sum(p["value"] for p in pending)))
+    report = "\n".join(preview) + "\n---\n" + "\n".join(full)
 
-    if lost:
-        lost_cost = sum(p["cost"] for p in lost)
-        lines.append("%d positions lost ($%.2f written off)." % (len(lost), lost_cost))
-
-    # === CLOSED PERFORMANCE ===
-    if d["closed"]:
-        wins = [c for c in d["closed"] if c["pnl"] >= 0]
-        losses = [c for c in d["closed"] if c["pnl"] < 0]
-        total_pnl = sum(c["pnl"] for c in d["closed"])
-        wr = len(wins) / len(d["closed"]) * 100
-
-        lines.append("")
-        lines.append("Closed: %d positions (%d wins, %d losses, %.0f%% WR). Net P&L: $%+.2f." % (
-            len(d["closed"]), len(wins), len(losses), wr, total_pnl))
-
-        if wins:
-            best = max(wins, key=lambda c: c["pnl"])
-            lines.append("Best win: %s (+$%.2f)." % (best["market"][:35], best["pnl"]))
-        if losses:
-            worst = min(losses, key=lambda c: c["pnl"])
-            lines.append("Worst loss: %s ($%.2f)." % (worst["market"][:35], worst["pnl"]))
-
-        # Win pattern analysis
-        avg_win = sum(c["pnl"] for c in wins) / len(wins) if wins else 0
-        avg_loss = sum(c["pnl"] for c in losses) / len(losses) if losses else 0
-        if avg_win > 0 and avg_loss < 0:
-            ratio = abs(avg_win / avg_loss)
-            if ratio > 2:
-                lines.append("Avg win ($%.2f) is %.1fx avg loss ($%.2f) — good risk/reward." % (avg_win, ratio, abs(avg_loss)))
-            elif ratio < 0.5:
-                lines.append("Warning: Avg win ($%.2f) is smaller than avg loss ($%.2f) — wins need to be bigger." % (avg_win, abs(avg_loss)))
-
-    # === TRADER PERFORMANCE ===
-    if d["traders"]:
-        lines.append("")
-        for t in d["traders"]:
-            day_str = "+$%.0f" % t["day"] if t["day"] >= 0 else "-$%.0f" % abs(t["day"])
-            week_str = "+$%.0f" % t["week"] if t["week"] >= 0 else "-$%.0f" % abs(t["week"])
-
-            if t["week"] > 10000:
-                grade = "exceptional"
-            elif t["week"] > 1000:
-                grade = "strong"
-            elif t["week"] > 0:
-                grade = "positive"
-            elif t["week"] > -1000:
-                grade = "underperforming"
-            else:
-                grade = "poor — consider removing"
-
-            lines.append("%s: %s today, %s this week — %s." % (t["name"], day_str, week_str, grade))
-
-    # === OPEN POSITION ANALYSIS ===
-    if active:
-        in_profit = [p for p in active if p["pnl"] > 0.50]
-        in_loss = [p for p in active if p["pnl"] < -0.50]
-
-        if in_profit:
-            best_open = max(in_profit, key=lambda p: p["pnl"])
-            lines.append("")
-            lines.append("Best open: %s (%dc -> %dc, +$%.2f)." % (
-                best_open["market"][:35], best_open["entry"]*100, best_open["current"]*100, best_open["pnl"]))
-
-        if in_loss:
-            worst_open = min(in_loss, key=lambda p: p["pnl"])
-            lines.append("Worst open: %s (%dc -> %dc, $%.2f)." % (
-                worst_open["market"][:35], worst_open["entry"]*100, worst_open["current"]*100, worst_open["pnl"]))
-
-        # Concentration risk
-        if active:
-            biggest = max(active, key=lambda p: p["value"])
-            pct = biggest["value"] / sum(p["value"] for p in active) * 100
-            if pct > 40:
-                lines.append("Warning: %.0f%% of active value in one position (%s)." % (pct, biggest["market"][:30]))
-
-    # === RECOMMENDATION ===
-    lines.append("")
-
-    if profit_pct > 10:
-        lines.append("Recommendation: Strong performance. Consider taking some profit.")
-    elif profit_pct > 0:
-        lines.append("Recommendation: Profitable. Keep running, monitor traders.")
-    elif profit_pct > -10:
-        lines.append("Recommendation: Slight loss. Normal variance — stay patient.")
-    elif profit_pct > -25:
-        lines.append("Recommendation: Significant loss. Review trader selection and position sizes.")
-    else:
-        lines.append("Recommendation: Heavy loss. Consider pausing and reviewing strategy.")
-
-    # Cash warning
-    if d["wallet"] < 5:
-        lines.append("Warning: Low cash ($%.2f). Bot cannot copy new positions until funds are available." % d["wallet"])
-
-    report = "\n".join(lines)
-
-    # Save
     db.save_report(report, json.dumps({
-        "wallet": d["wallet"], "total_value": total_value, "profit": profit,
-        "active": len(active), "pending": len(pending), "closed": len(d["closed"]),
+        "total_pnl": round(current_total, 2),
+        "winners": total_w, "losers": total_l,
+        "total_positions": len(all_trades),
     }))
-
     logger.info("Report generated (%d chars)", len(report))
     return report

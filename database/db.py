@@ -683,6 +683,15 @@ def get_latest_report():
         ).fetchone()
 
 
+def count_activities_since(timestamp: str) -> int:
+    """Count activity log entries newer than the given timestamp."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM activity_log WHERE created_at > ?", (timestamp,)
+        ).fetchone()
+        return row[0] if row else 0
+
+
 def get_reports(limit=10):
     with get_connection() as conn:
         return conn.execute(

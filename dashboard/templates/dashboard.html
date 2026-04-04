@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SUPER SAUNA CLUB TRADING</title>
+<title>Poly CopyBot by Super Sauna Club</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Fira+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -112,14 +112,17 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* ═══ TABLES ═══ */
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
+.tw table{table-layout:fixed;width:100%;min-width:700px}
+.tw th,.tw td{padding:10px 8px}
+.c-id{width:4%}.c-tr{width:8%}.c-mkt{width:30%}.c-side{width:9%}.c-sm{width:5%}.c-md{width:6%}.c-lg{width:8%}
 .tw::-webkit-scrollbar{width:3px;height:3px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
 .tw::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
 table{width:100%;border-collapse:collapse}
 thead{position:sticky;top:0;z-index:2}
 th{background:var(--bg3);color:var(--text-dim);font-weight:500;text-transform:uppercase;
-  letter-spacing:0.14em;font-size:.68rem;padding:13px 16px;text-align:left;border-bottom:1px solid var(--border)}
-td{padding:11px 16px;border-bottom:1px solid rgba(30,30,48,0.6);font-weight:300;font-size:.88rem}
+  letter-spacing:0.14em;font-size:.68rem;padding:12px 10px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:10px;border-bottom:1px solid rgba(30,30,48,0.6);font-weight:300;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr{transition:background .2s}
 tr:hover{background:rgba(201,168,76,0.03)}
 .p-up{color:var(--green)}.p-dn{color:var(--red)}
@@ -258,34 +261,32 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="card fi d2"><div class="card-lbl">Win Rate</div><div class="card-val neu" id="v-wr">---</div><div class="card-sub" id="v-wr-detail"></div></div>
   </div>
 
-  <!-- AI REPORT -->
-  <div class="sec fi d2">
-    <div class="sec-hd">
-      <span class="sec-t">AI Report</span>
-      <button class="btn-s" id="reportBtn" onclick="genReport()" style="border-color:var(--gold-dim);color:var(--gold)">Generate</button>
-    </div>
-    <div id="reportBox" style="background:var(--bg2);border:1px solid var(--border);padding:14px 18px;font-size:.85rem;color:var(--text-mid);line-height:1.7;min-height:40px;cursor:pointer" onclick="showReportModal()">
-      <span id="reportText" style="color:var(--text-dim)">Click Generate for AI analysis</span>
-      <div id="reportTime" style="font-size:.7rem;color:var(--text-dim);margin-top:6px"></div>
-    </div>
-  </div>
-
-  <!-- REPORT MODAL -->
-  <div id="reportModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--bg2);border:1px solid var(--border);max-width:600px;width:100%;padding:24px;max-height:80vh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <span style="font-size:.8rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-mid)">AI Performance Report</span>
-        <button class="btn-s" onclick="genReport()" style="border-color:var(--gold-dim);color:var(--gold)">Refresh</button>
-      </div>
-      <div id="reportModalText" style="font-size:.9rem;line-height:1.8;color:var(--text);white-space:pre-wrap"></div>
-      <div id="reportModalTime" style="font-size:.7rem;color:var(--text-dim);margin-top:12px"></div>
-    </div>
-  </div>
-
   <!-- ACTIVITY HISTORY -->
   <div class="sec fi d3">
     <div class="sec-hd"><span class="sec-t">Recent Activity</span></div>
     <div class="cli-panel" id="histPanel"></div>
+  </div>
+
+  <!-- PERFORMANCE REPORT (auto-generated) -->
+  <div class="sec fi d4">
+    <div class="sec-hd">
+      <span class="sec-t">Performance Report</span>
+      <span id="reportTime" style="font-size:.65rem;color:var(--text-dim);letter-spacing:.06em"></span>
+    </div>
+    <div id="reportBox" style="background:var(--bg2);border:1px solid var(--border);padding:16px 20px;font-size:.84rem;color:var(--text-mid);line-height:1.9;min-height:40px;cursor:pointer" onclick="showReportModal()">
+      <span id="reportText" style="color:var(--text-dim)">Waiting for report...</span>
+    </div>
+  </div>
+
+  <!-- REPORT MODAL -->
+  <div id="reportModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--bg2);border:1px solid var(--border);max-width:600px;width:100%;padding:24px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-size:.8rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-mid)">Performance Report</span>
+        <span id="reportModalTime" style="font-size:.65rem;color:var(--text-dim);letter-spacing:.06em"></span>
+      </div>
+      <div id="reportModalText" style="font-size:.9rem;line-height:1.9;color:var(--text)"></div>
+    </div>
   </div>
 
   <div class="sec fi d4">
@@ -299,16 +300,16 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <span class="badge">Tracking</span>
     </div>
     <div class="tw"><table><thead><tr>
-      <th>ID</th><th>Trader</th><th>Market</th><th>Side</th>
-      <th>Entry</th><th>Now</th><th>Size</th><th>P&L</th><th>Pot.</th><th>Age</th>
+      <th class="c-id">ID</th><th class="c-tr">Trader</th><th class="c-mkt">Market</th><th class="c-side">Side</th>
+      <th class="c-sm">Entry</th><th class="c-sm">Now</th><th class="c-md">Size</th><th class="c-lg">P&L</th><th class="c-lg">Time</th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
   <div class="sec fi d6">
     <div class="sec-hd"><span class="sec-t">Closed Positions <span class="ct" id="nClosed">0</span></span></div>
     <div class="tw"><table><thead><tr>
-      <th>ID</th><th>Trader</th><th>Market</th><th>Side</th>
-      <th>Entry</th><th>Size</th><th>P&L</th><th>Closed</th>
+      <th class="c-id">ID</th><th class="c-tr">Trader</th><th class="c-mkt">Market</th><th class="c-side">Side</th>
+      <th class="c-sm">Entry</th><th class="c-sm">Sell</th><th class="c-md">Size</th><th class="c-lg">P&L</th><th class="c-lg">Closed</th>
     </tr></thead><tbody id="tClosed"></tbody></table></div>
   </div>
 
@@ -403,8 +404,54 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.
     ['nec ','\u26BD','ERE'],['excelsior','\u26BD','ERE'],
     ['san lorenzo','\u26BD','ARG'],['estudiante','\u26BD','ARG'],
     ['paris','\u26BD','FL1'],['psg','\u26BD','FL1'],['toulouse','\u26BD','FL1'],
-    ['chelsea','\u26BD','EPL'],['port vale','\u26BD','EFL']];
-  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'',l:''}}
+    ['chelsea','\u26BD','EPL'],['port vale','\u26BD','EFL'],
+    // Tennis broad
+    ['bucharest','\uD83C\uDFBE','ATP'],['monte carlo','\uD83C\uDFBE','ATP'],['roland garros','\uD83C\uDFBE','ATP'],
+    ['wimbledon','\uD83C\uDFBE','ATP'],['indian wells','\uD83C\uDFBE','ATP'],['miami open','\uD83C\uDFBE','ATP'],
+    ['barletta','\uD83C\uDFBE','ATP'],['challenger','\uD83C\uDFBE','ATP'],['safiullin','\uD83C\uDFBE','ATP'],
+    ['navone','\uD83C\uDFBE','ATP'],['coppejans','\uD83C\uDFBE','ATP'],['zverev','\uD83C\uDFBE','ATP'],
+    ['sinner','\uD83C\uDFBE','ATP'],['djokovic','\uD83C\uDFBE','ATP'],['alcaraz','\uD83C\uDFBE','ATP'],
+    ['medvedev','\uD83C\uDFBE','ATP'],['rublev','\uD83C\uDFBE','ATP'],['tsitsipas','\uD83C\uDFBE','ATP'],
+    ['fritz','\uD83C\uDFBE','ATP'],['ruud','\uD83C\uDFBE','ATP'],['hurkacz','\uD83C\uDFBE','ATP'],
+    ['swiatek','\uD83C\uDFBE','WTA'],['sabalenka','\uD83C\uDFBE','WTA'],['gauff','\uD83C\uDFBE','WTA'],
+    ['qualification:','\uD83C\uDFBE','ATP'],['masters,','\uD83C\uDFBE','ATP'],
+    // Turkish soccer
+    ['g\u00F6ztepe','\u26BD','TUR'],['gen\u00E7ler','\u26BD','TUR'],['galatasaray','\u26BD','TUR'],
+    ['fenerbah','\u26BD','TUR'],['be\u015Fikta','\u26BD','TUR'],['trabzon','\u26BD','TUR'],
+    ['antalya','\u26BD','TUR'],['konyaspor','\u26BD','TUR'],['hatay','\u26BD','TUR'],
+    ['basaksehir','\u26BD','TUR'],['kasimpasa','\u26BD','TUR'],['sivasspor','\u26BD','TUR'],
+    // More soccer
+    ['inter miami','\u26BD','MLS'],['la galaxy','\u26BD','MLS'],['atlanta united','\u26BD','MLS'],
+    ['al ahly','\u26BD','SOC'],['al hilal','\u26BD','SOC'],['al nassr','\u26BD','SOC'],
+    ['boca','\u26BD','ARG'],['river plate','\u26BD','ARG'],['racing','\u26BD','ARG'],
+    ['palmeiras','\u26BD','BRA'],['flamengo','\u26BD','BRA'],['corinthians','\u26BD','BRA'],
+    ['ajax','\u26BD','NED'],['psv','\u26BD','NED'],['feyenoord','\u26BD','NED'],
+    ['celtic','\u26BD','SCO'],['aberdeen','\u26BD','SCO'],
+    ['anderlecht','\u26BD','BEL'],['club brugge','\u26BD','BEL'],['genk','\u26BD','BEL'],
+    ['benfica','\u26BD','POR'],['porto','\u26BD','POR'],['braga','\u26BD','POR'],
+    ['marseille','\u26BD','FL1'],['lyon','\u26BD','FL1'],['monaco','\u26BD','FL1'],['lille','\u26BD','FL1'],
+    ['napoli','\u26BD','SA'],['juventus','\u26BD','SA'],['ac milan','\u26BD','SA'],['as roma','\u26BD','SA'],['lazio','\u26BD','SA'],['atalanta','\u26BD','SA'],
+    ['atletico','\u26BD','LAL'],['sevilla','\u26BD','LAL'],['valencia','\u26BD','LAL'],['villarreal','\u26BD','LAL'],['betis','\u26BD','LAL'],
+    ['arsenal','\u26BD','EPL'],['liverpool','\u26BD','EPL'],['man city','\u26BD','EPL'],['manchester','\u26BD','EPL'],
+    ['tottenham','\u26BD','EPL'],['newcastle','\u26BD','EPL'],['aston villa','\u26BD','EPL'],['west ham','\u26BD','EPL'],
+    ['wolves','\u26BD','EPL'],['everton','\u26BD','EPL'],['nottingham','\u26BD','EPL'],['brighton','\u26BD','EPL'],
+    ['leicester','\u26BD','EPL'],['fulham','\u26BD','EPL'],['bournemouth','\u26BD','EPL'],['crystal palace','\u26BD','EPL'],
+    ['ipswich','\u26BD','EPL'],['brentford','\u26BD','EPL'],
+    // CS teams
+    ['parivision','\uD83C\uDFAE','CS'],['legacy','\uD83C\uDFAE','CS'],['wildcard','\uD83C\uDFAE','CS'],
+    ['b8 ','\uD83C\uDFAE','CS'],['voca','\uD83C\uDFAE','CS'],['heroic','\uD83C\uDFAE','CS'],
+    ['faze','\uD83C\uDFAE','CS'],['natus','\uD83C\uDFAE','CS'],['vitality','\uD83C\uDFAE','CS'],
+    ['g2 ','\uD83C\uDFAE','CS'],['mouz','\uD83C\uDFAE','CS'],['spirit','\uD83C\uDFAE','CS'],
+    // LoL teams
+    ['gen.g','\u2694\uFE0F','LOL'],['bilibili','\u2694\uFE0F','LOL'],['weibo','\u2694\uFE0F','LOL'],
+    ['jd gaming','\u2694\uFE0F','LOL'],['fnatic','\u2694\uFE0F','LOL'],['g2 esports','\u2694\uFE0F','LOL'],
+    // Broad fallbacks (must be last)
+    [' fc ','\u26BD','SOC'],[' sk ','\u26BD','SOC'],[' sc ','\u26BD','SOC'],
+    ['o/u ','\u26BD','SOC'],['haigang','\u26BD','CHN'],['changchun','\u26BD','CHN'],
+    ['rolex ','\uD83C\uDFBE','ATP'],['open:','\uD83C\uDFBE','ATP'],
+    ['game 1','','BO'],['game 2','','BO'],['game 3','','BO'],
+    ['(bo3)','','BO'],['(bo5)','','BO'],['map 1','\uD83C\uDFAE','CS'],['map 2','\uD83C\uDFAE','CS']];
+  for(const[k,e,l]of m){if(s.includes(k))return{e:e||'\uD83C\uDFAE',l:l||'E-Sport'}}return{e:'',l:''}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
     const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
@@ -463,18 +510,18 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-mkt">${spH}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
       <td>$${fm(t.size)}</td><td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
-      <td class="p-up">+$${fm(pot)}</td><td class="c-dt">${age(t.created_at)}</td></tr>`}).join('')
-    :'<tr><td colspan="10" class="empty" style="border:0">Waiting for signals...</td></tr>';
+      <td class="c-dt">${t.created_at?t.created_at.substring(5,16).replace('T',' '):''}</td></tr>`}).join('')
+    :'<tr><td colspan="9" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
   $('tClosed').innerHTML=D.closed_trades.length?D.closed_trades.map(t=>{const p=t.pnl_realized||0;
     const{e:ce,l:cl2}=dSp(t);const spH2='<span style="font-size:.75rem;margin-right:4px">'+(ce?ce+' '+cl2:'\uD83D\uDCCA')+'</span>';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH2}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
-      <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>$${fm(t.size)}</td>
+      <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round((t.current_price||0)*100)}\u00A2</td><td>$${fm(t.size)}</td>
       <td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
-      <td class="c-dt">${t.closed_at?(t.closed_at).substring(0,16):'---'}</td></tr>`}).join('')
-    :'<tr><td colspan="8" class="empty" style="border:0">No closed trades yet</td></tr>';
+      <td class="c-dt">${t.closed_at?(t.closed_at).substring(5,16):''}</td></tr>`}).join('')
+    :'<tr><td colspan="9" class="empty" style="border:0">No closed trades yet</td></tr>';
 
   ticker();
   renderLog()}
@@ -516,30 +563,118 @@ function chart(){fetch('/api/copy/chart').then(r=>r.json()).then(d=>{
 
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot()}catch(e){console.error('fetch:',e);dot()}}
 load();setInterval(load,10000);setTimeout(initSSE,2000);
+// Auto-refresh report every 60s
+setInterval(loadReport,60000);
 
-// AI Report
+// Performance Report
+function fmtReport(t){
+  return t
+    .replace(/\n\n/g,'<div style="height:10px"></div>')
+    .replace(/\n/g,'<br>')
+    // "Last X from Name:" — highlight name
+    .replace(/from (\w+):/g,'from <span style="color:var(--gold);font-weight:700">$1</span>:')
+    // "Name: X positions" stats line
+    .replace(/(\w+)(: \d+ positions)/g,'<span style="color:var(--gold);font-weight:700">$1</span>$2')
+    // Money: positive green, negative red, neutral gold
+    .replace(/\+\$[\d,.]+/g,'<span style="color:var(--green);font-weight:600">$&</span>')
+    .replace(/\$\+[\d,.]+/g,'<span style="color:var(--green);font-weight:600">$&</span>')
+    .replace(/-\$[\d,.]+/g,'<span style="color:var(--red);font-weight:600">$&</span>')
+    .replace(/\$-[\d,.]+/g,'<span style="color:var(--red);font-weight:600">$&</span>')
+    .replace(/\$[\d,.]+%?\b/g,function(m){return m.includes('+')||m.includes('-')?m:'<span style="color:var(--gold)">'+m+'</span>'})
+    // W/L record: "6W/3L"
+    .replace(/(\d+)W\/(\d+)L/g,'<span style="color:var(--green);font-weight:600">$1W</span>/<span style="color:var(--red);font-weight:600">$2L</span>')
+    // Standalone W/L counts: "2W" or "3L"
+    .replace(/(\d+)W(?=<|,| |\/)/g,'<span style="color:var(--green);font-weight:600">$1W</span>')
+    .replace(/(\d+)L(?=<|,| |\/)/g,'<span style="color:var(--red);font-weight:600">$1L</span>')
+    // WR percentage
+    .replace(/(\d+)(%)/g,function(m,n,p){return parseInt(n)>=60?'<span style="color:var(--green)">'+m+'</span>':parseInt(n)<40?'<span style="color:var(--red)">'+m+'</span>':m})
+    // Status tags: [open] / [closed]
+    .replace(/\[open\]/g,'<span style="color:var(--text-dim);font-size:.72em;border:1px solid var(--border);padding:0 4px;border-radius:2px">open</span>')
+    .replace(/\[closed\]/g,'<span style="color:var(--gold);font-size:.72em;border:1px solid rgba(201,168,76,.3);padding:0 4px;border-radius:2px">closed</span>')
+    // WIN/LOSS tags at end of position lines
+    .replace(/ W(<br>|<|$)/g,' <span style="color:#0a0a0a;background:var(--green);font-weight:700;font-size:.7em;padding:1px 5px;border-radius:2px;letter-spacing:.05em">WIN</span>$1')
+    .replace(/ L(<br>|<|$)/g,' <span style="color:#0a0a0a;background:var(--red);font-weight:700;font-size:.7em;padding:1px 5px;border-radius:2px;letter-spacing:.05em">LOSS</span>$1')
+    // Verdict words
+    .replace(/(all profitable|mostly winning)/g,'<span style="color:var(--green);font-weight:700">$1</span>')
+    .replace(/(all losing|mostly losing)/g,'<span style="color:var(--red);font-weight:700">$1</span>')
+    .replace(/(mixed)/g,'<span style="color:var(--gold);font-weight:600">$1</span>')
+    .replace(/(no results yet|no copies yet)/g,'<span style="color:var(--text-dim)">$1</span>')
+    // best/worst labels
+    .replace(/(best:)/g,'<span style="color:var(--green);font-weight:500">$1</span>')
+    .replace(/(worst:)/g,'<span style="color:var(--red);font-weight:500">$1</span>')
+    // Trader section header: "Name — X positions..."
+    .replace(/(\w+)( \u2014 \d+ positions)/g,'<div style="margin-top:6px;padding-bottom:4px;border-bottom:1px solid rgba(201,168,76,.2)"><span style="color:var(--gold);font-weight:700;font-size:1.05em">$1</span><span style="color:var(--text-mid)">$2</span></div>')
+    // Recommendation
+    .replace(/(Recommendation:)/g,'<span style="color:var(--gold);font-weight:600">$1</span>')
+    .replace(/(Performing well|Solid start)/g,'<span style="color:var(--green)">$1</span>')
+    .replace(/(Under pressure)/g,'<span style="color:var(--red)">$1</span>')
+    // avg win / avg loss labels
+    .replace(/avg win/g,'<span style="color:var(--green);font-size:.85em">avg win</span>')
+    .replace(/avg loss/g,'<span style="color:var(--red);font-size:.85em">avg loss</span>')
+    // Pipe separators
+    .replace(/\|/g,'<span style="color:var(--border-h);margin:0 4px">\u00B7</span>')
+    // Price movement in position lines: "30c>68c"
+    .replace(/(\d+c>)(\d+c)/g,'<span style="font-family:var(--mono);font-size:.82em;color:var(--text-mid)">$1$2</span>')
+    // Trader name before [open]/[closed] tag
+    .replace(/\s(\w+)\s(<span[^>]*>(?:open|closed)<\/span>)/g,' <span style="color:var(--gold);font-size:.82em;font-weight:500">$1</span> $2')
+    // Indented position lines: dim the market name
+    .replace(/(  )(\$[+-][\d.]+\s+)([^<\d][^<]*?)(\s+\d+c>)/g,'$1$2<span style="color:var(--text-dim)">$3</span>$4');
+}
+function buildPreview(raw){
+  // Parse preview lines: "Last X from Name: $PnL | record | verdict | best: ... | worst: ..."
+  return raw.split('\n').filter(l=>l.trim()).map(line=>{
+    const m=line.match(/^Last (\d+) from (\w+): \$([\+\-][\d.]+)\s*\|\s*(.+)$/);
+    if(!m)return'<div style="color:var(--text-dim)">'+line+'</div>';
+    const[,count,name,pnlStr,rest]=m;
+    const pnl=parseFloat(pnlStr);
+    const pnlCol=pnl>=0?'var(--green)':'var(--red)';
+    // Parse segments
+    const segs=rest.split(/\s*\|\s*/);
+    let record='',verdict='',best='',worst='';
+    for(const s of segs){
+      if(s.match(/^\d+[WL]/))record=s;
+      else if(s.match(/^(all |mostly |mixed|no )/))verdict=s;
+      else if(s.startsWith('best:'))best=s.replace('best: ','');
+      else if(s.startsWith('worst:'))worst=s.replace('worst: ','');
+    }
+    // Verdict badge
+    const vc=verdict.includes('profitable')||verdict.includes('winning')?'var(--green)':
+             verdict.includes('losing')?'var(--red)':verdict==='mixed'?'var(--gold)':'var(--text-dim)';
+    const vBg=verdict.includes('profitable')||verdict.includes('winning')?'rgba(52,211,153,.12)':
+              verdict.includes('losing')?'rgba(248,113,113,.12)':verdict==='mixed'?'rgba(201,168,76,.1)':'rgba(92,90,106,.1)';
+    // Record coloring
+    const recHtml=record.replace(/(\d+)W/g,'<span style="color:var(--green);font-weight:600">$1W</span>')
+                        .replace(/(\d+)L/g,'<span style="color:var(--red);font-weight:600">$1L</span>')
+                        .replace(/(\d+ open)/g,'<span style="color:var(--text-dim)">$1</span>');
+    // Best/worst
+    const bHtml=best?'<span style="color:var(--green)"><span style="font-size:.82em;opacity:.6">best:</span> '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">WIN</span>')+'</span>':'';
+    const wHtml=worst?'<span style="color:var(--red)"><span style="font-size:.82em;opacity:.6">worst:</span> '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">LOSS</span>')+'</span>':'';
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;gap:8px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <span style="color:var(--gold);font-weight:700;font-size:1.1em">${name}</span>
+        <span style="color:${pnlCol};font-weight:700;font-size:1.25em;font-family:var(--mono)">\$${pnlStr}</span>
+        <span style="font-size:.9em">${recHtml}</span>
+        <span style="color:${vc};font-weight:700;font-size:.78em;letter-spacing:.08em;background:${vBg};padding:3px 10px;border-radius:3px;text-transform:uppercase;white-space:nowrap">${verdict}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:1em">
+        ${bHtml}${wHtml?'<span style="color:var(--border-h);margin:0 1px">·</span>'+wHtml:''}
+      </div>
+    </div>`;
+  }).join('');
+}
 function loadReport(){
   fetch('/api/report/latest').then(r=>r.json()).then(d=>{
-    if(d.report&&d.report!=='No reports yet. Click Generate.'){
-      $('reportText').textContent=d.report.substring(0,200)+(d.report.length>200?'...':'');
-      $('reportText').style.color='var(--text)';
-      $('reportModalText').textContent=d.report;
+    if(d.report&&!d.report.startsWith('No reports')){
+      const parts=d.report.split('\n---\n');
+      const previewText=parts[0]||'';
+      const fullText=parts[1]||d.report;
+      $('reportText').innerHTML=buildPreview(previewText)+'<div style="margin-top:8px;font-size:.68rem;color:var(--gold);letter-spacing:.1em;opacity:.5;cursor:pointer">DETAILS \u25B8</div>';
+      $('reportModalText').innerHTML=fmtReport(fullText);
       const t=d.created_at||'';
       if(t){try{const dt=new Date(t+'Z');const ts=dt.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
-        $('reportTime').textContent=ts;$('reportModalTime').textContent='Generated: '+ts}catch(e){}}
-    }
+        $('reportTime').textContent='last check: '+ts;$('reportModalTime').textContent='last check: '+ts}catch(e){}}
+    }else{$('reportText').innerHTML='<span style="color:var(--text-dim)">Report wird nach den n\u00e4chsten Trades automatisch erstellt</span>'}
   }).catch(()=>{})
-}
-function genReport(){
-  $('reportBtn').textContent='Generating...';$('reportBtn').disabled=true;
-  $('reportText').textContent='Analyzing positions...';$('reportText').style.color='var(--gold)';
-  fetch('/api/report/generate',{method:'POST'}).then(r=>r.json()).then(d=>{
-    $('reportText').textContent=d.report?d.report.substring(0,200):'Error';
-    $('reportText').style.color='var(--text)';
-    $('reportModalText').textContent=d.report||'Error';
-    $('reportBtn').textContent='Generate';$('reportBtn').disabled=false;
-    $('reportTime').textContent='just now';$('reportModalTime').textContent='Generated: just now';
-  }).catch(()=>{$('reportBtn').textContent='Generate';$('reportBtn').disabled=false})
 }
 function showReportModal(){
   const m=$('reportModal');m.style.display='flex';
