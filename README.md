@@ -156,7 +156,8 @@ python redeem_positions.py --exec
 | `COPY_SCAN_INTERVAL` | 5 | Seconds between scans |
 | `CASH_FLOOR` | 0 | Stop buying below this cash level |
 | `MAX_OPEN_POSITIONS` | 100 | Maximum simultaneous positions |
-| `MAX_EXPOSURE_PER_TRADER` | 0.33 | Max 33% of portfolio per trader |
+| `MAX_EXPOSURE_PER_TRADER` | 0.33 | Default max % per trader |
+| `TRADER_EXPOSURE_MAP` | | Per-trader: `name:pct,name:pct` |
 | `DASHBOARD_PORT` | 8090 | Web dashboard port |
 | `DASHBOARD_SECRET` | changeme | Secret key for follow/unfollow API |
 
@@ -195,17 +196,29 @@ main.py                      → Scheduler + Flask + Startup
 The bot has several layers of protection built in:
 
 ### Trader Exposure Limit
-No single trader can use more than 33% of your portfolio (`MAX_EXPOSURE_PER_TRADER`). This is a hard limit — no exceptions, even for positions that look like they're about to win. When positions resolve or get auto-sold, the exposure drops and the trader can be copied again. With 3 traders at 33% each, your portfolio is naturally diversified.
+Each trader has a maximum percentage of your total portfolio (cash + positions) they can use. Set globally via `MAX_EXPOSURE_PER_TRADER` or per-trader via `TRADER_EXPOSURE_MAP`.
+
+```env
+# Default: 33% per trader
+MAX_EXPOSURE_PER_TRADER=0.33
+
+# Override per trader: give more room to your best traders
+TRADER_EXPOSURE_MAP=sovereign2013:0.50,xsaghav:0.50,Jargs:0.50
+```
+
+Limits are independent — they don't need to add up to 100%. A 50/50/50 split means each trader can use up to half the portfolio, but `CASH_FLOOR` prevents the wallet from going to zero.
 
 ```
-Portfolio: $300, 3 traders
+Portfolio: $400 (wallet $200 + positions $200)
 
-Trader A: $95 in positions  → can still open $5 more
-Trader B: $40 in positions  → can open $60 more  
-Trader C: $0 in positions   → can open $100
+Trader A (50%): max $200 → has $150 → can open $50 more
+Trader B (50%): max $200 → has $80  → can open $120 more
+Trader C (50%): max $200 → has $0   → can open $200
 
-Trader A wins $50 → positions drop to $45 → can open $55 more
+Trader A wins, positions close → exposure drops → can copy again
 ```
+
+The limit is based on **total portfolio value** (not just cash), so it doesn't shrink as you open more positions.
 
 ### Hedge Detection
 Waits 60s before executing a trade. If the trader buys the opposite side within that window, both are cancelled. This prevents copying hedged positions where you'd lose to fees regardless of outcome.
