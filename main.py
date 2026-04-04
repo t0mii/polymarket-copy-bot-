@@ -97,6 +97,17 @@ def update_prices():
                     import time as _t
                     if _cid_pos in _recently_closed and (_t.time() - _recently_closed[_cid_pos]) < 300:
                         continue
+                    # Only auto-sell/close positions that are tracked in copy_trades
+                    try:
+                        from database.db import get_connection as _gc_check
+                        with _gc_check() as _cc:
+                            _is_ours = _cc.execute(
+                                "SELECT id FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
+                            ).fetchone()
+                        if not _is_ours:
+                            continue  # not our bot's position, skip
+                    except Exception:
+                        pass
                     # Close lost positions in DB (price went to 0)
                     if _cp <= 0.01 and _iv > 0.01:
                         try:
