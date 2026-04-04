@@ -115,6 +115,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .tw table{table-layout:fixed;width:100%;min-width:700px}
 .tw th,.tw td{padding:10px 8px}
 .c-id{width:4%}.c-tr{width:8%}.c-mkt{width:30%}.c-side{width:9%}.c-sm{width:5%}.c-md{width:6%}.c-lg{width:8%}
+th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--gold)}th.sort.asc::after{content:' ▲';font-size:.6em}th.sort.desc::after{content:' ▼';font-size:.6em}
 .tw::-webkit-scrollbar{width:3px;height:3px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
 .tw::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
@@ -300,16 +301,16 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <span class="badge">Tracking</span>
     </div>
     <div class="tw"><table><thead><tr>
-      <th class="c-id">ID</th><th class="c-tr">Trader</th><th class="c-mkt">Market</th><th class="c-side">Side</th>
-      <th class="c-sm">Entry</th><th class="c-sm">Now</th><th class="c-md">Size</th><th class="c-lg">P&L</th><th class="c-lg">Time</th>
+      <th class="c-id sort" data-sort="id" data-table="open">ID</th><th class="c-tr sort" data-sort="trader" data-table="open">Trader</th><th class="c-mkt sort" data-sort="market" data-table="open">Market</th><th class="c-side sort" data-sort="side" data-table="open">Side</th>
+      <th class="c-sm sort" data-sort="entry" data-table="open">Entry</th><th class="c-sm sort" data-sort="now" data-table="open">Now</th><th class="c-md sort" data-sort="size" data-table="open">Size</th><th class="c-lg sort" data-sort="pnl" data-table="open">P&L</th><th class="c-lg sort" data-sort="time" data-table="open">Time</th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
   <div class="sec fi d6">
     <div class="sec-hd"><span class="sec-t">Closed Positions <span class="ct" id="nClosed">0</span></span></div>
     <div class="tw"><table><thead><tr>
-      <th class="c-id">ID</th><th class="c-tr">Trader</th><th class="c-mkt">Market</th><th class="c-side">Side</th>
-      <th class="c-sm">Entry</th><th class="c-sm">Sell</th><th class="c-md">Size</th><th class="c-lg">P&L</th><th class="c-lg">Closed</th>
+      <th class="c-id sort" data-sort="id" data-table="closed">ID</th><th class="c-tr sort" data-sort="trader" data-table="closed">Trader</th><th class="c-mkt sort" data-sort="market" data-table="closed">Market</th><th class="c-side sort" data-sort="side" data-table="closed">Side</th>
+      <th class="c-sm sort" data-sort="entry" data-table="closed">Entry</th><th class="c-sm sort" data-sort="sell" data-table="closed">Sell</th><th class="c-md sort" data-sort="size" data-table="closed">Size</th><th class="c-lg sort" data-sort="pnl" data-table="closed">P&L</th><th class="c-lg sort" data-sort="closed_at" data-table="closed">Closed</th>
     </tr></thead><tbody id="tClosed"></tbody></table></div>
   </div>
 
@@ -320,6 +321,36 @@ tr:hover{background:rgba(201,168,76,0.03)}
 
 <script>
 let D=null,CI=null,sfx=false,sseOk=false;
+let _sortOpen={col:'time',dir:'desc'};
+let _sortClosed={col:'closed_at',dir:'desc'};
+function sortTable(table,col){
+  const s=table==='open'?_sortOpen:_sortClosed;
+  if(s.col===col)s.dir=s.dir==='desc'?'asc':'desc';
+  else{s.col=col;s.dir='desc'}
+  document.querySelectorAll(`th.sort[data-table="${table}"]`).forEach(th=>{th.classList.remove('asc','desc');if(th.dataset.sort===col)th.classList.add(s.dir)});
+  render();
+}
+document.addEventListener('click',e=>{const th=e.target.closest('th.sort');if(th)sortTable(th.dataset.table,th.dataset.sort)});
+function _getSortVal(t,col,table){
+  if(col==='id')return t.id||0;
+  if(col==='trader')return(t.wallet_username||'').toLowerCase();
+  if(col==='market')return(t.market_question||'').toLowerCase();
+  if(col==='side')return(t.side||'').toLowerCase();
+  if(col==='entry')return t.entry_price||0;
+  if(col==='now')return t.current_price||0;
+  if(col==='sell')return t.current_price||0;
+  if(col==='size')return t.size||0;
+  if(col==='pnl')return table==='open'?(t.entry_price>0?(t.size/t.entry_price)*(t.current_price-t.entry_price):0):(t.pnl_realized||0);
+  if(col==='time')return t.created_at||'';
+  if(col==='closed_at')return t.closed_at||'';
+  return 0;
+}
+function _sortList(list,table){
+  const s=table==='open'?_sortOpen:_sortClosed;
+  return[...list].sort((a,b)=>{const va=_getSortVal(a,s.col,table),vb=_getSortVal(b,s.col,table);
+    const cmp=typeof va==='string'?va.localeCompare(vb):va-vb;
+    return s.dir==='asc'?cmp:-cmp});
+}
 const AC=new(window.AudioContext||window.webkitAudioContext)();
 const hist=[];
 const $=id=>document.getElementById(id);
@@ -506,7 +537,8 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('v-wr-detail').textContent='';
 
   $('nOpen').textContent=D.open_trades.length;
-  $('tOpen').innerHTML=D.open_trades.length?D.open_trades.map(t=>{const p=t.pnl_unrealized||0;
+  const sortedOpen=_sortList(D.open_trades,'open');
+  $('tOpen').innerHTML=sortedOpen.length?sortedOpen.map(t=>{const p=t.pnl_unrealized||0;
     const pot=t.entry_price>0&&t.entry_price<1?t.size*(1-t.entry_price)/t.entry_price:0;
     const{e:oe,l:ol}=dSp(t);const spH='<span style="font-size:.75rem;margin-right:4px">'+(oe?oe+' '+ol:'\uD83D\uDCCA')+'</span>';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
@@ -517,7 +549,8 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
     :'<tr><td colspan="9" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
-  $('tClosed').innerHTML=D.closed_trades.length?D.closed_trades.map(t=>{const p=t.pnl_realized||0;
+  const sortedClosed=_sortList(D.closed_trades,'closed');
+  $('tClosed').innerHTML=sortedClosed.length?sortedClosed.map(t=>{const p=t.pnl_realized||0;
     const{e:ce,l:cl2}=dSp(t);const spH2='<span style="font-size:.75rem;margin-right:4px">'+(ce?ce+' '+cl2:'\uD83D\uDCCA')+'</span>';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH2}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
