@@ -79,6 +79,7 @@ def update_prices():
                 for _p in _r.json():
                     _cp = float(_p.get("curPrice", 0) or 0)
                     _cv = float(_p.get("currentValue", 0) or 0)
+                    _iv = float(_p.get("initialValue", 0) or 0)
                     if _cp >= 0.97 and _cv > 0.50:
                         _out = _p.get("outcome", "")
                         if _out.lower() in ("yes", "y"): _side = "YES"
@@ -86,9 +87,11 @@ def update_prices():
                         else: _side = _out
                         _resp = sell_shares(_p.get("conditionId", ""), _side, _cp)
                         if _resp:
-                            logger.info("[AUTO-SELL] Sold won position: $%.2f | %s", _cv, (_p.get("title") or "")[:40])
-                            _db.log_activity("redeem", "CASH", "Auto-sold won position",
-                                             "%s — $%.2f" % ((_p.get("title") or "")[:35], _cv), round(_cv, 2))
+                            _pnl = round(_cv - _iv, 2)
+                            logger.info("[AUTO-SELL] Sold: $%.2f (cost $%.2f, P&L $%+.2f) | %s", _cv, _iv, _pnl, (_p.get("title") or "")[:40])
+                            _db.log_activity("sell", "WIN" if _pnl >= 0 else "LOSS",
+                                             "Position closed — %s" % ("profit" if _pnl >= 0 else "loss"),
+                                             "%s — sold $%.2f, P&L $%+.2f" % ((_p.get("title") or "")[:35], _cv, _pnl), _pnl)
         except Exception:
             pass
         _update_counter += 1
