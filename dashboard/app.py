@@ -115,7 +115,7 @@ def api_live_data():
             open_positions.append({
                 "id": hash(rp.get("conditionId", "")) % 10000,
                 "wallet_username": "RN1",
-                "wallet_address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+                "wallet_address": funder,
                 "market_question": rp.get("title") or rp.get("question", ""),
                 "market_slug": rp.get("slug", ""),
                 "event_slug": rp.get("eventSlug", ""),
@@ -185,7 +185,7 @@ def api_live_data():
             closed_positions.append({
                 "id": hash(cid) % 10000,
                 "wallet_username": "RN1",
-                "wallet_address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+                "wallet_address": funder,
                 "market_question": bv["title"],
                 "side": side,
                 "outcome_label": outcome if side not in ("YES","NO") else "",
@@ -206,7 +206,7 @@ def api_live_data():
     for rl in resolved_list:
         closed_positions.append({
             "id": 0, "wallet_username": "RN1",
-            "wallet_address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+            "wallet_address": funder,
             "market_question": rl["q"], "side": "", "outcome_label": "",
             "entry_price": 0, "current_price": 1.0 if rl["status"] == "won" else 0,
             "size": abs(rl["pnl"]), "pnl_realized": round(rl["pnl"], 2),
@@ -254,7 +254,7 @@ def api_live_data():
         "closed_trades": closed_positions[:50],
         "followed": [dict(w) for w in followed],
         "trader_stats": [{"username": "RN1",
-                          "address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+                          "address": funder,
                           "pnl_realized": 0,
                           "pnl_unrealized": round(total_value - DEPOSIT, 2),
                           "wins": wins, "losses": losses,
@@ -304,7 +304,7 @@ def api_followed():
 @app.route("/api/wallet/<address>/follow", methods=["POST"])
 def api_follow(address):
     secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != "ssc2026":
+    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 1)
     return jsonify({"status": "ok", "followed": True})
@@ -313,7 +313,7 @@ def api_follow(address):
 @app.route("/api/wallet/<address>/unfollow", methods=["POST"])
 def api_unfollow(address):
     secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != "ssc2026":
+    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 0)
     return jsonify({"status": "ok", "followed": False})
