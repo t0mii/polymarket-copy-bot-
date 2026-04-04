@@ -288,7 +288,7 @@ def api_live_data():
                           "pnl_unrealized": round(total_value - DEPOSIT, 2),
                           "wins": wins, "losses": losses,
                           "open": len(open_positions), "closed": total_closed}],
-        "activity": [dict(a) for a in db.get_activity_log(limit=50)],
+        "activity": [dict(a) for a in db.get_activity_log(limit=200)],
         "timestamp": int(time.time()),
     })
 
