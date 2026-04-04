@@ -258,6 +258,30 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="card fi d2"><div class="card-lbl">Win Rate</div><div class="card-val neu" id="v-wr">---</div><div class="card-sub" id="v-wr-detail"></div></div>
   </div>
 
+  <!-- AI REPORT -->
+  <div class="sec fi d2">
+    <div class="sec-hd">
+      <span class="sec-t">AI Report</span>
+      <button class="btn-s" id="reportBtn" onclick="genReport()" style="border-color:var(--gold-dim);color:var(--gold)">Generate</button>
+    </div>
+    <div id="reportBox" style="background:var(--bg2);border:1px solid var(--border);padding:14px 18px;font-size:.85rem;color:var(--text-mid);line-height:1.7;min-height:40px;cursor:pointer" onclick="showReportModal()">
+      <span id="reportText" style="color:var(--text-dim)">Click Generate for AI analysis</span>
+      <div id="reportTime" style="font-size:.7rem;color:var(--text-dim);margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- REPORT MODAL -->
+  <div id="reportModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--bg2);border:1px solid var(--border);max-width:600px;width:100%;padding:24px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-size:.8rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-mid)">AI Performance Report</span>
+        <button class="btn-s" onclick="genReport()" style="border-color:var(--gold-dim);color:var(--gold)">Refresh</button>
+      </div>
+      <div id="reportModalText" style="font-size:.9rem;line-height:1.8;color:var(--text);white-space:pre-wrap"></div>
+      <div id="reportModalTime" style="font-size:.7rem;color:var(--text-dim);margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- ACTIVITY HISTORY -->
   <div class="sec fi d3">
     <div class="sec-hd"><span class="sec-t">Recent Activity</span></div>
@@ -492,6 +516,35 @@ function chart(){fetch('/api/copy/chart').then(r=>r.json()).then(d=>{
 
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot()}catch(e){console.error('fetch:',e);dot()}}
 load();setInterval(load,10000);setTimeout(initSSE,2000);
+
+// AI Report
+function loadReport(){
+  fetch('/api/report/latest').then(r=>r.json()).then(d=>{
+    if(d.report&&d.report!=='No reports yet. Click Generate.'){
+      $('reportText').textContent=d.report.substring(0,200)+(d.report.length>200?'...':'');
+      $('reportText').style.color='var(--text)';
+      $('reportModalText').textContent=d.report;
+      const t=d.created_at||'';
+      if(t){try{const dt=new Date(t+'Z');const ts=dt.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
+        $('reportTime').textContent=ts;$('reportModalTime').textContent='Generated: '+ts}catch(e){}}
+    }
+  }).catch(()=>{})
+}
+function genReport(){
+  $('reportBtn').textContent='Generating...';$('reportBtn').disabled=true;
+  $('reportText').textContent='Analyzing positions...';$('reportText').style.color='var(--gold)';
+  fetch('/api/report/generate',{method:'POST'}).then(r=>r.json()).then(d=>{
+    $('reportText').textContent=d.report?d.report.substring(0,200):'Error';
+    $('reportText').style.color='var(--text)';
+    $('reportModalText').textContent=d.report||'Error';
+    $('reportBtn').textContent='Generate';$('reportBtn').disabled=false;
+    $('reportTime').textContent='just now';$('reportModalTime').textContent='Generated: just now';
+  }).catch(()=>{$('reportBtn').textContent='Generate';$('reportBtn').disabled=false})
+}
+function showReportModal(){
+  const m=$('reportModal');m.style.display='flex';
+}
+loadReport();
 </script>
 </body>
 </html>

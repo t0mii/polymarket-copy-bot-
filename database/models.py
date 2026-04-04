@@ -160,6 +160,13 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_log(created_at);
 
+CREATE TABLE IF NOT EXISTS ai_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_text TEXT NOT NULL,
+    data_snapshot TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_copy_trades_wallet ON copy_trades(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_copy_trades_condition ON copy_trades(condition_id);
 CREATE INDEX IF NOT EXISTS idx_copy_trades_status ON copy_trades(status);

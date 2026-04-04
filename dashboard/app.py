@@ -290,6 +290,36 @@ def api_live_data():
     })
 
 
+@app.route("/api/report/generate", methods=["POST"])
+def api_generate_report():
+    """Generate AI performance report."""
+    import threading
+    from bot.ai_report import generate_report
+    result = {"status": "generating"}
+
+    def do_generate():
+        report = generate_report()
+        result["report"] = report
+        result["status"] = "done"
+
+    thread = threading.Thread(target=do_generate, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+
+    if result["status"] == "done":
+        return jsonify({"report": result.get("report", ""), "status": "ok"})
+    return jsonify({"report": "Generating... refresh in a few seconds", "status": "pending"})
+
+
+@app.route("/api/report/latest")
+def api_latest_report():
+    """Get most recent AI report."""
+    report = db.get_latest_report()
+    if report:
+        return jsonify({"report": dict(report)["report_text"], "created_at": dict(report)["created_at"]})
+    return jsonify({"report": "No reports yet. Click Generate.", "created_at": ""})
+
+
 @app.route("/")
 def index():
     """Root redirects to copybot dashboard."""

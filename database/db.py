@@ -665,3 +665,27 @@ def get_activity_log(limit=100):
             "SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?",
             (limit,)
         ).fetchall()
+
+
+# --- AI Reports ---
+
+def save_report(report_text: str, data_snapshot: str = ""):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO ai_reports (report_text, data_snapshot) VALUES (?, ?)",
+            (report_text, data_snapshot))
+
+
+def get_latest_report():
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM ai_reports ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+
+
+def get_reports(limit=10):
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM ai_reports ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()

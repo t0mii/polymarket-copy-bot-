@@ -68,6 +68,10 @@ HEDGE_WAIT_TRADERS = os.getenv("HEDGE_WAIT_TRADERS", "")
 # e.g. "Jargs:0xf164...,xsaghav:0xdbb3..."
 FOLLOWED_TRADERS = os.getenv("FOLLOWED_TRADERS", "")
 
+# AI Report
+REPORT_INTERVAL_HOURS = int(os.getenv("REPORT_INTERVAL_HOURS", "0"))  # 0 = manual only
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
 # Massive.com Market Data
 MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "")
 
