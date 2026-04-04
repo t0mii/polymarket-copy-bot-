@@ -401,8 +401,9 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('nOpen').textContent=D.open_trades.length;
   $('tOpen').innerHTML=D.open_trades.length?D.open_trades.map(t=>{const p=t.pnl_unrealized||0;
     const pot=t.entry_price>0&&t.entry_price<1?t.size*(1-t.entry_price)/t.entry_price:0;
+    const sp=t.sport?'<span style="font-size:.6rem;color:var(--gold);font-weight:600;margin-right:4px">'+t.sport+'</span>':'';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
-      <td class="c-mkt">${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
+      <td class="c-mkt">${sp}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
       <td>$${fm(t.size)}</td><td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
       <td class="p-up">+$${fm(pot)}</td><td class="c-dt">${age(t.created_at)}</td></tr>`}).join('')

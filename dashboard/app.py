@@ -112,12 +112,25 @@ def api_live_data():
             elif outcome.lower() in ("no", "n"): side = "NO"
             else: side = outcome or "YES"
 
+            # Detect sport from slug
+            _slug = rp.get("slug", "") or ""
+            _sport_map = {"mlb": "MLB", "nba": "NBA", "nhl": "NHL", "nfl": "NFL",
+                          "ufc": "UFC", "mma": "MMA", "atp": "ATP", "wta": "WTA",
+                          "soccer": "SOC", "liga": "SOC", "epl": "SOC", "ucl": "SOC",
+                          "lol": "LOL", "csgo": "CS", "ncaa": "NCAA"}
+            _sport = ""
+            for _k, _v in _sport_map.items():
+                if _k in _slug.lower():
+                    _sport = _v
+                    break
+
             open_positions.append({
                 "id": hash(rp.get("conditionId", "")) % 10000,
                 "wallet_username": "RN1",
                 "wallet_address": funder,
                 "market_question": rp.get("title") or rp.get("question", ""),
                 "market_slug": rp.get("slug", ""),
+                "sport": _sport,
                 "event_slug": rp.get("eventSlug", ""),
                 "side": side,
                 "outcome_label": outcome if side not in ("YES", "NO") else "",
