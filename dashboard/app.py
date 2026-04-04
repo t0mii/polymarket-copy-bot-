@@ -71,6 +71,10 @@ def api_live_data():
     DEPOSIT = float(config.STARTING_BALANCE)
     funder = config.POLYMARKET_FUNDER
     DATA_API = "https://data-api.polymarket.com"
+    _sport_map = {"mlb": "MLB", "nba": "NBA", "nhl": "NHL", "nfl": "NFL",
+                  "ufc": "UFC", "mma": "MMA", "atp": "ATP", "wta": "WTA",
+                  "soccer": "SOC", "liga": "SOC", "epl": "SOC", "ucl": "SOC",
+                  "lol": "LOL", "csgo": "CS", "ncaa": "NCAA"}
 
     # Real wallet balance
     wallet = 0
@@ -114,10 +118,6 @@ def api_live_data():
 
             # Detect sport from slug
             _slug = rp.get("slug", "") or ""
-            _sport_map = {"mlb": "MLB", "nba": "NBA", "nhl": "NHL", "nfl": "NFL",
-                          "ufc": "UFC", "mma": "MMA", "atp": "ATP", "wta": "WTA",
-                          "soccer": "SOC", "liga": "SOC", "epl": "SOC", "ucl": "SOC",
-                          "lol": "LOL", "csgo": "CS", "ncaa": "NCAA"}
             _sport = ""
             for _k, _v in _sport_map.items():
                 if _k in _slug.lower():
@@ -195,6 +195,12 @@ def api_live_data():
                 sell_losses += 1
             outcome = bv["outcome"]
             side = outcome if outcome.lower() not in ("yes","no","y","n","") else outcome.upper()[:3] or "?"
+            _cs = bv.get("slug", "") or ""
+            _csport = ""
+            for _ck, _cv2 in _sport_map.items():
+                if _ck in _cs.lower():
+                    _csport = _cv2
+                    break
             closed_positions.append({
                 "id": hash(cid) % 10000,
                 "wallet_username": "RN1",
@@ -209,6 +215,7 @@ def api_live_data():
                 "status": "closed",
                 "market_slug": bv.get("slug", ""),
                 "event_slug": bv.get("eventSlug", ""),
+                "sport": _csport,
                 "closed_at": "",
                 "created_at": "",
             })
