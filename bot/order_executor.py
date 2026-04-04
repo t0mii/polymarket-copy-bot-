@@ -120,7 +120,7 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         success = False
         if isinstance(response, dict):
             status = (response.get("status") or response.get("orderStatus") or "").lower()
-            success = status in ("matched", "filled", "live")
+            success = status in ("matched", "filled", "live", "delayed")
         elif response:
             success = True
 
