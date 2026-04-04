@@ -348,7 +348,7 @@ function alert_(t){const o=$('alOv');o.style.display='flex';
     <div class="al-det"><span class="hl">${t.side||'?'}</span> @ ${t.price||0}\u00A2 \u00B7 $${fm(t.size)} \u00B7 via <span class="hl">${t.trader||'?'}</span>${t.live?' \u2014 LIVE':''}</div></div>`;
   setTimeout(()=>{o.style.display='none'},4200)}
 
-function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||t.title||t.detail||'')).toLowerCase();
+function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.title||'')+(t.detail||'')).toLowerCase();
   const m=[['mlb','\u26BE','MLB'],['nba','\uD83C\uDFC0','NBA'],['nhl','\uD83C\uDFD2','NHL'],['nfl','\uD83C\uDFC8','NFL'],
     ['ufc','\uD83E\uDD4A','UFC'],['mma','\uD83E\uDD4A','MMA'],['atp','\uD83C\uDFBE','ATP'],['wta','\uD83C\uDFBE','WTA'],
     ['charleston','\uD83C\uDFBE','WTA'],['copa','\uD83C\uDFBE','WTA'],['soccer','\u26BD','SOC'],
