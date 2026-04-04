@@ -640,8 +640,8 @@ function fmtReport(t){
     .replace(/(worst:)/g,'<span style="color:var(--red);font-weight:500">$1</span>')
     .replace(/(total:)/g,'<span style="font-weight:600;color:var(--text)">$1</span>')
     .replace(/(total \(\d+\):)/g,'<span style="font-weight:600;color:var(--text)">$1</span>')
-    // Trader section header: "Name — X positions..."
-    .replace(/(\w+)( \u2014 \d+ positions)/g,'<div style="margin-top:6px;padding-bottom:4px;border-bottom:1px solid rgba(201,168,76,.2)"><span style="color:var(--gold);font-weight:700;font-size:1.05em">$1</span><span style="color:var(--text-mid)">$2</span></div>')
+    // Trader section header: "Name — last X: $PnL | total (X): $PnL | stats"
+    .replace(/(\w+)( \u2014 last \d+:)/g,'<div style="margin:10px 0 6px;padding:6px 0;border-bottom:2px solid rgba(201,168,76,.3)"><span style="color:var(--gold);font-weight:700;font-size:1.1em;letter-spacing:.03em">$1</span><span style="color:var(--text-dim);font-size:.9em">$2</span>')
     // Recommendation
     .replace(/(Recommendation:)/g,'<span style="color:var(--gold);font-weight:600">$1</span>')
     .replace(/(Performing well|Solid start)/g,'<span style="color:var(--green)">$1</span>')
@@ -696,13 +696,17 @@ function buildPreview(raw){
     // Best/worst
     const bHtml=best?'<span style="color:var(--green)"><span style="font-size:.82em;opacity:.6">best:</span> '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">WIN</span>')+'</span>':'';
     const wHtml=worst?'<span style="color:var(--red)"><span style="font-size:.82em;opacity:.6">worst:</span> '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;font-size:.82em;padding:1px 4px;border-radius:2px;font-weight:700">LOSS</span>')+'</span>':'';
-    return`<div style="display:grid;grid-template-columns:90px 85px 70px 110px 1fr 1fr;gap:4px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
-      <span style="color:var(--gold);font-weight:700;font-size:1.05em;overflow:hidden;text-overflow:ellipsis">${name}</span>
-      <span style="color:${pnlCol};font-weight:700;font-size:1.15em;font-family:var(--mono)">\$${pnlStr}</span>
-      <span style="font-size:.88em">${recHtml}</span>
-      <span style="color:${vc};font-weight:700;font-size:.72em;letter-spacing:.08em;background:${vBg};padding:2px 8px;border-radius:3px;text-transform:uppercase;white-space:nowrap;text-align:center">${verdict}${lastPnl?' <span style="color:var(--text-mid);font-weight:400;text-transform:none">'+lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>')+'</span>':''}</span>
-      <span style="font-size:.88em">${bHtml||''}</span>
-      <span style="font-size:.88em">${wHtml||''}</span>
+    return`<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="color:var(--gold);font-weight:700;font-size:1.1em;min-width:90px">${name}</span>
+        <span style="color:${pnlCol};font-weight:700;font-size:1.2em;font-family:var(--mono);min-width:75px">\$${pnlStr}</span>
+        <span style="font-size:.9em;min-width:60px">${recHtml}</span>
+        <span style="color:${vc};font-weight:700;font-size:.72em;letter-spacing:.08em;background:${vBg};padding:2px 8px;border-radius:3px;text-transform:uppercase;white-space:nowrap">${verdict}</span>
+        ${lastPnl?'<span style="color:var(--text-dim);font-size:.88em">'+lastPnl.replace(/\$([\+\-][\d.]+)/,(_,v)=>'<span style="color:'+(v.startsWith('+')?'var(--green)':'var(--red)')+';font-weight:600">$'+v+'</span>')+'</span>':''}
+      </div>
+      <div style="display:flex;gap:16px;padding-left:100px;font-size:.9em">
+        ${bHtml||''}${wHtml||''}
+      </div>
     </div>`;
   }).join('');
 }
