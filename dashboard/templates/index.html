@@ -23,6 +23,13 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:linear-gradient(rgba(201,168,76,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.03) 1px,transparent 1px);
   background-size:80px 80px;animation:gridDrift 60s linear infinite}
 @keyframes gridDrift{to{background-position:80px 80px}}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse at 20% 0%,rgba(201,168,76,0.06),transparent 55%),
+             radial-gradient(ellipse at 80% 100%,rgba(201,168,76,0.03),transparent 50%)}
+.scan{position:fixed;top:0;left:0;right:0;height:1px;z-index:9998;pointer-events:none;
+  background:linear-gradient(90deg,transparent 10%,rgba(201,168,76,0.25) 50%,transparent 90%);
+  animation:scanMove 8s linear infinite}
+@keyframes scanMove{0%{top:-1px}100%{top:100vh}}
 .app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 5% 40px}
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px;flex-wrap:wrap;gap:12px}
 .logo{font-size:1.25rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);text-shadow:0 0 30px rgba(201,168,76,0.2)}
@@ -61,10 +68,12 @@ tr:hover{background:rgba(201,168,76,0.02)}
 </style>
 </head>
 <body>
+<div class="scan"></div>
 <div class="app">
   <header class="hd">
     <div style="display:flex;align-items:center;gap:8px">
-      <div><div class="logo">POLY COPYBOT</div><div class="logo-sub">by Super Sauna Club</div></div>
+      <img src="/static/logo.png" alt="SSC" style="height:36px" onerror="this.style.display='none'">
+      <div><div class="logo">Poly Copybot</div><div class="logo-sub">by Super Sauna Club</div></div>
     </div>
     <nav class="nav">
       <a href="/copy">Terminal</a>
