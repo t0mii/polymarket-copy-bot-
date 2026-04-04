@@ -544,8 +544,8 @@ def copy_followed_wallets():
                                 wait, side, td["question"][:40])
                     # Re-inject into the activity feed by creating the trade directly
                     entry_price = td["entry_price"]
-                    # Check trader exposure limit (1/3 of portfolio)
-                    _max_t = cash / 3.0
+                    # Check trader exposure limit
+                    _max_t = cash * config.MAX_EXPOSURE_PER_TRADER
                     _t_inv = sum(x["size"] for x in db.get_open_copy_trades() if x["wallet_address"] == td["address"])
                     if _t_inv >= _max_t:
                         logger.info("[HEDGE-WAIT] Trader exposure $%.0f >= max $%.0f, skipping: %s", _t_inv, _max_t, td["question"][:40])
@@ -832,8 +832,8 @@ def copy_followed_wallets():
             # Apply realistic entry slippage (+1 tick) — simulates execution delay
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, 0.97), 4)
 
-            # Max exposure per trader: 1/3 of portfolio
-            max_per_trader = balance / 3.0
+            # Max exposure per trader
+            max_per_trader = balance * config.MAX_EXPOSURE_PER_TRADER
             trader_invested = sum(
                 t["size"] for t in db.get_open_copy_trades()
                 if t["wallet_address"] == address

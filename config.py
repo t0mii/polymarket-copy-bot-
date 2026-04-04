@@ -28,6 +28,7 @@ RATIO_MAX = float(os.getenv("RATIO_MAX", "3.0"))
 CASH_FLOOR = float(os.getenv("CASH_FLOOR", "0"))
 CASH_RECOVERY = float(os.getenv("CASH_RECOVERY", "6"))
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "100"))
+MAX_EXPOSURE_PER_TRADER = float(os.getenv("MAX_EXPOSURE_PER_TRADER", "0.33"))  # Max % of portfolio per trader
 
 # --- Trade Filters ---
 MIN_TRADER_USD = float(os.getenv("MIN_TRADER_USD", "3"))

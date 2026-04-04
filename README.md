@@ -156,6 +156,9 @@ python redeem_positions.py --exec
 | `COPY_SCAN_INTERVAL` | 5 | Seconds between scans |
 | `CASH_FLOOR` | 0 | Stop buying below this cash level |
 | `MAX_OPEN_POSITIONS` | 100 | Maximum simultaneous positions |
+| `MAX_EXPOSURE_PER_TRADER` | 0.33 | Max 33% of portfolio per trader |
+
+> **Risk Management:** No single trader can use more than 33% of your portfolio. With a $300 portfolio and 3 traders, each trader is capped at ~$100 in open positions. This prevents one trader from dominating your portfolio if they go on a buying spree.
 | `DASHBOARD_PORT` | 8090 | Web dashboard port |
 | `DASHBOARD_SECRET` | changeme | Secret key for follow/unfollow API |
 
