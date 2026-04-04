@@ -92,21 +92,38 @@ def update_prices():
                     _cv = float(_p.get("currentValue", 0) or 0)
                     _iv = float(_p.get("initialValue", 0) or 0)
                     _pnl_check = _cv - _iv
+                    _cid_pos = _p.get("conditionId", "")
                     # Close lost positions in DB (price went to 0)
                     if _cp <= 0.01 and _iv > 0.50:
                         try:
                             from database.db import get_connection
-                            _cid_lost = _p.get("conditionId", "")
                             with get_connection() as _conn:
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _updated = _conn.execute(
-                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=? "
+                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
                                     "WHERE condition_id=? AND status='open'",
-                                    (round(-_iv, 2), _now, _cid_lost)).rowcount
+                                    (round(-_iv, 2), _now, _cid_pos)).rowcount
                                 if _updated:
                                     logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, (_p.get("title") or "")[:40])
                                     _db.log_activity("resolved", "LOSS", "Position lost",
                                                      "%s — P&L $%.2f" % ((_p.get("title") or "")[:35], round(-_iv, 2)), round(-_iv, 2))
+                        except Exception:
+                            pass
+                    # Close won positions in DB (price at 100c, resolved)
+                    elif _cp >= 0.99 and _iv > 0.50 and _cv > _iv:
+                        try:
+                            from database.db import get_connection
+                            with get_connection() as _conn:
+                                _pnl_won = round(_cv - _iv, 2)
+                                _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                _updated = _conn.execute(
+                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
+                                    "WHERE condition_id=? AND status='open'",
+                                    (_pnl_won, _now, _cid_pos)).rowcount
+                                if _updated:
+                                    logger.info("[AUTO-CLOSE] Won position marked closed: +$%.2f | %s", _pnl_won, (_p.get("title") or "")[:40])
+                                    _db.log_activity("resolved", "WIN", "Position won",
+                                                     "#%s — P&L $+%.2f" % ((_p.get("title") or "")[:35], _pnl_won), _pnl_won)
                         except Exception:
                             pass
                     if _cp >= 0.96 and _cv > 0.50 and _pnl_check > 0:
