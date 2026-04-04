@@ -852,6 +852,28 @@ def copy_followed_wallets():
                             entry_price_raw * 100, BUY_THRESHOLD * 100, question[:40])
                 continue
 
+            # Event timing filter: only buy X hours before event starts
+            if config.MAX_HOURS_BEFORE_EVENT > 0:
+                _event_slug = t.get("event_slug", "") or t.get("market_slug", "")
+                if _event_slug:
+                    try:
+                        _ev_r = requests.get("https://gamma-api.polymarket.com/events",
+                                             params={"slug": _event_slug.split("/")[-1]}, timeout=5)
+                        if _ev_r.ok and _ev_r.json():
+                            _ev = _ev_r.json()[0] if isinstance(_ev_r.json(), list) else _ev_r.json()
+                            _st = _ev.get("startTime", "")
+                            if _st:
+                                from datetime import datetime as _dt, timezone as _tz
+                                _start = _dt.fromisoformat(_st.replace("Z", "+00:00"))
+                                _now_utc = _dt.now(_tz.utc)
+                                _hours_until = (_start - _now_utc).total_seconds() / 3600
+                                if _hours_until > config.MAX_HOURS_BEFORE_EVENT:
+                                    logger.info("[SKIP] Event in %.1fh (max %.1fh): %s",
+                                                _hours_until, config.MAX_HOURS_BEFORE_EVENT, question[:40])
+                                    continue
+                    except Exception:
+                        pass  # API fail → don't block, just skip check
+
             # Apply realistic entry slippage (+1 tick) — simulates execution delay
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, 0.97), 4)
 
