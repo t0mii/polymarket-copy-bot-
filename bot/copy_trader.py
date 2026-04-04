@@ -347,8 +347,8 @@ def _position_diff_scan(address: str, username: str, balance: float,
             if entry_price_raw <= 0 or entry_price_raw >= 1:
                 continue
 
-            # Max exposure per trader
-            _max_exp = balance * config.MAX_EXPOSURE_PER_TRADER
+            # Max exposure per trader (based on total portfolio)
+            _max_exp = (balance + sum(t["size"] for t in db.get_open_copy_trades())) * config.MAX_EXPOSURE_PER_TRADER
             _t_exp = sum(t["size"] for t in db.get_open_copy_trades() if t["wallet_address"] == address)
             if _t_exp >= _max_exp:
                 logger.info("[DIFF] Trader exposure $%.0f >= max $%.0f, skipping: %s",
@@ -533,7 +533,10 @@ def copy_followed_wallets():
         cash = 0
     balance = cash
     total_invested = 0
-    logger.info("PORTFOLIO: Wallet=$%.2f", cash)
+    # Portfolio value for exposure limit (cash + open positions value)
+    _open_value = sum(t["size"] for t in db.get_open_copy_trades())
+    portfolio_value = cash + _open_value
+    logger.info("PORTFOLIO: Wallet=$%.2f | Positions=$%.2f | Total=$%.2f", cash, _open_value, portfolio_value)
 
     # Pending-Buy-Queue abarbeiten
     new_trades += _process_pending_buys(balance, total_invested)
@@ -552,8 +555,8 @@ def copy_followed_wallets():
                                 wait, side, td["question"][:40])
                     # Re-inject into the activity feed by creating the trade directly
                     entry_price = td["entry_price"]
-                    # Check trader exposure limit (exclude near-won at 95c+)
-                    _max_t = cash * config.MAX_EXPOSURE_PER_TRADER
+                    # Check trader exposure limit (based on total portfolio)
+                    _max_t = portfolio_value * config.MAX_EXPOSURE_PER_TRADER
                     _t_inv = sum(x["size"] for x in db.get_open_copy_trades() if x["wallet_address"] == td["address"])
                     if _t_inv >= _max_t:
                         logger.info("[HEDGE-WAIT] Trader exposure $%.0f >= max $%.0f, skipping: %s", _t_inv, _max_t, td["question"][:40])
@@ -840,8 +843,8 @@ def copy_followed_wallets():
             # Apply realistic entry slippage (+1 tick) — simulates execution delay
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, 0.97), 4)
 
-            # Max exposure per trader
-            max_per_trader = balance * config.MAX_EXPOSURE_PER_TRADER
+            # Max exposure per trader (based on total portfolio, not just cash)
+            max_per_trader = portfolio_value * config.MAX_EXPOSURE_PER_TRADER
             trader_invested = sum(
                 t["size"] for t in db.get_open_copy_trades()
                 if t["wallet_address"] == address
