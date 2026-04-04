@@ -370,7 +370,14 @@ function alert_(t){const o=$('alOv');o.style.display='flex';
   setTimeout(()=>{o.style.display='none'},4200)}
 
 function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.title||'')+(t.detail||'')).toLowerCase();
-  const m=[['mlb','\u26BE','MLB'],['nba','\uD83C\uDFC0','NBA'],['nhl','\uD83C\uDFD2','NHL'],['nfl','\uD83C\uDFC8','NFL'],
+  const m=[
+    // Esports FIRST (to prevent team name collisions with sports teams)
+    ['dota 2:','\uD83E\uDDD9','DOTA'],['dota','\uD83E\uDDD9','DOTA'],['nigma','\uD83E\uDDD9','DOTA'],['pipsqueak','\uD83E\uDDD9','DOTA'],['virtus.pro','\uD83E\uDDD9','DOTA'],['power rangers','\uD83E\uDDD9','DOTA'],['yellow submarine','\uD83E\uDDD9','DOTA'],['zero tenacity','\uD83E\uDDD9','DOTA'],
+    ['counter-strike','\uD83C\uDFAE','CS'],['csgo','\uD83C\uDFAE','CS'],['cs2-','\uD83C\uDFAE','CS'],['3dmax','\uD83C\uDFAE','CS'],['fokus','\uD83C\uDFAE','CS'],['games total','\uD83C\uDFAE','CS'],['nrg','\uD83C\uDFAE','CS'],['inner circle','\uD83C\uDFAE','CS'],['fut esport','\uD83C\uDFAE','CS'],
+    ['lol:','\u2694\uFE0F','LOL'],['lol','\u2694\uFE0F','LOL'],['league of legends','\u2694\uFE0F','LOL'],['drx','\u2694\uFE0F','LOL'],['t1 ','\u2694\uFE0F','LOL'],['hanwha','\u2694\uFE0F','LOL'],['sk gaming','\u2694\uFE0F','LOL'],['shifters','\u2694\uFE0F','LOL'],['kiwoom','\u2694\uFE0F','LOL'],['dplus','\u2694\uFE0F','LOL'],['top esports','\u2694\uFE0F','LOL'],['invictus','\u2694\uFE0F','LOL'],['red canids','\u2694\uFE0F','LOL'],['fluxo','\u2694\uFE0F','LOL'],['heretics','\u2694\uFE0F','LOL'],
+    ['valorant','\uD83D\uDD2B','VAL'],['paper rex','\uD83D\uDD2B','VAL'],['nongshim','\uD83D\uDD2B','VAL'],['esprit','\uD83D\uDD2B','VAL'],['caldya','\uD83D\uDD2B','VAL'],
+    // Sports
+    ['mlb','\u26BE','MLB'],['nba','\uD83C\uDFC0','NBA'],['nhl','\uD83C\uDFD2','NHL'],['nfl','\uD83C\uDFC8','NFL'],
     ['ufc','\uD83E\uDD4A','UFC'],['mma','\uD83E\uDD4A','MMA'],['atp','\uD83C\uDFBE','ATP'],['wta','\uD83C\uDFBE','WTA'],
     ['charleston','\uD83C\uDFBE','WTA'],['copa','\uD83C\uDFBE','WTA'],['soccer','\u26BD','SOC'],
     ['efa-','\u26BD','EPL'],['lal-','\u26BD','LAL'],['mex-','\u26BD','MX'],
@@ -386,10 +393,6 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.
     ['blues','\uD83C\uDFD2','NHL'],['ducks','\uD83C\uDFD2','NHL'],['penguins','\uD83C\uDFD2','NHL'],['rangers','\uD83C\uDFD2','NHL'],['canadiens','\uD83C\uDFD2','NHL'],['maple leafs','\uD83C\uDFD2','NHL'],['oilers','\uD83C\uDFD2','NHL'],['flames','\uD83C\uDFD2','NHL'],['canucks','\uD83C\uDFD2','NHL'],['blackhawks','\uD83C\uDFD2','NHL'],['predators','\uD83C\uDFD2','NHL'],['lightning','\uD83C\uDFD2','NHL'],['panthers','\uD83C\uDFD2','NHL'],['hurricanes','\uD83C\uDFD2','NHL'],['avalanche','\uD83C\uDFD2','NHL'],['capitals','\uD83C\uDFD2','NHL'],
     ['coventry','\u26BD','EFL'],['derby','\u26BD','EFL'],['sporting','\u26BD','SOC'],['santa clara','\u26BD','SOC'],['rayo','\u26BD','SOC'],['elche','\u26BD','SOC'],['coquimbo','\u26BD','SOC'],['cobresal','\u26BD','SOC'],['uni\u00F3n','\u26BD','SOC'],['riestra','\u26BD','SOC'],['estudiante','\u26BD','SOC'],['san lorenzo','\u26BD','SOC'],['toulouse','\u26BD','SOC'],['paris','\u26BD','SOC'],['psg','\u26BD','SOC'],
     ['shelton','\uD83C\uDFBE','ATP'],['ficovich','\uD83C\uDFBE','ATP'],['san luis potosi','\uD83C\uDFBE','ATP'],
-    ['counter-strike','\uD83C\uDFAE','CS'],['csgo','\uD83C\uDFAE','CS'],['cs2-','\uD83C\uDFAE','CS'],['3dmax','\uD83C\uDFAE','CS'],['fokus','\uD83C\uDFAE','CS'],['games total','\uD83C\uDFAE','CS'],['nrg','\uD83C\uDFAE','CS'],['inner circle','\uD83C\uDFAE','CS'],['fut esport','\uD83C\uDFAE','CS'],
-    ['lol','\u2694\uFE0F','LOL'],['league of legends','\u2694\uFE0F','LOL'],['drx','\u2694\uFE0F','LOL'],['t1 ','\u2694\uFE0F','LOL'],['hanwha','\u2694\uFE0F','LOL'],['sk gaming','\u2694\uFE0F','LOL'],['shifters','\u2694\uFE0F','LOL'],['kiwoom','\u2694\uFE0F','LOL'],['dplus','\u2694\uFE0F','LOL'],['top esports','\u2694\uFE0F','LOL'],['invictus','\u2694\uFE0F','LOL'],
-    ['valorant','\uD83D\uDD2B','VAL'],['paper rex','\uD83D\uDD2B','VAL'],['nongshim','\uD83D\uDD2B','VAL'],
-    ['dota','\uD83E\uDDD9','DOTA'],['nigma','\uD83E\uDDD9','DOTA'],['pipsqueak','\uD83E\uDDD9','DOTA'],
     ['ncaa','\uD83C\uDFC0','NCAA'],['cwbb','\uD83C\uDFC0','NCAA'],
     ['chi-','\u26BD','CHN'],['bl2-','\u26BD','BL2'],['bun-','\u26BD','BL'],['ere-','\u26BD','ERE'],
     ['es2-','\u26BD','ES2'],['tur-','\u26BD','TUR'],['fl1-','\u26BD','FL1'],['arg-','\u26BD','ARG'],
@@ -510,7 +513,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-mkt">${spH}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
       <td>$${fm(t.size)}</td><td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
-      <td class="c-dt">${t.created_at?t.created_at.substring(5,16).replace('T',' '):''}</td></tr>`}).join('')
+      <td class="c-dt">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return t.created_at.substring(5,16)}})():''}</td></tr>`}).join('')
     :'<tr><td colspan="9" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
@@ -520,7 +523,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-mkt">${spH2}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round((t.current_price||0)*100)}\u00A2</td><td>$${fm(t.size)}</td>
       <td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
-      <td class="c-dt">${t.closed_at?(t.closed_at).substring(5,16):''}</td></tr>`}).join('')
+      <td class="c-dt">${t.closed_at?(()=>{try{const d=new Date(t.closed_at.replace(' ','T')+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return t.closed_at.substring(5,16)}})():''}</td></tr>`}).join('')
     :'<tr><td colspan="9" class="empty" style="border:0">No closed trades yet</td></tr>';
 
   ticker();
@@ -550,7 +553,7 @@ function renderLog(){
 
 function chart(){fetch('/api/copy/chart').then(r=>r.json()).then(d=>{
   const c=$('chart');if(!c||!d.labels.length)return;
-  const lb=d.labels.map(l=>{const x=new Date(l);return x.toLocaleDateString('de',{day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'})});
+  const lb=d.labels.map(l=>{const x=new Date(l+'Z');return x.toLocaleDateString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})});
   if(CI){CI.data.labels=lb;CI.data.datasets[0].data=d.values;CI.update();return}
   CI=new Chart(c,{type:'line',data:{labels:lb,datasets:[{data:d.values,
     borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,0.04)',

@@ -135,8 +135,8 @@ def _calculate_position_size(entry_price: float, balance: float, trader_ratio: f
     else:
         price_mult = 0.60
 
-    # Proportionaler Trader-Multiplikator (begrenzt auf 0.5x–3x)
-    clamped_ratio = max(0.5, min(3.0, trader_ratio))
+    # Proportionaler Trader-Multiplikator
+    clamped_ratio = max(config.RATIO_MIN, min(config.RATIO_MAX, trader_ratio))
 
     size = base * price_mult * clamped_ratio
     size = min(size, MAX_POSITION_SIZE, available)
@@ -531,15 +531,17 @@ def copy_followed_wallets():
     new_trades += _process_pending_buys(balance, total_invested)
 
     # Hedge-Wait Queue: fire trades that waited long enough without hedge
-    if config.HEDGE_WAIT_SECS > 0:
+    if _hedge_queue:
         now_ts = _time.time()
         expired_keys = []
         for ekey, q in list(_hedge_queue.items()):
-            if now_ts - q["queued_at"] >= config.HEDGE_WAIT_SECS:
+            # Per-trade wait time (stored in the trade data)
+            wait = max(td.get("wait_secs", 60) for td in q["sides"].values())
+            if now_ts - q["queued_at"] >= wait:
                 # No hedge detected in time → this is a conviction trade, execute it
                 for side, td in q["sides"].items():
                     logger.info("[HEDGE-WAIT] No hedge after %ds → executing: %s %s",
-                                config.HEDGE_WAIT_SECS, side, td["question"][:40])
+                                wait, side, td["question"][:40])
                     # Re-inject into the activity feed by creating the trade directly
                     entry_price = td["entry_price"]
                     size = _calculate_position_size(entry_price, cash, 1.0)
@@ -662,16 +664,20 @@ def copy_followed_wallets():
         for t in new_buy_trades:
             cid = t.get("condition_id", "")
             question = t["market_question"]
+            logger.info("[NEW] %s: %s | $%.2f | %dc | cid=%s",
+                        username, question[:40], t.get("usdc_size", 0),
+                        round(t.get("price", 0) * 100), (cid or "?")[:16])
 
             if not question:
+                logger.info("[SKIP] Empty question")
                 continue
 
             # === RN1 SMART-FILTER ===
             # 1) Min Trader USD: Nur echte Conviction-Trades kopieren, Noise ignorieren
             dollar_value = t.get("usdc_size", 0)
             if dollar_value < config.MIN_TRADER_USD:
-                logger.debug("[FILTER] Trader-Size $%.1f < $%.0f: %s",
-                             dollar_value, config.MIN_TRADER_USD, question[:40])
+                logger.info("[FILTER] Size $%.1f < $%.0f: %s",
+                            dollar_value, config.MIN_TRADER_USD, question[:40])
                 continue
 
             # 2) Preis-Range-Filter: Trash-Farming (1-3c) und Hedges (95-99c) ausfiltern
@@ -684,8 +690,8 @@ def copy_followed_wallets():
 
             # 3) Max Kopien pro Markt: nicht X-mal denselben Markt kopieren
             if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
-                logger.debug("[FILTER] Max Kopien (%d) fuer Markt erreicht: %s",
-                             config.MAX_COPIES_PER_MARKET, question[:40])
+                logger.info("[FILTER] Max copies (%d) for market: %s",
+                            config.MAX_COPIES_PER_MARKET, question[:40])
                 continue
 
             # === STANDARD-FILTER ===
@@ -706,30 +712,45 @@ def copy_followed_wallets():
                         continue
 
             # Hedge-Wait: hold trade and check if trader buys opposite side
-            # Only for traders known to hedge (strategy_type contains "Esports")
-            _hw_traders = [t.strip().lower() for t in config.HEDGE_WAIT_TRADERS.split(",") if t.strip()]
-            trader_hedges = (wallet.get("username") or "").lower() in _hw_traders
-            if config.HEDGE_WAIT_SECS > 0 and cid and trader_hedges:
-                event_key = t.get("event_slug", "") or t.get("market_slug", "") or cid[:20]
-                if event_key in _hedge_queue:
-                    q = _hedge_queue[event_key]
+            # Per-trader wait times from HEDGE_WAIT_TRADERS (e.g. "xsaghav:60,RN1:30")
+            _hw_map = {}
+            for entry in config.HEDGE_WAIT_TRADERS.split(","):
+                entry = entry.strip()
+                if ":" in entry:
+                    parts = entry.split(":", 1)
+                    _hw_map[parts[0].strip().lower()] = int(parts[1].strip())
+                elif entry:
+                    _hw_map[entry.lower()] = config.HEDGE_WAIT_SECS
+            trader_name_lower = (wallet.get("username") or "").lower()
+            hedge_wait_secs = _hw_map.get(trader_name_lower, 0)
+
+            if hedge_wait_secs > 0 and cid:
+                # Key = condition_id (exact market, not event-level)
+                hedge_key = cid
+                if hedge_key in _hedge_queue:
+                    q = _hedge_queue[hedge_key]
                     if t["side"] not in q["sides"]:
-                        # Trader bought opposite side → HEDGE DETECTED → cancel both
+                        # Trader bought opposite side on SAME market → HEDGE → cancel both
                         logger.info("[HEDGE-WAIT] Hedge detected! %s bought %s + %s → skipping both: %s",
                                     username, list(q["sides"].keys())[0], t["side"], question[:40])
-                        del _hedge_queue[event_key]
+                        del _hedge_queue[hedge_key]
+                        continue
+                    else:
+                        # Same side again (doubling down) → skip duplicate, keep original queued
+                        logger.debug("[HEDGE-WAIT] Same side again, ignoring: %s %s", t["side"], question[:40])
                         continue
                 else:
                     # First side → queue it, wait for potential hedge
-                    _hedge_queue[event_key] = {
+                    _hedge_queue[hedge_key] = {
                         "sides": {t["side"]: {
                             "trade_data": t, "question": question, "cid": cid,
                             "entry_price": trader_price, "address": address, "username": username,
+                            "wait_secs": hedge_wait_secs,
                         }},
                         "queued_at": _time.time(),
                     }
                     logger.info("[HEDGE-WAIT] Queued trade, waiting %ds for hedge check: %s %s",
-                                config.HEDGE_WAIT_SECS, t["side"], question[:40])
+                                hedge_wait_secs, t["side"], question[:40])
                     continue
 
             # Staleness Guard: Trade älter als ENTRY_TRADE_SEC → ignorieren
@@ -808,6 +829,8 @@ def copy_followed_wallets():
             # Proportionaler Trader-Multiplikator: dieser Trade vs. Trader-Durchschnitt
             trader_ratio = (dollar_value / avg_trader_size) if avg_trader_size > 0 else 1.0
             size = _calculate_position_size(entry_price, balance, trader_ratio=trader_ratio)
+            logger.info("[SIZE] %s: trader=$%.0f avg=$%.0f ratio=%.2f → our=$%.2f | %s",
+                        username, dollar_value, avg_trader_size, trader_ratio, size, question[:35])
 
             cash_left = balance - total_invested - size
             if cash_left < _load_dynamic_floor():

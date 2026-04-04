@@ -108,7 +108,8 @@ def api_live_data():
         with get_connection() as _conn:
             for _row in _conn.execute(
                 "SELECT condition_id, wallet_username, created_at FROM copy_trades "
-                "WHERE condition_id != '' GROUP BY condition_id"
+                "WHERE condition_id != '' AND status != 'baseline' "
+                "ORDER BY created_at DESC"
             ).fetchall():
                 _trader_by_cid[_row["condition_id"]] = _row["wallet_username"]
                 _time_by_cid[_row["condition_id"]] = _row["created_at"] or ""
