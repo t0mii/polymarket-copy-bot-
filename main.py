@@ -60,7 +60,7 @@ def copy_scan():
 
 
 _update_counter = 0
-_recently_closed: set = set()  # condition_ids recently sold/closed, prevents duplicate logs
+_recently_closed: dict = {}  # cid → timestamp, prevents duplicate logs
 
 
 def auto_generate_report():
@@ -94,7 +94,8 @@ def update_prices():
                     _iv = float(_p.get("initialValue", 0) or 0)
                     _pnl_check = _cv - _iv
                     _cid_pos = _p.get("conditionId", "")
-                    if _cid_pos in _recently_closed:
+                    import time as _t
+                    if _cid_pos in _recently_closed and (_t.time() - _recently_closed[_cid_pos]) < 300:
                         continue
                     # Close lost positions in DB (price went to 0)
                     if _cp <= 0.01 and _iv > 0.01:
@@ -108,7 +109,7 @@ def update_prices():
                                     (round(-_iv, 2), _now, _cid_pos)).rowcount
                                 if _updated:
                                     logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, (_p.get("title") or "")[:40])
-                                    _recently_closed.add(_cid_pos)
+                                    _recently_closed[_cid_pos] = _t.time()
                                     _db.log_activity("resolved", "LOSS", "Position lost",
                                                      "%s — P&L $%.2f" % ((_p.get("title") or "")[:35], round(-_iv, 2)), round(-_iv, 2))
                                     try:
@@ -131,7 +132,7 @@ def update_prices():
                                     (_pnl_won, _now, _cid_pos)).rowcount
                                 if _updated:
                                     logger.info("[AUTO-CLOSE] Won position marked closed: +$%.2f | %s", _pnl_won, (_p.get("title") or "")[:40])
-                                    _recently_closed.add(_cid_pos)
+                                    _recently_closed[_cid_pos] = _t.time()
                                     _db.log_activity("resolved", "WIN", "Position won",
                                                      "#%s — P&L $+%.2f" % ((_p.get("title") or "")[:35], _pnl_won), _pnl_won)
                                     try:
@@ -151,7 +152,7 @@ def update_prices():
                         if _resp:
                             _pnl = round(_cv - _iv, 2)
                             logger.info("[AUTO-SELL] Sold: $%.2f (cost $%.2f, P&L $%+.2f) | %s", _cv, _iv, _pnl, (_p.get("title") or "")[:40])
-                            _recently_closed.add(_cid_pos)
+                            _recently_closed[_cid_pos] = _t.time()
                             _db.log_activity("sell", "WIN" if _pnl >= 0 else "LOSS",
                                              "Position closed — %s" % ("profit" if _pnl >= 0 else "sold"),
                                              "%s — sold $%.2f, P&L $%+.2f" % ((_p.get("title") or "")[:35], _cv, _pnl), _pnl)
@@ -176,7 +177,9 @@ def update_prices():
         _update_counter += 1
         # Snapshot alle 10 Updates (= 5 Min bei 30s Intervall)
         if _update_counter >= 10:
-            _recently_closed.clear()
+            _stale = [k for k, v in _recently_closed.items() if _t.time() - v > 600]
+            for _sk in _stale:
+                del _recently_closed[_sk]
             _update_counter = 0
             try:
                 from bot.order_executor import get_wallet_balance

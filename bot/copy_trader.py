@@ -611,6 +611,7 @@ def copy_followed_wallets():
                     if trade_id:
                         new_trades += 1
                         cash -= size
+                        _cached_open_trades.append(trade)
                         db.log_activity("buy", "BUY", "Copied position from %s (conviction)" % td["username"],
                                         "#%d %s @ %dc — $%.2f" % (trade_id, td["question"][:40], entry_price*100, size))
                         logger.info("[HEDGE-WAIT] CONVICTION TRADE #%d: %s @ %dc | $%.2f",
@@ -972,6 +973,7 @@ def copy_followed_wallets():
             if trade_id:
                 new_trades += 1
                 total_invested += size
+                _cached_open_trades.append(trade)
 
                 if cid:
                     price_tracker.subscribe_condition(cid)
