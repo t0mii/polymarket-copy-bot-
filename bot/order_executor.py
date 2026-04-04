@@ -102,45 +102,53 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         except Exception:
             logger.debug("Fee rate lookup failed, using default 200bps")
 
-        # Market Order: price mit +3c Slippage damit Order eher füllt
-        limit_price = round(min(price + 0.03, 0.99), 2)
+        # Market Order: try with increasing slippage until filled
+        for slippage in [0.05, 0.08, 0.12]:
+            limit_price = round(min(price + slippage, 0.99), 2)
 
-        order_args = MarketOrderArgs(
-            token_id=token_id,
-            amount=round(amount_usd, 2),
-            side=BUY,
-            price=limit_price,
-            fee_rate_bps=fee_rate,
-        )
+            order_args = MarketOrderArgs(
+                token_id=token_id,
+                amount=round(amount_usd, 2),
+                side=BUY,
+                price=limit_price,
+                fee_rate_bps=fee_rate,
+            )
 
-        signed_order = client.create_market_order(order_args)
-        response = client.post_order(signed_order, OrderType.FOK)
+            signed_order = client.create_market_order(order_args)
+            response = client.post_order(signed_order, OrderType.FOK)
 
-        # Check ob Order tatsaechlich gefuellt wurde
-        success = False
-        if isinstance(response, dict):
-            status = (response.get("status") or response.get("orderStatus") or "").lower()
-            if status in ("matched", "filled", "live"):
+            # Check ob Order tatsaechlich gefuellt wurde
+            success = False
+            if isinstance(response, dict):
+                status = (response.get("status") or response.get("orderStatus") or "").lower()
+                if status in ("matched", "filled", "live"):
+                    success = True
+                elif status == "delayed":
+                    # "delayed" = queued, may or may not fill. Verify after short wait.
+                    time.sleep(3)
+                    try:
+                        params = BalanceAllowanceParams(asset_type="CONDITIONAL", token_id=token_id)
+                        bal_after = float(client.get_balance_allowance(params).get("balance", 0)) / 1_000_000
+                        success = bal_after > 0.1
+                        logger.info("ORDER VERIFY: delayed → %s (balance=%.2f shares)",
+                                    "FILLED" if success else "NOT FILLED", bal_after)
+                    except Exception:
+                        success = False
+                        logger.warning("ORDER VERIFY: could not check balance, treating as failed")
+            elif response:
                 success = True
-            elif status == "delayed":
-                # "delayed" = queued, may or may not fill. Verify after short wait.
-                time.sleep(3)
-                try:
-                    params = BalanceAllowanceParams(asset_type="CONDITIONAL", token_id=token_id)
-                    bal_after = float(client.get_balance_allowance(params).get("balance", 0)) / 1_000_000
-                    success = bal_after > 0.1
-                    logger.info("ORDER VERIFY: delayed → %s (balance=%.2f shares)",
-                                "FILLED" if success else "NOT FILLED", bal_after)
-                except Exception:
-                    success = False
-                    logger.warning("ORDER VERIFY: could not check balance, treating as failed")
-        elif response:
-            success = True
 
-        logger.info("ORDER BUY: $%.2f @ %.0fc (limit %.0fc) | %s | %s | %s",
-                    amount_usd, price * 100, limit_price * 100, side,
-                    "FILLED" if success else "REJECTED", response)
-        return response if success else None
+            if success:
+                logger.info("ORDER BUY: $%.2f @ %.0fc (limit %.0fc +%.0fc slip) | %s | FILLED",
+                            amount_usd, price * 100, limit_price * 100, slippage * 100, side)
+                return response
+            else:
+                logger.info("ORDER BUY: attempt +%.0fc slip failed, %s",
+                            slippage * 100, "retrying..." if slippage < 0.12 else "giving up")
+
+        # All attempts failed
+        logger.warning("ORDER BUY FAILED: all slippage levels tried | %s / %s / $%.2f", condition_id[:20], side, amount_usd)
+        return None
 
     except Exception as e:
         logger.error("ORDER FEHLER (BUY): %s | %s / %s / $%.2f", e, condition_id[:20], side, amount_usd)
