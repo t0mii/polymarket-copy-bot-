@@ -79,7 +79,7 @@ def update_prices():
                 for _p in _r.json():
                     _cp = float(_p.get("curPrice", 0) or 0)
                     _cv = float(_p.get("currentValue", 0) or 0)
-                    if _cp >= 0.95 and _cv > 0.50:
+                    if _cp >= 0.97 and _cv > 0.50:
                         _out = _p.get("outcome", "")
                         if _out.lower() in ("yes", "y"): _side = "YES"
                         elif _out.lower() in ("no", "n"): _side = "NO"
