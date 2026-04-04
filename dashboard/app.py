@@ -146,6 +146,9 @@ def api_live_data():
 
             if cv < 0.001 and cp < 0.001:
                 continue
+            # Skip resolved positions (won at 100c or lost at 0c) — waiting for redeem
+            if cp >= 0.99 or (cp <= 0.01 and iv > 0.01):
+                continue
 
             if outcome.lower() in ("yes", "y"): side = "YES"
             elif outcome.lower() in ("no", "n"): side = "NO"
@@ -166,7 +169,7 @@ def api_live_data():
                 "outcome_label": outcome if side not in ("YES", "NO") else "",
                 "entry_price": ap,
                 "current_price": cp,
-                "size": round(cv, 2),
+                "size": round(iv, 2),
                 "pnl_unrealized": round(cv - float(rp.get("initialValue", 0) or 0), 2),
                 "condition_id": _cid,
                 "created_at": _time_by_cid.get(_cid, ""),
@@ -276,7 +279,9 @@ def api_live_data():
     followed = db.get_followed_wallets()
 
     # Filter out unattributed old positions from display (keep values in summary)
-    display_open = [p for p in open_positions if p["wallet_username"] != "—"]
+    display_open = sorted(
+        [p for p in open_positions if p["wallet_username"] != "—"],
+        key=lambda p: p.get("created_at", "") or "", reverse=True)
     display_closed = [p for p in closed_positions if p["wallet_username"] != "—"]
 
     # Counts from bot-copies only (display), values from API (real)
