@@ -382,7 +382,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 logger.info("[DIFF] Neuer Trade #%d (via Position-Diff): %s @ %.0fc (%s)",
                             trade_id, pos["market_question"][:40], entry_price * 100, pos["side"])
                 db.log_activity("buy", "BUY", "Copied position from %s" % username,
-                                "#%d %s @ %dc" % (trade_id, pos["market_question"][:40], entry_price * 100))
+                                "#%d %s @ %dc — $%.2f" % (trade_id, pos["market_question"][:40], entry_price * 100, size))
         return new_trades
     except Exception as e:
         logger.debug("Position-diff error for %s: %s", address[:10], e)
