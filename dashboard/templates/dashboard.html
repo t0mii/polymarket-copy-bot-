@@ -253,10 +253,10 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="card fi d2"><div class="card-lbl">Profit</div><div class="card-val neu" id="v-profit">$---</div><div class="card-sub" id="v-profit-detail"></div></div>
     <div class="card fi d3"><div class="card-lbl">Wallet</div><div class="card-val neu" id="v-cash">$---</div><div class="card-sub">available</div></div>
     <div class="card fi d4"><div class="card-lbl">In Positions</div><div class="card-val neu" id="v-active">$---</div><div class="card-sub" id="v-open-detail"></div></div>
-    <div class="card fi d1"><div class="card-lbl">Pending Payout</div><div class="card-val neu" id="v-pending">$---</div><div class="card-sub">won, auto-redeeming</div></div>
-    <div class="card fi d2"><div class="card-lbl">Return</div><div class="card-val neu" id="v-roi">---</div><div class="card-sub" id="v-roi-detail"></div></div>
-    <div class="card fi d3"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-open-sub"></div></div>
-    <div class="card fi d4"><div class="card-lbl">Open P&L</div><div class="card-val neu" id="v-pnl-main">---</div><div class="card-sub" id="v-pnl-sub"></div></div>
+    <div class="card fi d1"><div class="card-lbl">Open P&L</div><div class="card-val neu" id="v-pnl-main">---</div><div class="card-sub" id="v-pnl-sub"></div></div>
+    <div class="card fi d2"><div class="card-lbl">Pending Payout</div><div class="card-val neu" id="v-pending">$---</div><div class="card-sub">won, auto-redeeming</div></div>
+    <div class="card fi d3"><div class="card-lbl">Return</div><div class="card-val neu" id="v-roi">---</div><div class="card-sub" id="v-roi-detail"></div></div>
+    <div class="card fi d4"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-open-sub"></div></div>
     <div class="card fi d1"><div class="card-lbl">Record</div><div class="card-val-sm" id="v-record-line1">---</div><div class="card-val-sm" id="v-record-line2">---</div><div class="card-sub" id="v-record-detail"></div></div>
     <div class="card fi d2"><div class="card-lbl">Win Rate</div><div class="card-val neu" id="v-wr">---</div><div class="card-sub" id="v-wr-detail"></div></div>
   </div>
@@ -382,9 +382,9 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.
     ['charleston','\uD83C\uDFBE','WTA'],['copa','\uD83C\uDFBE','WTA'],['soccer','\u26BD','SOC'],
     ['efa-','\u26BD','EPL'],['lal-','\u26BD','LAL'],['mex-','\u26BD','MX'],
     ['epl','\u26BD','EPL'],['ucl','\u26BD','UCL'],['bundesliga','\u26BD','BL'],['freiburg','\u26BD','BL'],['bayern','\u26BD','BL'],
-    ['puebla','\u26BD','MX'],['juarez','\u26BD','MX'],['ju\u00E1rez','\u26BD','MX'],['necaxa','\u26BD','MX'],['tigre','\u26BD','MX'],['tijuana','\u26BD','MX'],['mazatl','\u26BD','MX'],
+    ['puebla','\u26BD','MX'],['juarez','\u26BD','MX'],['ju\u00E1rez','\u26BD','MX'],['necaxa','\u26BD','MX'],['tigres','\u26BD','MX'],['tijuana','\u26BD','MX'],['mazatl','\u26BD','MX'],
     ['southampton','\u26BD','EPL'],['barcelona','\u26BD','LAL'],['madrid','\u26BD','LAL'],
-    ['rays','\u26BE','MLB'],['brewers','\u26BE','MLB'],['astros','\u26BE','MLB'],['braves','\u26BE','MLB'],['angels','\u26BE','MLB'],['mariners','\u26BE','MLB'],['athletics','\u26BE','MLB'],
+    ['rays','\u26BE','MLB'],['brewers','\u26BE','MLB'],['astros','\u26BE','MLB'],['braves','\u26BE','MLB'],['angels','\u26BE','MLB'],['mariners','\u26BE','MLB'],['athletics','\u26BE','MLB'],['cardinals','\u26BE','MLB'],['tigers','\u26BE','MLB'],['phillies','\u26BE','MLB'],['nationals','\u26BE','MLB'],['marlins','\u26BE','MLB'],['rockies','\u26BE','MLB'],
     ['celtics','\uD83C\uDFC0','NBA'],['bucks','\uD83C\uDFC0','NBA'],['76ers','\uD83C\uDFC0','NBA'],['knicks','\uD83C\uDFC0','NBA'],['bulls','\uD83C\uDFC0','NBA'],['hawks','\uD83C\uDFC0','NBA'],['nets','\uD83C\uDFC0','NBA'],['magic','\uD83C\uDFC0','NBA'],['mavericks','\uD83C\uDFC0','NBA'],['timberwolves','\uD83C\uDFC0','NBA'],
     ['flyers','\uD83C\uDFD2','NHL'],['islanders','\uD83C\uDFD2','NHL'],
     ['longhorn','\uD83C\uDFC0','NCAA'],['bruins','\uD83C\uDFC0','NCAA'],['gamecock','\uD83C\uDFC0','NCAA'],['huskies','\uD83C\uDFC0','NCAA'],

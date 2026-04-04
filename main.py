@@ -21,7 +21,7 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout),
     ],
 )
-logger = logging.getLogger("wallet-scanner")
+logger = logging.getLogger("poly-copybot")
 
 
 def scheduled_scan():
@@ -250,7 +250,7 @@ def run_startup_baseline():
 
 def main():
     logger.info("=" * 60)
-    logger.info("Polymarket Wallet Scanner starting...")
+    logger.info("Poly CopyBot starting...")
     logger.info("Scan interval: %d hours | Dashboard port: %d",
                 config.SCAN_INTERVAL_HOURS, config.DASHBOARD_PORT)
     logger.info("=" * 60)
