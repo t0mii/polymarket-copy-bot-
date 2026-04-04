@@ -64,7 +64,6 @@ Optional:
 - `BUILDER_KEY/SECRET/PASSPHRASE` — For auto-redeem (get from polymarket.com/settings → Builder)
 - `FOLLOWED_TRADERS` — Traders to follow (format: `Name:0xAddress,Name2:0xAddress2`)
 - `HEDGE_WAIT_TRADERS` — Traders that need hedge detection (comma-separated names)
-- AI API keys for wallet analysis (Groq, Anthropic, Gemini, Z.ai)
 
 ### 3. Run
 
