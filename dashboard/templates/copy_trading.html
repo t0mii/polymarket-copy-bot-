@@ -349,19 +349,19 @@ function alert_(t){const o=$('alOv');o.style.display='flex';
   setTimeout(()=>{o.style.display='none'},4200)}
 
 function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||t.title||t.detail||'')).toLowerCase();
-  const m=[['mlb','\u26BE'],['nba','\uD83C\uDFC0'],['nhl','\uD83C\uDFD2'],['nfl','\uD83C\uDFC8'],
-    ['ufc','\uD83E\uDD4A'],['mma','\uD83E\uDD4A'],['atp','\uD83C\uDFBE'],['wta','\uD83C\uDFBE'],
-    ['charleston','\uD83C\uDFBE'],['copa','\uD83C\uDFBE'],['soccer','\u26BD'],
-    ['efa-','\u26BD'],['lal-','\u26BD'],['mex-','\u26BD'],
-    ['epl','\u26BD'],['ucl','\u26BD'],['bundesliga','\u26BD'],['freiburg','\u26BD'],['bayern','\u26BD'],
-    ['puebla','\u26BD'],['juarez','\u26BD'],['necaxa','\u26BD'],['tigre','\u26BD'],['tijuana','\u26BD'],['mazatl','\u26BD'],
-    ['southampton','\u26BD'],['barcelona','\u26BD'],['madrid','\u26BD'],
-    ['lol','\uD83C\uDFAE'],['ncaa','\uD83C\uDFC0']];
-  for(const[k,v]of m){if(s.includes(k))return v}return''}
+  const m=[['mlb','\u26BE','MLB'],['nba','\uD83C\uDFC0','NBA'],['nhl','\uD83C\uDFD2','NHL'],['nfl','\uD83C\uDFC8','NFL'],
+    ['ufc','\uD83E\uDD4A','UFC'],['mma','\uD83E\uDD4A','MMA'],['atp','\uD83C\uDFBE','ATP'],['wta','\uD83C\uDFBE','WTA'],
+    ['charleston','\uD83C\uDFBE','WTA'],['copa','\uD83C\uDFBE','WTA'],['soccer','\u26BD','SOC'],
+    ['efa-','\u26BD','EPL'],['lal-','\u26BD','LAL'],['mex-','\u26BD','MX'],
+    ['epl','\u26BD','EPL'],['ucl','\u26BD','UCL'],['bundesliga','\u26BD','BL'],['freiburg','\u26BD','BL'],['bayern','\u26BD','BL'],
+    ['puebla','\u26BD','MX'],['juarez','\u26BD','MX'],['necaxa','\u26BD','MX'],['tigre','\u26BD','MX'],['tijuana','\u26BD','MX'],['mazatl','\u26BD','MX'],
+    ['southampton','\u26BD','EPL'],['barcelona','\u26BD','LAL'],['madrid','\u26BD','LAL'],
+    ['lol','\uD83C\uDFAE','LOL'],['ncaa','\uD83C\uDFC0','NCAA']];
+  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'',l:''}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
-    const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const e=dSp(t);
-      return`<span class="tk-i"><span class="s">${e} #${t.id}</span>${(t.market_question||'').substring(0,30)} \u00B7 ${t.side} @ ${Math.round((t.entry_price||0)*100)}\u00A2 \u00B7 <span class="${p>=0?'up':'dn'}">${sg(p)}$${fm(p)}</span></span>`});
+    const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
+      return`<span class="tk-i"><span class="s">#${t.id} ${te} ${tl}</span>${(t.market_question||'').substring(0,30)} \u00B7 ${t.side} @ ${Math.round((t.entry_price||0)*100)}\u00A2 \u00B7 <span class="${p>=0?'up':'dn'}">${sg(p)}$${fm(p)}</span></span>`});
     el.innerHTML=it.join('')+it.join('');return}
   if(hist.length){const it=hist.slice(0,12).map(t=>
     `<span class="tk-i"><span class="s">\u26A1</span>${t.trader} \u2192 ${(t.market||'').substring(0,25)} \u00B7 ${t.side} @ ${t.price}\u00A2 \u00B7 <span class="up">$${fm(t.size)}</span></span>`);
@@ -411,7 +411,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('nOpen').textContent=D.open_trades.length;
   $('tOpen').innerHTML=D.open_trades.length?D.open_trades.map(t=>{const p=t.pnl_unrealized||0;
     const pot=t.entry_price>0&&t.entry_price<1?t.size*(1-t.entry_price)/t.entry_price:0;
-    const sp=t.sport||dSp(t);const spH=sp?'<span style="font-size:.75rem;margin-right:4px">'+sp+'</span>':'';
+    const{e:oe,l:ol}=dSp(t);const spH=(t.sport||oe)?'<span style="font-size:.75rem;margin-right:4px">'+(t.sport||oe+' '+ol)+'</span>':'';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
@@ -421,7 +421,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
 
   $('nClosed').textContent=D.closed_trades.length;
   $('tClosed').innerHTML=D.closed_trades.length?D.closed_trades.map(t=>{const p=t.pnl_realized||0;
-    const sp2=t.sport||dSp(t);const spH2=sp2?'<span style="font-size:.75rem;margin-right:4px">'+sp2+'</span>':'';
+    const{e:ce,l:cl2}=dSp(t);const spH2=(t.sport||ce)?'<span style="font-size:.75rem;margin-right:4px">'+(t.sport||ce+' '+cl2)+'</span>':'';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH2}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>$${fm(t.size)}</td>
@@ -458,8 +458,8 @@ function renderLog(){
       const hlC=pCol==='g'?'hl-g':pCol==='r'?'hl-r':pCol==='y'?'hl-y':pCol==='b'?'hl-b':'';
       const pnlHtml=a.pnl?`<div class="cl-pnl" style="color:var(${a.pnl>=0?'--green':'--red'})">${a.pnl>=0?'+':''}$${a.pnl.toFixed(2)}</div>`:`<div class="cl-pnl"></div>`;
       const detail=a.detail?` <span class="${hlC}">${a.detail}</span>`:'';
-      const aSp=dSp(a);
-      return`<div class="cl"><div class="cl-t">${ts}</div><div class="cl-p ${pCol}">${sym}</div><div class="cl-msg">${aSp?aSp+' ':''}<b>${a.title||''}</b>${detail}</div>${pnlHtml}</div>`}).join('')}
+      const{e:ae,l:al2}=dSp(a);const aSp=ae?ae+' '+al2+' ':'';
+      return`<div class="cl"><div class="cl-t">${ts}</div><div class="cl-p ${pCol}">${sym}</div><div class="cl-msg">${aSp}<b>${a.title||''}</b>${detail}</div>${pnlHtml}</div>`}).join('')}
   else{hp.innerHTML='<div class="cl"><div class="cl-p d">\u00B7</div><div class="cl-msg" style="color:#4a4a5a">no history yet \u2014 buys, sells, wins, losses and redeems appear here</div><div class="cl-pnl"></div></div>'}
 }
 
