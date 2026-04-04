@@ -219,11 +219,7 @@ def main():
             logger.warning("Wallet-Check uebersprungen: %s", e)
     logger.info("Mode: %s | Startkapital: $%d", "LIVE" if LIVE_MODE else "PAPER", STARTING_BALANCE)
 
-    # Activity Log: Bot started
     from database.db import log_activity
-    bal_str = "$%.2f" % balance if balance > 0 else "N/A"
-    log_activity("system", "SYS", "Bot started — %s mode" % ("LIVE" if LIVE_MODE else "PAPER"),
-                 "Wallet: %s" % bal_str)
 
     # STARTUP BASELINE: Immer beim Start neue Baseline erstellen
     # → verhindert, dass bestehende Positionen kopiert werden
