@@ -365,7 +365,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   const profit=Math.round((s.total_value-sb)*100)/100;
   const roi=sb>0?(profit/sb*100):0;
   const L=s.closed_trades-s.wins;
-  const openPnl=D.open_trades?D.open_trades.reduce((a,t)=>a+(t.pnl_unrealized||0),0):0;
+  const openPnl=D.open_trades?D.open_trades.filter(t=>t.current_price>0.01&&t.current_price<0.99).reduce((a,t)=>a+(t.pnl_unrealized||0),0):0;
 
   // Row 1: Your Money
   $('v-val').textContent='$'+fm(s.total_value);$('v-val').className='card-val '+(profit>=0?'gld':'dn');
