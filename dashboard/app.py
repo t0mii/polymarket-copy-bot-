@@ -236,10 +236,10 @@ def api_live_data():
     losses = sum(1 for p in closed_positions if p["pnl_realized"] < 0)
     total_closed = len(closed_positions)
 
-    # Polymarket values (use ALL positions for accurate totals)
-    open_value = sum(p["size"] for p in open_positions)
-    active_value = sum(p["size"] for p in open_positions if 0.01 < p.get("current_price", 0) < 0.99)
-    redeemable_value = sum(p["size"] for p in open_positions if p.get("current_price", 0) >= 0.99)
+    # Polymarket values (use ALL raw positions for accurate totals, not filtered open_positions)
+    open_value = sum(float(rp.get("currentValue", 0) or 0) for rp in all_raw)
+    active_value = sum(float(rp.get("currentValue", 0) or 0) for rp in all_raw if 0.01 < float(rp.get("curPrice", 0) or 0) < 0.99)
+    redeemable_value = sum(float(rp.get("currentValue", 0) or 0) for rp in all_raw if float(rp.get("curPrice", 0) or 0) >= 0.99)
     total_value = wallet + open_value
     total_pnl = total_value - DEPOSIT
     wr = round(wins / max(wins + losses, 1) * 100, 1)
