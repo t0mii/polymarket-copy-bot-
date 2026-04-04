@@ -237,7 +237,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <button class="sfx-btn" id="sfxBtn" onclick="togSfx()"><span id="sfxIco">&#128264;</span> Sound</button>
       <nav class="nav">
         <a href="/wallets">Settings</a>
-        <a href="/copy" class="act">Terminal</a>
+        <a href="/copy">Terminal</a>
         <a href="/copy/history">History</a>
       </nav>
     </div>
@@ -434,17 +434,6 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-dt">${t.closed_at?(t.closed_at).substring(0,16):'---'}</td></tr>`}).join('')
     :'<tr><td colspan="8" class="empty" style="border:0">No closed trades yet</td></tr>';
 
-  const g=$('trGrid');
-  if(D.trader_stats&&D.trader_stats.length){
-    g.innerHTML=D.trader_stats.map(t=>{const tot=+(t.pnl_realized||0)+ +(t.pnl_unrealized||0);
-      const wr=(t.wins+t.losses)>0?(t.wins/(t.wins+t.losses)*100):0;
-      return`<div class="tc ${tot>=0?'win':'lose'}"><div class="tc-name">${tL(t)}</div>
-        <div class="tc-grid"><div class="tc-s"><span>Open</span> ${t.open}</div><div class="tc-s"><span>Closed</span> ${t.closed}</div>
-        <div class="tc-s"><span>Wins</span> ${t.wins}</div><div class="tc-s"><span>WR</span> ${fm(wr,1)}%</div></div>
-        <div class="tc-pnl p-${pc(tot)}">${sg(tot)}$${fm(tot)}</div>
-        <div class="tc-det">Real: ${sg(t.pnl_realized)}$${fm(t.pnl_realized)} \u00B7 Unreal: ${sg(t.pnl_unrealized)}$${fm(t.pnl_unrealized)}</div>
-</div>`}).join('')}
-  else{g.innerHTML='<div class="empty">No trader data yet</div>'}
   ticker();
   renderLog()}
 
