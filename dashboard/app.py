@@ -124,7 +124,7 @@ def api_live_data():
                 "entry_price": ap,
                 "current_price": cp,
                 "size": round(cv, 2),
-                "pnl_unrealized": round(pnl, 2),
+                "pnl_unrealized": round(cv - float(rp.get("initialValue", 0) or 0), 2),
                 "condition_id": rp.get("conditionId", ""),
                 "created_at": "",
             })
