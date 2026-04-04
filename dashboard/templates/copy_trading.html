@@ -366,7 +366,7 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||t.title
     ['coventry','\u26BD','EFL'],['derby','\u26BD','EFL'],['sporting','\u26BD','SOC'],['santa clara','\u26BD','SOC'],['rayo','\u26BD','SOC'],['elche','\u26BD','SOC'],['coquimbo','\u26BD','SOC'],['cobresal','\u26BD','SOC'],['uni\u00F3n','\u26BD','SOC'],['riestra','\u26BD','SOC'],['estudiante','\u26BD','SOC'],['san lorenzo','\u26BD','SOC'],['toulouse','\u26BD','SOC'],['paris','\u26BD','SOC'],['psg','\u26BD','SOC'],
     ['shelton','\uD83C\uDFBE','ATP'],['ficovich','\uD83C\uDFBE','ATP'],['san luis potosi','\uD83C\uDFBE','ATP'],
     ['lol','\uD83C\uDFAE','LOL'],['ncaa','\uD83C\uDFC0','NCAA']];
-  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'\uD83C\uDFAF',l:'BET'}}
+  for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'',l:''}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
     const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
@@ -420,7 +420,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('nOpen').textContent=D.open_trades.length;
   $('tOpen').innerHTML=D.open_trades.length?D.open_trades.map(t=>{const p=t.pnl_unrealized||0;
     const pot=t.entry_price>0&&t.entry_price<1?t.size*(1-t.entry_price)/t.entry_price:0;
-    const{e:oe,l:ol}=dSp(t);const spH=(t.sport||oe)?'<span style="font-size:.75rem;margin-right:4px">'+(t.sport||oe+' '+ol)+'</span>':'';
+    const{e:oe,l:ol}=dSp(t);const spH='<span style="font-size:.75rem;margin-right:4px">'+(oe?oe+' '+ol:'\uD83D\uDCCA')+'</span>';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
@@ -430,7 +430,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
 
   $('nClosed').textContent=D.closed_trades.length;
   $('tClosed').innerHTML=D.closed_trades.length?D.closed_trades.map(t=>{const p=t.pnl_realized||0;
-    const{e:ce,l:cl2}=dSp(t);const spH2=(t.sport||ce)?'<span style="font-size:.75rem;margin-right:4px">'+(t.sport||ce+' '+cl2)+'</span>':'';
+    const{e:ce,l:cl2}=dSp(t);const spH2='<span style="font-size:.75rem;margin-right:4px">'+(ce?ce+' '+cl2:'\uD83D\uDCCA')+'</span>';
     return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
       <td class="c-mkt">${spH2}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
       <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>$${fm(t.size)}</td>
@@ -467,7 +467,7 @@ function renderLog(){
       const hlC=pCol==='g'?'hl-g':pCol==='r'?'hl-r':pCol==='y'?'hl-y':pCol==='b'?'hl-b':'';
       const pnlHtml=a.pnl?`<div class="cl-pnl" style="color:var(${a.pnl>=0?'--green':'--red'})">${a.pnl>=0?'+':''}$${a.pnl.toFixed(2)}</div>`:`<div class="cl-pnl"></div>`;
       const detail=a.detail?` <span class="${hlC}">${a.detail}</span>`:'';
-      const{e:ae,l:al2}=dSp(a);const aSp=ae?ae+' '+al2+' ':'';
+      const{e:ae,l:al2}=dSp(a);const aSp=(ae&&al2)?ae+' '+al2+' ':(ae?ae+' ':'');
       return`<div class="cl"><div class="cl-t">${ts}</div><div class="cl-p ${pCol}">${sym}</div><div class="cl-msg">${aSp}<b>${a.title||''}</b>${detail}</div>${pnlHtml}</div>`}).join('')}
   else{hp.innerHTML='<div class="cl"><div class="cl-p d">\u00B7</div><div class="cl-msg" style="color:#4a4a5a">no history yet \u2014 buys, sells, wins, losses and redeems appear here</div><div class="cl-pnl"></div></div>'}
 }
