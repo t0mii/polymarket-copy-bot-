@@ -120,7 +120,20 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         success = False
         if isinstance(response, dict):
             status = (response.get("status") or response.get("orderStatus") or "").lower()
-            success = status in ("matched", "filled", "live", "delayed")
+            if status in ("matched", "filled", "live"):
+                success = True
+            elif status == "delayed":
+                # "delayed" = queued, may or may not fill. Verify after short wait.
+                time.sleep(3)
+                try:
+                    params = BalanceAllowanceParams(asset_type="CONDITIONAL", token_id=token_id)
+                    bal_after = float(client.get_balance_allowance(params).get("balance", 0)) / 1_000_000
+                    success = bal_after > 0.1
+                    logger.info("ORDER VERIFY: delayed → %s (balance=%.2f shares)",
+                                "FILLED" if success else "NOT FILLED", bal_after)
+                except Exception:
+                    success = False
+                    logger.warning("ORDER VERIFY: could not check balance, treating as failed")
         elif response:
             success = True
 
