@@ -223,7 +223,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
   <header class="hd fi">
     <div class="hd-left">
       <img src="/static/logo.png" alt="SSC" style="height:36px">
-      <div style="margin-right:auto"><div class="logo">Copy Trade Dashboard</div><div style="font-size:.8rem;color:var(--text-dim);letter-spacing:.12em;font-weight:300">by Super Sauna Club</div></div>
+      <div style="margin-right:auto"><div class="logo">Poly Copybot</div><div style="font-size:.8rem;color:var(--text-dim);letter-spacing:.12em;font-weight:300">by Super Sauna Club</div></div>
     </div>
     <div class="hd-center">
       <div class="live-tag"><span class="live-dot"></span>LIVE</div>
@@ -362,7 +362,10 @@ function dSp(t){const s=((t.market_slug||t.slug||'')+(t.market_question||'')+(t.
     ['coventry','\u26BD','EFL'],['derby','\u26BD','EFL'],['sporting','\u26BD','SOC'],['santa clara','\u26BD','SOC'],['rayo','\u26BD','SOC'],['elche','\u26BD','SOC'],['coquimbo','\u26BD','SOC'],['cobresal','\u26BD','SOC'],['uni\u00F3n','\u26BD','SOC'],['riestra','\u26BD','SOC'],['estudiante','\u26BD','SOC'],['san lorenzo','\u26BD','SOC'],['toulouse','\u26BD','SOC'],['paris','\u26BD','SOC'],['psg','\u26BD','SOC'],
     ['shelton','\uD83C\uDFBE','ATP'],['ficovich','\uD83C\uDFBE','ATP'],['san luis potosi','\uD83C\uDFBE','ATP'],
     ['counter-strike','\uD83C\uDFAE','CS'],['csgo','\uD83C\uDFAE','CS'],['cs2-','\uD83C\uDFAE','CS'],['3dmax','\uD83C\uDFAE','CS'],['fokus','\uD83C\uDFAE','CS'],['games total','\uD83C\uDFAE','CS'],['nrg','\uD83C\uDFAE','CS'],['inner circle','\uD83C\uDFAE','CS'],['fut esport','\uD83C\uDFAE','CS'],
-    ['lol','\uD83C\uDFAE','LOL'],['ncaa','\uD83C\uDFC0','NCAA']];
+    ['lol','\u2694\uFE0F','LOL'],['league of legends','\u2694\uFE0F','LOL'],['drx','\u2694\uFE0F','LOL'],['t1 ','\u2694\uFE0F','LOL'],['hanwha','\u2694\uFE0F','LOL'],['sk gaming','\u2694\uFE0F','LOL'],['shifters','\u2694\uFE0F','LOL'],['kiwoom','\u2694\uFE0F','LOL'],['dplus','\u2694\uFE0F','LOL'],['top esports','\u2694\uFE0F','LOL'],['invictus','\u2694\uFE0F','LOL'],
+    ['valorant','\uD83D\uDD2B','VAL'],['paper rex','\uD83D\uDD2B','VAL'],['nongshim','\uD83D\uDD2B','VAL'],
+    ['dota','\uD83E\uDDD9','DOTA'],['nigma','\uD83E\uDDD9','DOTA'],['pipsqueak','\uD83E\uDDD9','DOTA'],
+    ['ncaa','\uD83C\uDFC0','NCAA']];
   for(const[k,e,l]of m){if(s.includes(k))return{e,l}}return{e:'',l:''}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
