@@ -721,7 +721,7 @@ def copy_followed_wallets():
                     _hw_map[parts[0].strip().lower()] = int(parts[1].strip())
                 elif entry:
                     _hw_map[entry.lower()] = config.HEDGE_WAIT_SECS
-            trader_name_lower = (wallet.get("username") or "").lower()
+            trader_name_lower = (wallet["username"] or "").lower()
             hedge_wait_secs = _hw_map.get(trader_name_lower, 0)
 
             if hedge_wait_secs > 0 and cid:
