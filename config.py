@@ -57,6 +57,12 @@ MIN_ENTRY_PRICE = float(os.getenv("MIN_ENTRY_PRICE", "0.05"))
 MAX_ENTRY_PRICE = float(os.getenv("MAX_ENTRY_PRICE", "0.92"))
 # Max Kopien desselben Marktes pro Wallet (verhindert Spam-Kopien)
 MAX_COPIES_PER_MARKET = int(os.getenv("MAX_COPIES_PER_MARKET", "2"))
+# Hedge-Wait: hold trades for X seconds to detect if trader buys opposite side
+# If both sides bought within this window → skip both (hedge detected)
+# Set to 0 to disable
+HEDGE_WAIT_SECS = int(os.getenv("HEDGE_WAIT_SECS", "120"))
+# Comma-separated list of strategy types that need hedge-wait (e.g. "Esports,Sports")
+HEDGE_WAIT_TYPES = os.getenv("HEDGE_WAIT_TYPES", "Esports")
 
 # Massive.com Market Data
 MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "")
