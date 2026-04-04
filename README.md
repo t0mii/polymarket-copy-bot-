@@ -4,26 +4,23 @@ Automated copybot for [Polymarket](https://polymarket.com). Follows top traders 
 
 ## Features
 
-- **Position Copying** — Automatically copies trades from followed wallets (e.g. RN1)
-- **Smart Filters** — Min trade size, price range, hedge detection, duplicate blocking
+- **Position Copying** — Automatically copies positions from followed wallets
+- **Smart Filters** — Min position size, price range, hedge detection, duplicate blocking
+- **Hedge-Wait** — Detects when a trader buys both sides and skips the hedge (configurable per trader)
 - **Fast-Sell Detection** — Detects when trader sells and mirrors within 5 seconds
 - **Auto-Close** — Closes positions when markets resolve (via Positions API + Gamma API fallback)
 - **Auto-Redeem** — Redeems resolved positions via Polymarket Builder Relayer (gas-free)
+- **Auto-Sell** — Sells won positions at 97c+ to recycle capital
 - **Live Dashboard** — Real-time web dashboard with SSE updates, position alerts, equity curve
 - **Sound Alerts** — Browser audio notification for new positions and closes
-- **Activity Log** — CLI-style live feed of all bot actions
-
-## Dashboard
-
-![Dashboard](https://img.shields.io/badge/Live-Dashboard-gold)
-
-Real-time dashboard showing portfolio value, P&L, active positions, trade record, and activity history. Built with vanilla JS, Chart.js, and Server-Sent Events.
+- **Activity Log** — Live feed of all bot actions with sport emojis
+- **Sport Detection** — Automatic emoji tags (⚾ MLB, 🏀 NBA, 🏒 NHL, ⚽ Soccer, 🎮 CS, ⚔️ LOL, 🔫 VAL, 🧙 DOTA)
 
 ## Architecture
 
 ```
 main.py                      → Scheduler + Flask + Startup validation
-├── bot/copy_trader.py       → Core: trade detection, smart filters, fast-sell
+├── bot/copy_trader.py       → Core: position detection, smart filters, fast-sell, hedge-wait
 ├── bot/order_executor.py    → Real CLOB orders (Buy/Sell via py-clob-client)
 ├── bot/wallet_scanner.py    → Leaderboard scan, wallet positions, activity feed
 ├── bot/wallet_analyzer.py   → AI-powered trader analysis (4 AI fallbacks)
@@ -36,7 +33,10 @@ main.py                      → Scheduler + Flask + Startup validation
 └── dashboard/
     ├── app.py               → Flask app, SSE, REST APIs (reads from Polymarket API)
     ├── static/style.css     → Shared CSS
-    └── templates/            → Dashboard pages
+    └── templates/
+        ├── dashboard.html   → Main dashboard
+        ├── index.html       → Settings page
+        └── history.html     → Position history
 ```
 
 ## Setup
@@ -62,6 +62,8 @@ Required keys:
 
 Optional:
 - `BUILDER_KEY/SECRET/PASSPHRASE` — For auto-redeem (get from polymarket.com/settings → Builder)
+- `FOLLOWED_TRADERS` — Traders to follow (format: `Name:0xAddress,Name2:0xAddress2`)
+- `HEDGE_WAIT_TRADERS` — Traders that need hedge detection (comma-separated names)
 - AI API keys for wallet analysis (Groq, Anthropic, Gemini, Z.ai)
 
 ### 3. Run
@@ -76,10 +78,15 @@ LIVE_MODE=true python main.py
 
 Dashboard at `http://localhost:8090`
 
-### 4. Follow a Trader
+### 4. Follow Traders
 
+Via `.env` (recommended):
 ```bash
-# Via API (replace ADDRESS and KEY)
+FOLLOWED_TRADERS=Jargs:0xf164...,xsaghav:0xdbb3...
+```
+
+Or via API:
+```bash
 curl -X POST "http://localhost:8090/api/wallet/ADDRESS/follow?key=YOUR_SECRET"
 ```
 
@@ -100,17 +107,21 @@ All configurable via `.env`:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `LIVE_MODE` | false | true = real money |
-| `STARTING_BALANCE` | 200 | Initial deposit for P&L tracking |
-| `MAX_POSITION_SIZE` | 5 | Max $ per position |
+| `STARTING_BALANCE` | 200 | Total deposited (for P&L calculation) |
+| `MAX_POSITION_SIZE` | 15 | Max $ per position |
 | `MIN_TRADE_SIZE` | 1.0 | Min $ per position |
+| `BET_SIZE_PCT` | 0.20 | % of portfolio per position |
 | `CASH_FLOOR` | 0 | Stop buying below this |
 | `MAX_OPEN_POSITIONS` | 100 | Max simultaneous positions |
 | `COPY_SCAN_INTERVAL` | 5 | Seconds between scans |
-| `BET_SIZE_PCT` | 0.02 | % of portfolio per position |
-| `MIN_TRADER_USD` | 15 | Only positions where trader spends $X+ |
+| `MIN_TRADER_USD` | 50 | Only copy when trader spends $X+ |
 | `MIN_ENTRY_PRICE` | 0.05 | Skip trash farming (<5c) |
 | `MAX_ENTRY_PRICE` | 0.92 | Skip hedges (>92c) |
-| `MAX_COPIES_PER_MARKET` | 2 | Max copies of same market per wallet |
+| `MAX_COPIES_PER_MARKET` | 1 | Max copies of same market per wallet |
+| `MAX_SPREAD` | 0.05 | Max bid/ask spread (5%) |
+| `HEDGE_WAIT_SECS` | 30 | Seconds to wait for hedge detection |
+| `HEDGE_WAIT_TRADERS` | | Traders that need hedge-wait (comma-separated) |
+| `FOLLOWED_TRADERS` | | Traders to follow (Name:Address pairs) |
 
 ## Tech Stack
 
