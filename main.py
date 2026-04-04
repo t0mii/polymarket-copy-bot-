@@ -94,7 +94,7 @@ def update_prices():
                     _pnl_check = _cv - _iv
                     _cid_pos = _p.get("conditionId", "")
                     # Close lost positions in DB (price went to 0)
-                    if _cp <= 0.01 and _iv > 0.50:
+                    if _cp <= 0.01 and _iv > 0.01:
                         try:
                             from database.db import get_connection
                             with get_connection() as _conn:
@@ -110,7 +110,7 @@ def update_prices():
                         except Exception:
                             pass
                     # Close won positions in DB (price at 100c, resolved)
-                    elif _cp >= 0.99 and _iv > 0.50 and _cv > _iv:
+                    elif _cp >= 0.99 and _iv > 0.01:
                         try:
                             from database.db import get_connection
                             with get_connection() as _conn:
