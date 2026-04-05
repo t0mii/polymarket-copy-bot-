@@ -15,6 +15,24 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+
+def _check_auth() -> bool:
+    """Check dashboard secret from X-Dashboard-Key header, ?key= param, or JSON body."""
+    expected = os.getenv("DASHBOARD_SECRET", "changeme")
+    key = (request.headers.get("X-Dashboard-Key", "")
+           or request.args.get("key", "")
+           or ((request.json or {}).get("key", "") if request.is_json else ""))
+    return key == expected
+
+
+@app.route("/api/auth/check", methods=["POST"])
+def api_auth_check():
+    """Verify dashboard secret — used by frontend unlock button."""
+    if _check_auth():
+        return jsonify({"status": "ok", "authenticated": True})
+    return jsonify({"error": "invalid key", "authenticated": False}), 403
+
+
 # --- Server-Sent Events for Live Dashboard ---
 _sse_clients: list = []
 _sse_lock = threading.Lock()
@@ -481,8 +499,7 @@ def api_followed():
 
 @app.route("/api/wallet/<address>/follow", methods=["POST"])
 def api_follow(address):
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 1)
     return jsonify({"status": "ok", "followed": True})
@@ -490,8 +507,7 @@ def api_follow(address):
 
 @app.route("/api/wallet/<address>/unfollow", methods=["POST"])
 def api_unfollow(address):
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 0)
     return jsonify({"status": "ok", "followed": False})
@@ -603,8 +619,7 @@ def api_trader_stats():
 @app.route("/api/copy/close/<int:trade_id>", methods=["POST"])
 def api_close_trade(trade_id):
     """Manually close an open position — sells shares and marks as closed."""
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
 
     from database.db import get_connection
@@ -715,8 +730,7 @@ def api_copy_update():
 @app.route("/api/copy/reset", methods=["POST"])
 def api_copy_reset():
     """Reset copy trading: delete all trades, baselines, snapshots. Keep followed wallets."""
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     confirm = request.args.get("confirm", "")
     if not confirm and request.is_json:
