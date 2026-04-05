@@ -752,7 +752,7 @@ def copy_followed_wallets():
                             logger.warning("[FAST-SELL] Order fehlgeschlagen: %s", our_trade["market_question"][:40])
                     shares = our_trade["size"] / our_trade["entry_price"] if our_trade["entry_price"] > 0 else 0
                     pnl = (sell_price - our_trade["entry_price"]) * shares
-                    db.close_copy_trade(our_trade["id"], round(pnl, 2))
+                    db.close_copy_trade(our_trade["id"], round(pnl, 2), close_price=sell_price)
                     logger.info("[FAST-SELL] #%d CLOSED (trader sold): PnL=$%.2f @ %.0fc | %s",
                                 our_trade["id"], pnl, sell_price * 100, our_trade["market_question"][:40])
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
