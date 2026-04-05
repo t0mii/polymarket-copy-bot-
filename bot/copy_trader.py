@@ -141,6 +141,21 @@ for _tpm_entry in config.TAKE_PROFIT_MAP.split(","):
         _tpm_parts = _tpm_entry.split(":", 1)
         _TAKE_PROFIT_MAP[_tpm_parts[0].strip().lower()] = float(_tpm_parts[1].strip())
 
+# Per-trader entry price maps (override global MIN/MAX_ENTRY_PRICE)
+_MIN_ENTRY_PRICE_MAP: dict[str, float] = {}
+for _mep_entry in config.MIN_ENTRY_PRICE_MAP.split(","):
+    _mep_entry = _mep_entry.strip()
+    if ":" in _mep_entry:
+        _mep_parts = _mep_entry.split(":", 1)
+        _MIN_ENTRY_PRICE_MAP[_mep_parts[0].strip().lower()] = float(_mep_parts[1].strip())
+
+_MAX_ENTRY_PRICE_MAP: dict[str, float] = {}
+for _xep_entry in config.MAX_ENTRY_PRICE_MAP.split(","):
+    _xep_entry = _xep_entry.strip()
+    if ":" in _xep_entry:
+        _xep_parts = _xep_entry.split(":", 1)
+        _MAX_ENTRY_PRICE_MAP[_xep_parts[0].strip().lower()] = float(_xep_parts[1].strip())
+
 
 def _calculate_position_size(entry_price: float, cash: float, trader_ratio: float = 1.0,
                              portfolio_value: float = 0, trader_name: str = "") -> float:
@@ -393,8 +408,10 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 continue
 
             # === SAME FILTERS AS ACTIVITY SCAN ===
-            # Price range filter
-            if entry_price_raw < config.MIN_ENTRY_PRICE or entry_price_raw > config.MAX_ENTRY_PRICE:
+            # Price range filter (per-trader override via MIN/MAX_ENTRY_PRICE_MAP)
+            _min_price = _MIN_ENTRY_PRICE_MAP.get(username.lower(), config.MIN_ENTRY_PRICE)
+            _max_price = _MAX_ENTRY_PRICE_MAP.get(username.lower(), config.MAX_ENTRY_PRICE)
+            if entry_price_raw < _min_price or entry_price_raw > _max_price:
                 continue
 
             # Max copies per market
@@ -894,12 +911,14 @@ def copy_followed_wallets():
                             dollar_value, _min_usd, question[:40])
                 continue
 
-            # 2) Preis-Range-Filter: Trash-Farming (1-3c) und Hedges (95-99c) ausfiltern
+            # 2) Preis-Range-Filter: per-trader override via MIN/MAX_ENTRY_PRICE_MAP
             trader_price = t["price"]
-            if trader_price < config.MIN_ENTRY_PRICE or trader_price > config.MAX_ENTRY_PRICE:
+            _min_price = _MIN_ENTRY_PRICE_MAP.get(username.lower(), config.MIN_ENTRY_PRICE)
+            _max_price = _MAX_ENTRY_PRICE_MAP.get(username.lower(), config.MAX_ENTRY_PRICE)
+            if trader_price < _min_price or trader_price > _max_price:
                 logger.info("[FILTER] Preis %.0fc ausserhalb Range (%.0f-%.0fc): %s",
-                            trader_price * 100, config.MIN_ENTRY_PRICE * 100,
-                            config.MAX_ENTRY_PRICE * 100, question[:40])
+                            trader_price * 100, _min_price * 100,
+                            _max_price * 100, question[:40])
                 continue
 
             # 3) Max Kopien pro Markt: nicht X-mal denselben Markt kopieren

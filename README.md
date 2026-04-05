@@ -169,9 +169,11 @@ Price 45c → edge 0.05 → weak signal  → bet × 0.6
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `MIN_TRADER_USD` | 3 | Default min trade size to copy |
-| `MIN_TRADER_USD_MAP` | | Per-trader: `name:amount` (e.g. `sovereign2013:500`) |
+| `MIN_TRADER_USD_MAP` | | Per-trader: `name:amount` (e.g. `sovereign2013:750`) |
 | `MIN_ENTRY_PRICE` | 0.15 | Skip lottery tickets below 15c |
+| `MIN_ENTRY_PRICE_MAP` | | Per-trader min price (e.g. `sovereign2013:0.40` = only 40c+) |
 | `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92c |
+| `MAX_ENTRY_PRICE_MAP` | | Per-trader max price (e.g. `sovereign2013:0.75` = max 75c) |
 | `MAX_COPIES_PER_MARKET` | 1 | One copy per market (prevents doubling up) |
 | `ENTRY_TRADE_SEC` | 300 | Ignore trades older than 5 minutes |
 | `MAX_HOURS_BEFORE_EVENT` | 0 | Queue trades if event > X hours away (0=disabled) |
