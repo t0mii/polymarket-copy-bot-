@@ -85,11 +85,23 @@ def update_prices():
             from bot.order_executor import sell_shares, get_wallet_balance
             import requests as _rq
             import time as _t
-            _r = _rq.get("https://data-api.polymarket.com/positions", params={
-                "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
-            }, timeout=15)
-            if _r.ok:
-                for _p in _r.json():
+            _all_positions = []
+            _offset = 0
+            while True:
+                _r = _rq.get("https://data-api.polymarket.com/positions", params={
+                    "user": config.POLYMARKET_FUNDER, "limit": 500, "offset": _offset, "sizeThreshold": 0
+                }, timeout=15)
+                if not _r.ok:
+                    break
+                _page = _r.json()
+                if not _page:
+                    break
+                _all_positions.extend(_page)
+                if len(_page) < 500:
+                    break
+                _offset += 500
+            if _all_positions:
+                for _p in _all_positions:
                     _cp = float(_p.get("curPrice", 0) or 0)
                     _cv = float(_p.get("currentValue", 0) or 0)
                     _iv = float(_p.get("initialValue", 0) or 0)
