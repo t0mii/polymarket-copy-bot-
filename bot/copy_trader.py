@@ -543,14 +543,15 @@ def copy_followed_wallets():
     total_invested = 0
     # Cache open trades for this scan (convert Row→dict so .get() works everywhere)
     _cached_open_trades = [dict(t) for t in db.get_open_copy_trades()]
-    # Portfolio value from Polymarket API (real value, not DB sizes)
+    # Portfolio value: wallet + active positions + redeemable (not dead 0c shares)
     _open_value = 0
     try:
         _pos_r = requests.get("https://data-api.polymarket.com/positions", params={
             "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
         }, timeout=10)
         if _pos_r.ok:
-            _open_value = sum(float(p.get("currentValue", 0) or 0) for p in _pos_r.json())
+            _open_value = sum(float(p.get("currentValue", 0) or 0) for p in _pos_r.json()
+                              if float(p.get("curPrice", 0) or 0) > 0.01)
     except Exception:
         _open_value = sum(t["size"] for t in _cached_open_trades)  # fallback to DB
     portfolio_value = cash + _open_value
