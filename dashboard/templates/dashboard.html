@@ -615,7 +615,7 @@ function chart(period){
               y:{ticks:{color:'#5c5a6a',callback:v=>'$'+v.toFixed(0),font:{size:11,family:'Manrope'}},grid:{color:'#12121c'}}}}})}).catch(e=>console.log('chart:',e))}
 document.querySelectorAll('.cp-btn').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.cp-btn').forEach(x=>x.classList.remove('act'));
-  b.classList.add('act');CI=null;chart(b.dataset.p)}))
+  b.classList.add('act');if(CI){CI.destroy();CI=null}chart(b.dataset.p)}))
 
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot()}catch(e){console.error('fetch:',e);dot()}}
 load();setInterval(load,10000);setTimeout(initSSE,2000);
