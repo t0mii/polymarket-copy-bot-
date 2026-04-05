@@ -401,11 +401,15 @@ function beepClose(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.creat
   g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.5);o.start();o.stop(AC.currentTime+.5)}catch(e){}}
 function alertClose(t){const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
-  o.innerHTML=`<div class="al-ban" style="border-color:${w?'var(--green)':'var(--red)'}">
-    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED — WIN':'\u274C POSITION CLOSED — LOSS'}</div>
+  const bigWin=t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
+  const gifHtml=bigWin?'<img src="https://media.tenor.com/mMk0ePGBsUAAAAd/ref-with-yellow-cards-fifa18-leonardo-di-caprio.gif" style="width:120px;border-radius:8px;margin-left:14px;flex-shrink:0" alt="Money GIF">':'';
+  o.innerHTML=`<div class="al-ban" style="border-color:${w?'var(--green)':'var(--red)'}; display:flex;align-items:center">
+    <div style="flex:1">
+    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED — WIN':'\u274C POSITION CLOSED — LOSS'}${bigWin?' \uD83D\uDCB0':''}</div>
     <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
-    <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div></div>`;
-  setTimeout(()=>{o.style.display='none'},4200)}
+    <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
+    </div>${gifHtml}</div>`;
+  setTimeout(()=>{o.style.display='none'},bigWin?6000:4200)}
 
 function initSSE(){try{const es=new EventSource('/api/stream');
   es.onopen=()=>{sseOk=true;dot()};
