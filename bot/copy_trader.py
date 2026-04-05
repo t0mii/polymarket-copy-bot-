@@ -113,25 +113,38 @@ def _get_current_balance() -> float:
     return STARTING_BALANCE + stats["total_pnl"]
 
 
-def _calculate_position_size(entry_price: float, balance: float, trader_ratio: float = 1.0) -> float:
-    """Bet-Sizing: 2% vom Portfolio × Preis-Signal × proportionaler Trader-Multiplikator.
+# Per-trader bet size map (parsed once at module load)
+_BET_SIZE_MAP: dict[str, float] = {}
+for _bsm_entry in config.BET_SIZE_MAP.split(","):
+    _bsm_entry = _bsm_entry.strip()
+    if ":" in _bsm_entry:
+        _bsm_parts = _bsm_entry.split(":", 1)
+        _BET_SIZE_MAP[_bsm_parts[0].strip().lower()] = float(_bsm_parts[1].strip())
 
-    trader_ratio = trader_trade_size / trader_median_trade_size
-        → wenn Trader 2x seinen Durchschnitt setzt, setzen wir auch 2x
 
-    Preis-Multiplikator:
-        0-20¢ / 80-100¢  → ×1.5  (sehr starkes Signal)
-        20-35¢ / 65-80¢  → ×1.0  (normales Signal)
-        35-50¢           → ×0.60 (schwaches Signal)
+def _calculate_position_size(entry_price: float, cash: float, trader_ratio: float = 1.0,
+                             portfolio_value: float = 0, trader_name: str = "") -> float:
+    """Bet-Sizing: X% vom Portfolio/Cash × Preis-Signal × proportionaler Trader-Multiplikator.
 
-    trader_ratio wird auf [0.5, 3.0] begrenzt um Ausreisser abzufangen.
+    BET_SIZE_BASIS controls whether sizing uses cash or portfolio value.
+    BET_SIZE_MAP allows per-trader override of BET_SIZE_PCT.
+    Result is always capped to available cash.
     """
-    available = balance - CASH_RESERVE
+    available = cash - CASH_RESERVE
     if available <= 0:
         return 0
 
-    # Basis: BET_SIZE_PCT vom Portfolio (default 2%)
-    base = balance * BET_SIZE_PCT
+    # Sizing basis: cash or portfolio (configurable)
+    if config.BET_SIZE_BASIS == "portfolio" and portfolio_value > 0:
+        sizing_base = portfolio_value
+    else:
+        sizing_base = cash
+
+    # Per-trader bet size override
+    bet_pct = _BET_SIZE_MAP.get(trader_name.lower(), BET_SIZE_PCT)
+
+    # Basis: bet_pct vom Sizing-Base
+    base = sizing_base * bet_pct
 
     # Preis-Signal Multiplikator
     edge = abs(entry_price - 0.50)
@@ -146,7 +159,7 @@ def _calculate_position_size(entry_price: float, balance: float, trader_ratio: f
     clamped_ratio = max(config.RATIO_MIN, min(config.RATIO_MAX, trader_ratio))
 
     size = base * price_mult * clamped_ratio
-    size = min(size, MAX_POSITION_SIZE, available)
+    size = min(size, MAX_POSITION_SIZE, available)  # never exceed cash
     return round(max(MIN_TRADE_SIZE, size), 2)
 
 
@@ -301,7 +314,8 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
 
         # Prüfe ob noch Kapital vorhanden
         size = _calculate_position_size(current, balance,
-                                        trader_ratio=entry.get("trader_ratio", 1.0))
+                                        trader_ratio=entry.get("trader_ratio", 1.0),
+                                        trader_name=trade_data.get("wallet_username", ""))
         # Cash-Floor Check: genug Cash uebrig?
         cash_left = balance - total_invested - size
         if cash_left < _load_dynamic_floor():
@@ -368,7 +382,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 continue  # Markt bereits vorbei
 
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, config.MAX_ENTRY_PRICE_CAP), 4)
-            size = _calculate_position_size(entry_price, balance)
+            size = _calculate_position_size(entry_price, balance, trader_name=username)
             cash_left = balance - total_invested - size
             if cash_left < _load_dynamic_floor():
                 break
@@ -607,7 +621,8 @@ def copy_followed_wallets():
                                 logger.info("[HEDGE-WAIT] Event exposure $%.0f >= max $%.0f, skipping: %s",
                                             _hw_evt_inv, config.MAX_PER_EVENT, td["question"][:40])
                                 continue
-                    size = _calculate_position_size(entry_price, cash, 1.0)
+                    size = _calculate_position_size(entry_price, cash, 1.0,
+                                                    portfolio_value=portfolio_value, trader_name=td["username"])
                     if size < MIN_TRADE_SIZE or cash < size:
                         continue
                     trade = {
@@ -957,7 +972,8 @@ def copy_followed_wallets():
 
             # Proportionaler Trader-Multiplikator: dieser Trade vs. Trader-Durchschnitt
             trader_ratio = (dollar_value / avg_trader_size) if avg_trader_size > 0 else 1.0
-            size = _calculate_position_size(entry_price, balance, trader_ratio=trader_ratio)
+            size = _calculate_position_size(entry_price, balance, trader_ratio=trader_ratio,
+                                                portfolio_value=portfolio_value, trader_name=username)
             # Cap to event remaining budget
             if _evt_remaining is not None and size > _evt_remaining:
                 size = round(_evt_remaining, 2)
