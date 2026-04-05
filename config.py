@@ -23,6 +23,10 @@ MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "30"))
 MIN_TRADE_SIZE = float(os.getenv("MIN_TRADE_SIZE", "1.0"))
 RATIO_MIN = float(os.getenv("RATIO_MIN", "0.2"))
 RATIO_MAX = float(os.getenv("RATIO_MAX", "3.0"))
+# Sizing basis: "cash" = wallet balance only, "portfolio" = wallet + active positions
+BET_SIZE_BASIS = os.getenv("BET_SIZE_BASIS", "cash").lower()
+# Per-trader bet size override: "name:pct,name:pct" (overrides BET_SIZE_PCT per trader)
+BET_SIZE_MAP = os.getenv("BET_SIZE_MAP", "")
 
 # --- Cash Management ---
 CASH_FLOOR = float(os.getenv("CASH_FLOOR", "0"))

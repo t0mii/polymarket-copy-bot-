@@ -238,12 +238,18 @@ def update_copy_trade_end_date(trade_id: int, end_date: str):
         )
 
 
-def close_copy_trade(trade_id: int, pnl_realized: float):
+def close_copy_trade(trade_id: int, pnl_realized: float, close_price: float = None):
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=datetime('now','localtime') WHERE id=?",
-            (pnl_realized, trade_id)
-        )
+        if close_price is not None:
+            conn.execute(
+                "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=?, closed_at=datetime('now','localtime') WHERE id=?",
+                (pnl_realized, close_price, trade_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=datetime('now','localtime') WHERE id=?",
+                (pnl_realized, trade_id)
+            )
 
 
 def reopen_copy_trade(trade_id: int):

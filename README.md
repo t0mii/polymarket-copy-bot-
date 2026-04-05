@@ -143,6 +143,8 @@ All settings are optional — defaults work out of the box. Only `POLYMARKET_PRI
 | `MIN_TRADE_SIZE` | 1.0 | Minimum bet size |
 | `RATIO_MIN` | 0.2 | Floor multiplier (small trader bet → small copy) |
 | `RATIO_MAX` | 2.0 | Ceiling multiplier (big trader bet → bigger copy) |
+| `BET_SIZE_BASIS` | cash | `cash` = size from wallet, `portfolio` = wallet + positions |
+| `BET_SIZE_MAP` | | Per-trader: `name:pct,name:pct` (overrides BET_SIZE_PCT) |
 | `DEFAULT_AVG_TRADER_SIZE` | 10.0 | Fallback avg trade size when no trader data |
 
 ### Price Signal Multipliers

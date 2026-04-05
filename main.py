@@ -111,24 +111,25 @@ def update_prices():
                         continue
                     # Only auto-sell/close positions that are tracked in copy_trades
                     # Skip wallet-imported positions (they are display-only)
-                    _skip_this = False
+                    _our_trade = None
                     try:
                         from database.db import get_connection as _gc_check
                         with _gc_check() as _cc:
-                            _is_ours = _cc.execute(
-                                "SELECT id, wallet_username FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
+                            _our_trade = _cc.execute(
+                                "SELECT id, size, entry_price, wallet_username FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
                             ).fetchone()
-                        if not _is_ours:
-                            _skip_this = True
-                        elif _is_ours["wallet_username"] in ("(manual)", "(wallet)"):
-                            _skip_this = True
+                        if not _our_trade:
+                            continue  # not our bot's position, skip
+                        if _our_trade["wallet_username"] in ("(manual)", "(wallet)"):
+                            continue  # imported position, don't auto-close
                     except Exception:
-                        _skip_this = True  # on error, don't close
-                    if _skip_this:
-                        continue
+                        continue  # DB error → skip, don't risk selling non-bot positions
+                    # Use bot's recorded size for PnL, not API initialValue
+                    _our_size = _our_trade["size"] or _iv
+                    _our_entry = _our_trade["entry_price"] or 0
                     # Close lost positions in DB (price went to 0)
                     if _cp <= 0.01 and _iv > 0.01:
-                        _close_pnl = round(-_iv, 2)
+                        _close_pnl = round(-_our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
                         _did_close = False
                         try:
@@ -154,7 +155,8 @@ def update_prices():
                         continue  # Already handled — skip auto-sell
                     # Close won positions in DB (price at 100c, resolved)
                     elif _cp >= 0.99 and _iv > 0.01:
-                        _pnl_won = round(_cv - _iv, 2)
+                        _shares = _our_size / _our_entry if _our_entry > 0 else 0
+                        _pnl_won = round(_shares * 1.0 - _our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
                         _did_close = False
                         try:
@@ -186,8 +188,9 @@ def update_prices():
                         _cid = _p.get("conditionId", "")
                         _resp = sell_shares(_cid, _side, _cp)
                         if _resp:
-                            _pnl = round(_cv - _iv, 2)
-                            logger.info("[AUTO-SELL] Sold: $%.2f (cost $%.2f, P&L $%+.2f) | %s", _cv, _iv, _pnl, (_p.get("title") or "")[:40])
+                            _sell_shares = _our_size / _our_entry if _our_entry > 0 else 0
+                            _pnl = round((_cp - _our_entry) * _sell_shares, 2)
+                            logger.info("[AUTO-SELL] Sold: P&L $%+.2f (entry %.0fc, sell %.0fc) | %s", _pnl, _our_entry * 100, _cp * 100, (_p.get("title") or "")[:40])
                             _recently_closed[_cid_pos] = _t.time()
                             _db.log_activity("sell", "WIN" if _pnl >= 0 else "LOSS",
                                              "Position closed — %s" % ("profit" if _pnl >= 0 else "sold"),

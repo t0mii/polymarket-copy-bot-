@@ -113,25 +113,38 @@ def _get_current_balance() -> float:
     return STARTING_BALANCE + stats["total_pnl"]
 
 
-def _calculate_position_size(entry_price: float, balance: float, trader_ratio: float = 1.0) -> float:
-    """Bet-Sizing: 2% vom Portfolio × Preis-Signal × proportionaler Trader-Multiplikator.
+# Per-trader bet size map (parsed once at module load)
+_BET_SIZE_MAP: dict[str, float] = {}
+for _bsm_entry in config.BET_SIZE_MAP.split(","):
+    _bsm_entry = _bsm_entry.strip()
+    if ":" in _bsm_entry:
+        _bsm_parts = _bsm_entry.split(":", 1)
+        _BET_SIZE_MAP[_bsm_parts[0].strip().lower()] = float(_bsm_parts[1].strip())
 
-    trader_ratio = trader_trade_size / trader_median_trade_size
-        → wenn Trader 2x seinen Durchschnitt setzt, setzen wir auch 2x
 
-    Preis-Multiplikator:
-        0-20¢ / 80-100¢  → ×1.5  (sehr starkes Signal)
-        20-35¢ / 65-80¢  → ×1.0  (normales Signal)
-        35-50¢           → ×0.60 (schwaches Signal)
+def _calculate_position_size(entry_price: float, cash: float, trader_ratio: float = 1.0,
+                             portfolio_value: float = 0, trader_name: str = "") -> float:
+    """Bet-Sizing: X% vom Portfolio/Cash × Preis-Signal × proportionaler Trader-Multiplikator.
 
-    trader_ratio wird auf [0.5, 3.0] begrenzt um Ausreisser abzufangen.
+    BET_SIZE_BASIS controls whether sizing uses cash or portfolio value.
+    BET_SIZE_MAP allows per-trader override of BET_SIZE_PCT.
+    Result is always capped to available cash.
     """
-    available = balance - CASH_RESERVE
+    available = cash - CASH_RESERVE
     if available <= 0:
         return 0
 
-    # Basis: BET_SIZE_PCT vom Portfolio (default 2%)
-    base = balance * BET_SIZE_PCT
+    # Sizing basis: cash or portfolio (configurable)
+    if config.BET_SIZE_BASIS == "portfolio" and portfolio_value > 0:
+        sizing_base = portfolio_value
+    else:
+        sizing_base = cash
+
+    # Per-trader bet size override
+    bet_pct = _BET_SIZE_MAP.get(trader_name.lower(), BET_SIZE_PCT)
+
+    # Basis: bet_pct vom Sizing-Base
+    base = sizing_base * bet_pct
 
     # Preis-Signal Multiplikator
     edge = abs(entry_price - 0.50)
@@ -146,7 +159,7 @@ def _calculate_position_size(entry_price: float, balance: float, trader_ratio: f
     clamped_ratio = max(config.RATIO_MIN, min(config.RATIO_MAX, trader_ratio))
 
     size = base * price_mult * clamped_ratio
-    size = min(size, MAX_POSITION_SIZE, available)
+    size = min(size, MAX_POSITION_SIZE, available)  # never exceed cash
     return round(max(MIN_TRADE_SIZE, size), 2)
 
 
@@ -301,7 +314,8 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
 
         # Prüfe ob noch Kapital vorhanden
         size = _calculate_position_size(current, balance,
-                                        trader_ratio=entry.get("trader_ratio", 1.0))
+                                        trader_ratio=entry.get("trader_ratio", 1.0),
+                                        trader_name=trade_data.get("wallet_username", ""))
         # Cash-Floor Check: genug Cash uebrig?
         cash_left = balance - total_invested - size
         if cash_left < _load_dynamic_floor():
@@ -333,6 +347,8 @@ def _position_diff_scan(address: str, username: str, balance: float,
     Holt aktuelle Positionen des Traders und vergleicht mit unseren copy_trades.
     Jede Condition-ID die weder als 'open' noch als 'baseline' in unserer DB ist
     → neuer Trade der kopiert werden soll.
+
+    Applies the SAME filters as the activity scan to prevent bypass.
     """
     try:
         positions = fetch_wallet_positions(address)
@@ -341,6 +357,8 @@ def _position_diff_scan(address: str, username: str, balance: float,
 
         # Alle bekannten condition_ids für diese Wallet (open + baseline)
         known = {t["condition_id"] for t in db.get_all_copy_trades_for_wallet(address) if t["condition_id"]}
+        # Cache open trades once for this scan
+        _diff_open = [dict(t) for t in db.get_open_copy_trades()]
 
         new_trades = 0
         for pos in positions:
@@ -354,9 +372,40 @@ def _position_diff_scan(address: str, username: str, balance: float,
             if entry_price_raw <= 0 or entry_price_raw >= 1:
                 continue
 
-            # Max exposure per trader (per-trader or default)
-            _max_exp = (balance + sum(t["size"] for t in db.get_open_copy_trades())) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
-            _t_exp = sum(t["size"] for t in db.get_open_copy_trades() if t["wallet_address"] == address)
+            # === SAME FILTERS AS ACTIVITY SCAN ===
+            # Price range filter
+            if entry_price_raw < config.MIN_ENTRY_PRICE or entry_price_raw > config.MAX_ENTRY_PRICE:
+                continue
+
+            # Max copies per market
+            if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
+                continue
+
+            # Duplicate market check (another trader already has this market)
+            if cid and db.is_market_already_open(cid, from_wallet=address):
+                continue
+
+            # Hedge check: don't buy opposite side of an existing position
+            if cid:
+                _existing = [x for x in _diff_open if x.get("condition_id") == cid and x.get("wallet_address") == address]
+                if _existing:
+                    _existing_sides = {x.get("side", "") for x in _existing}
+                    if pos["side"] not in _existing_sides:
+                        logger.info("[DIFF] Hedge blocked (%s open, skipping %s): %s",
+                                    "/".join(_existing_sides), pos["side"], pos["market_question"][:40])
+                        continue
+
+            # Max per event
+            if config.MAX_PER_EVENT > 0:
+                _evt = pos.get("event_slug", "") or ""
+                if _evt:
+                    _evt_inv = sum(x["size"] for x in _diff_open if x.get("event_slug", "") == _evt)
+                    if _evt_inv >= config.MAX_PER_EVENT:
+                        continue
+
+            # Max exposure per trader
+            _max_exp = (balance + sum(t["size"] for t in _diff_open)) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
+            _t_exp = sum(t["size"] for t in _diff_open if t.get("wallet_address") == address)
             if _t_exp >= _max_exp:
                 logger.info("[DIFF] Trader exposure $%.0f >= max $%.0f, skipping: %s",
                             _t_exp, _max_exp, pos["market_question"][:40])
@@ -365,10 +414,10 @@ def _position_diff_scan(address: str, username: str, balance: float,
             # Market-close guard
             end_ts = _parse_end_ts(pos.get("end_date", ""))
             if end_ts and (_time.time() - end_ts) > 0:
-                continue  # Markt bereits vorbei
+                continue
 
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, config.MAX_ENTRY_PRICE_CAP), 4)
-            size = _calculate_position_size(entry_price, balance)
+            size = _calculate_position_size(entry_price, balance, trader_name=username)
             cash_left = balance - total_invested - size
             if cash_left < _load_dynamic_floor():
                 break
@@ -608,7 +657,8 @@ def copy_followed_wallets():
                                 logger.info("[HEDGE-WAIT] Event exposure $%.0f >= max $%.0f, skipping: %s",
                                             _hw_evt_inv, config.MAX_PER_EVENT, td["question"][:40])
                                 continue
-                    size = _calculate_position_size(entry_price, cash, 1.0)
+                    size = _calculate_position_size(entry_price, cash, 1.0,
+                                                    portfolio_value=portfolio_value, trader_name=td["username"])
                     if size < MIN_TRADE_SIZE or cash < size:
                         continue
                     trade = {
@@ -669,12 +719,8 @@ def copy_followed_wallets():
         buy_sizes = [t.get("usdc_size", 0) for t in recent_trades if t["trade_type"] == "BUY" and t.get("usdc_size", 0) > 0]
         avg_trader_size = (sum(buy_sizes) / len(buy_sizes)) if buy_sizes else config.DEFAULT_AVG_TRADER_SIZE
 
-        # Update timestamp to newest trade seen (for next scan)
         max_ts = max(t["timestamp"] for t in recent_trades)
-        logger.debug("[SCAN] %s: last_ts=%d, max_ts=%d, delta=%ds",
-                     username, last_ts, max_ts, max_ts - last_ts)
-        if max_ts > last_ts:
-            db.set_last_trade_timestamp(address, max_ts)
+        _last_processed_ts = last_ts  # tracks the last trade we actually processed
 
         # Only BUY trades that happened AFTER our last seen timestamp
         new_buy_trades = [
@@ -691,6 +737,7 @@ def copy_followed_wallets():
         if new_sells:
             open_by_cid = {t["condition_id"]: t for t in _cached_open_trades if t["condition_id"] and t["wallet_address"] == address}
             for sell in new_sells:
+                _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                 sell_cid = sell.get("condition_id", "")
                 if sell_cid and sell_cid in open_by_cid:
                     our_trade = open_by_cid[sell_cid]
@@ -706,7 +753,7 @@ def copy_followed_wallets():
                             logger.warning("[FAST-SELL] Order fehlgeschlagen: %s", our_trade["market_question"][:40])
                     shares = our_trade["size"] / our_trade["entry_price"] if our_trade["entry_price"] > 0 else 0
                     pnl = (sell_price - our_trade["entry_price"]) * shares
-                    db.close_copy_trade(our_trade["id"], round(pnl, 2))
+                    db.close_copy_trade(our_trade["id"], round(pnl, 2), close_price=sell_price)
                     logger.info("[FAST-SELL] #%d CLOSED (trader sold): PnL=$%.2f @ %.0fc | %s",
                                 our_trade["id"], pnl, sell_price * 100, our_trade["market_question"][:40])
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
@@ -727,6 +774,7 @@ def copy_followed_wallets():
             new_trades += _position_diff_scan(address, username, balance, total_invested)
 
         for t in new_buy_trades:
+            _last_processed_ts = max(_last_processed_ts, t["timestamp"])
             cid = t.get("condition_id", "")
             question = t["market_question"]
             logger.info("[NEW] %s: %s | $%.2f | %dc | cid=%s",
@@ -744,7 +792,7 @@ def copy_followed_wallets():
                     with _gc() as _rc:
                         _was_closed = _rc.execute(
                             "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
-                            "AND closed_at > datetime('now', '-%d minutes')" % config.NO_REBUY_MINUTES, (cid,)
+                            "AND closed_at > datetime('now', '-' || ? || ' minutes')", (cid, str(config.NO_REBUY_MINUTES))
                         ).fetchone()
                         if _was_closed:
                             logger.info("[SKIP] Recently closed (no-rebuy %dmin): %s",
@@ -958,22 +1006,23 @@ def copy_followed_wallets():
 
             # Proportionaler Trader-Multiplikator: dieser Trade vs. Trader-Durchschnitt
             trader_ratio = (dollar_value / avg_trader_size) if avg_trader_size > 0 else 1.0
-            size = _calculate_position_size(entry_price, balance, trader_ratio=trader_ratio)
-
-            # Enforce MAX_POSITION_SIZE across ALL trades on same condition_id
-            _existing_on_market = sum(
-                ot["size"] for ot in _cached_open_trades
-                if ot.get("condition_id", "") == cid
-            )
-            if _existing_on_market >= MAX_POSITION_SIZE:
-                logger.info("[SKIP] Position cap reached $%.2f >= max $%.0f: %s",
-                            _existing_on_market, MAX_POSITION_SIZE, question[:40])
-                continue
-            _remaining_cap = MAX_POSITION_SIZE - _existing_on_market
-            if size > _remaining_cap:
-                size = round(_remaining_cap, 2)
-                logger.info("[SIZE] Capped to position limit: $%.2f (existing $%.2f, max $%.0f) | %s",
-                            size, _existing_on_market, MAX_POSITION_SIZE, question[:35])
+            size = _calculate_position_size(entry_price, balance, trader_ratio=trader_ratio,
+                                                portfolio_value=portfolio_value, trader_name=username)
+            # Cap to MAX_POSITION_SIZE across all trades on same condition_id
+            if cid:
+                _existing_on_market = sum(
+                    ot["size"] for ot in _cached_open_trades
+                    if ot.get("condition_id", "") == cid
+                )
+                if _existing_on_market >= MAX_POSITION_SIZE:
+                    logger.info("[SKIP] Position cap $%.0f >= max $%.0f: %s",
+                                _existing_on_market, MAX_POSITION_SIZE, question[:40])
+                    continue
+                _remaining_cap = MAX_POSITION_SIZE - _existing_on_market
+                if size > _remaining_cap:
+                    size = round(_remaining_cap, 2)
+                    logger.info("[SIZE] Capped to position limit: $%.2f (existing $%.2f, max $%.0f) | %s",
+                                size, _existing_on_market, MAX_POSITION_SIZE, question[:35])
 
             # Cap to event remaining budget
             if _evt_remaining is not None and size > _evt_remaining:
@@ -1075,6 +1124,11 @@ def copy_followed_wallets():
                 if new_trades >= MAX_TRADES_PER_SCAN:
                     logger.info("[SCAN] MAX_TRADES_PER_SCAN (%d) erreicht — naechster Scan.", MAX_TRADES_PER_SCAN)
                     break  # inner loop break
+
+        # Update timestamp to last processed trade (not max_ts!)
+        # If MAX_TRADES_PER_SCAN cut off some trades, they'll reappear next scan
+        if _last_processed_ts > last_ts:
+            db.set_last_trade_timestamp(address, _last_processed_ts)
 
         if new_trades >= MAX_TRADES_PER_SCAN:
             break  # outer wallet loop break
