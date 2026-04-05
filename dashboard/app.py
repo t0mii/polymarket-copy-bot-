@@ -152,7 +152,7 @@ def api_live_data():
         from database.db import get_connection
         with get_connection() as _conn:
             for _row in _conn.execute(
-                "SELECT condition_id, wallet_username, created_at, closed_at, "
+                "SELECT id, condition_id, wallet_username, created_at, closed_at, "
                 "size, entry_price, status FROM copy_trades "
                 "WHERE condition_id != '' AND status != 'baseline' "
                 "ORDER BY created_at DESC"
@@ -228,7 +228,7 @@ def api_live_data():
             _show_pnl = round(_shares * (cp - _show_entry), 2) if _shares > 0 else round(cv - iv, 2)
 
             open_positions.append({
-                "id": hash(_cid) % 10000,
+                "id": _open_match.get("id", hash(_cid) % 10000) if _open_match else hash(_cid) % 10000,
                 "wallet_username": _trader_by_cid.get(_cid, "—"),
                 "wallet_address": funder,
                 "market_question": rp.get("title") or rp.get("question", ""),
@@ -467,6 +467,10 @@ def api_settings():
         {"key": "MAX_DAILY_TRADES", "value": str(config.MAX_DAILY_TRADES) if config.MAX_DAILY_TRADES > 0 else "OFF", "desc": "Max trades per day"},
         {"key": "STOP_LOSS_PCT", "value": _pct(config.STOP_LOSS_PCT) if config.STOP_LOSS_PCT > 0 else "OFF", "desc": "Auto-sell at X% loss"},
         {"key": "TAKE_PROFIT_PCT", "value": _pct(config.TAKE_PROFIT_PCT) if config.TAKE_PROFIT_PCT > 0 else "OFF", "desc": "Auto-sell at X% gain"},
+        # --- Auto-Sell / Auto-Close ---
+        {"key": "AUTO_SELL_PRICE", "value": str(int(config.AUTO_SELL_PRICE * 100)) + "c", "desc": "Sell winning positions above this price"},
+        {"key": "AUTO_CLOSE_WON_PRICE", "value": str(int(config.AUTO_CLOSE_WON_PRICE * 100)) + "c", "desc": "Mark as won above this price"},
+        {"key": "AUTO_CLOSE_LOST_PRICE", "value": str(int(config.AUTO_CLOSE_LOST_PRICE * 100)) + "c", "desc": "Mark as lost below this price"},
         # --- Feature Toggles ---
         {"key": "COPY_SELLS", "value": _onoff(config.COPY_SELLS), "desc": "Copy sell signals from traders"},
         {"key": "POSITION_DIFF_ENABLED", "value": _onoff(config.POSITION_DIFF_ENABLED), "desc": "Position-diff fallback scan"},

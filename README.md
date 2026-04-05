@@ -358,8 +358,14 @@ BET_SIZE_MAP=xsaghav:0.08,sovereign2013:0.03,Jargs:0.05
 # base=$24 × 1.5x(strong) × 2.0x(conviction) = $72 → capped to MAX_POSITION_SIZE=$30
 ```
 
-### Auto-Sell at 96¢
-Won positions are automatically sold at 96¢+ to recycle capital. No need to wait for market resolution — the bot takes profit and frees up cash for new trades.
+### Auto-Sell / Auto-Close
+Won positions are automatically sold to recycle capital. All thresholds configurable:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUTO_SELL_PRICE` | 0.96 | Sell winning positions above 96¢ |
+| `AUTO_CLOSE_WON_PRICE` | 0.99 | Mark as won above 99¢ (waiting for redeem) |
+| `AUTO_CLOSE_LOST_PRICE` | 0.01 | Mark as lost below 1¢ (position dead) |
 
 ### One Copy Per Market
 `MAX_COPIES_PER_MARKET=1` prevents the bot from doubling up on the same market when a trader adds to their position in waves.

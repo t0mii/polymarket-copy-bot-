@@ -49,23 +49,37 @@ def main():
     funder = config.POLYMARKET_FUNDER
     positions = fetch_wallet_positions(funder)
 
+    # Use Polymarket API directly — positions at 99c+ with value are redeemable
+    # Skip the slow Gamma API check (1 call per position)
+    import requests as _req
+    all_api = []
+    _offset = 0
+    while True:
+        _r = _req.get("https://data-api.polymarket.com/positions", params={
+            "user": funder, "limit": 500, "offset": _offset, "sizeThreshold": 0
+        }, timeout=15)
+        if not _r.ok: break
+        _page = _r.json()
+        if not _page: break
+        all_api.extend(_page)
+        if len(_page) < 500: break
+        _offset += 500
+
     resolved = []
-    for p in positions:
-        cid = p.get("condition_id", "")
-        if not cid:
-            continue
-        try:
-            r = requests.get("https://gamma-api.polymarket.com/markets",
-                             params={"conditionId": cid}, timeout=5)
-            if r.ok and r.json():
-                m = r.json()[0]
-                if m.get("closed") or m.get("resolved"):
-                    resolved.append(p)
-        except Exception:
-            continue
+    for p in all_api:
+        cp = float(p.get("curPrice", 0) or 0)
+        cv = float(p.get("currentValue", 0) or 0)
+        cid = p.get("conditionId", "")
+        if cp >= 0.99 and cv > 0.05 and cid:
+            resolved.append({
+                "condition_id": cid,
+                "size": cv,
+                "side": p.get("outcome", ""),
+                "market_question": p.get("title", ""),
+            })
 
     if not resolved:
-        logger.info("No resolved positions to redeem!")
+        logger.info("No resolved positions with value to redeem!")
         return
 
     total = sum(p.get("size", 0) for p in resolved)
@@ -116,21 +130,40 @@ def main():
     from bot.order_executor import get_wallet_balance
     bal_before = get_wallet_balance()
 
-    logger.info("Redeeming all resolved positions...")
+    logger.info("Redeeming %d resolved positions ($%.2f)...", len(resolved), total)
+    condition_ids = [p.get("condition_id") for p in resolved if p.get("condition_id")]
+    redeemed_total = 0
+    failed_total = 0
+    import time as _rt
+
+    # Try redeem_all first (sometimes works for all at once)
     try:
         result = service.redeem_all(batch_size=10)
-        logger.info("Redeem result: %s", result)
+        success = len(result.success_list) if hasattr(result, 'success_list') else 0
+        if success > 0:
+            redeemed_total += success
+            logger.info("redeem_all: %d redeemed", success)
     except Exception as e:
-        logger.error("Redeem failed: %s", e)
-        logger.info("Trying individual redemptions...")
+        logger.info("redeem_all failed: %s — trying individually", e)
 
-        condition_ids = [p.get("condition_id") for p in resolved if p.get("condition_id")]
-        for cid in condition_ids:
+    # Process remaining one by one (Relayer only handles 1 per transaction)
+    if redeemed_total < len(condition_ids):
+        for i, cid in enumerate(condition_ids):
             try:
                 r = service.redeem([cid], batch_size=1)
-                logger.info("Redeemed %s: %s", cid[:16], r)
+                if hasattr(r, 'success_list') and r.success_list:
+                    redeemed_total += 1
+                    vol = r.success_list[0].get('derivedMetadata', {}).get('operationCount', 1) if r.success_list else 0
+                    logger.info("[%d/%d] Redeemed: %s", i + 1, len(condition_ids), cid[:20])
+                else:
+                    failed_total += 1
             except Exception as ex:
-                logger.error("Failed %s: %s", cid[:16], ex)
+                failed_total += 1
+                logger.debug("[%d/%d] Failed: %s: %s", i + 1, len(condition_ids), cid[:16], ex)
+            _rt.sleep(2)  # pause between calls to avoid rate limiting
+
+    logger.info("Redeem complete: %d redeemed, %d failed out of %d total",
+                redeemed_total, failed_total, len(condition_ids))
 
     # Check new balance + remaining positions
     from bot.wallet_scanner import fetch_wallet_positions

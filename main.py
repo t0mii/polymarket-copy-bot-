@@ -125,7 +125,7 @@ def update_prices():
                     _our_size = _our_trade["size"] or _iv
                     _our_entry = _our_trade["entry_price"] or 0
                     # Close lost positions in DB (price went to 0)
-                    if _cp <= 0.01 and _iv > 0.01:
+                    if _cp <= config.AUTO_CLOSE_LOST_PRICE and _iv > 0.01:
                         _close_pnl = round(-_our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
                         _did_close = False
@@ -151,7 +151,7 @@ def update_prices():
                                 pass
                         continue  # Already handled — skip auto-sell
                     # Close won positions in DB (price at 100c, resolved)
-                    elif _cp >= 0.99 and _iv > 0.01:
+                    elif _cp >= config.AUTO_CLOSE_WON_PRICE and _iv > 0.01:
                         _shares = _our_size / _our_entry if _our_entry > 0 else 0
                         _pnl_won = round(_shares * 1.0 - _our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
@@ -177,7 +177,7 @@ def update_prices():
                             except Exception:
                                 pass
                         continue  # Already handled — skip auto-sell
-                    if _cp >= 0.96 and _cv > 0.50 and _pnl_check > 0:
+                    if _cp >= config.AUTO_SELL_PRICE and _cv > 0.50 and _pnl_check > 0:
                         _out = _p.get("outcome", "")
                         if _out.lower() in ("yes", "y"): _side = "YES"
                         elif _out.lower() in ("no", "n"): _side = "NO"
