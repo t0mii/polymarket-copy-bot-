@@ -249,14 +249,15 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="hd-right">
       <div style="position:relative">
         <button class="sfx-btn" id="sfxBtn" onclick="togSfxPanel()"><span id="sfxIco">&#128264;</span> Sound</button>
-        <div id="sfxPanel" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;background:var(--bg2);border:1px solid var(--border);padding:10px 14px;z-index:100;min-width:180px;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:.78rem;color:var(--text)">Trade Alerts</span>
-            <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.7rem;padding:2px 10px;border-radius:3px">OFF</button>
+        <div id="sfxPanel" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;background:var(--bg);border:1px solid var(--border);padding:12px 16px;z-index:9998;width:220px;border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.7)">
+          <div style="font-size:.65rem;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Sound Settings</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:.82rem;color:var(--text)">Trade Alerts</span>
+            <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.72rem;padding:3px 12px;border-radius:3px;min-width:40px">OFF</button>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">
-            <span style="font-size:.78rem;color:var(--text)">Pop Out Sound</span>
-            <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.7rem;padding:2px 10px;border-radius:3px">OFF</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
+            <span style="font-size:.82rem;color:var(--text)">Pop Out Sound</span>
+            <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.72rem;padding:3px 12px;border-radius:3px;min-width:40px">OFF</button>
           </div>
         </div>
       </div>
