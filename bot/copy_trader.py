@@ -992,7 +992,9 @@ def copy_followed_wallets():
                     logger.warning("[LIVE] Order fehlgeschlagen — ueberspringe: %s", question[:40])
                     continue
                 # Echten Fill-Betrag bestimmen: Differenz der Wallet-Balance
+                # Short delay to let wallet API reflect the full deduction
                 try:
+                    _time.sleep(2)
                     bal_after = get_wallet_balance()
                     real_fill = round(bal_before - bal_after, 2)
                     if real_fill > 0.10:
