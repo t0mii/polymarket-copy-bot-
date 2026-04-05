@@ -49,23 +49,37 @@ def main():
     funder = config.POLYMARKET_FUNDER
     positions = fetch_wallet_positions(funder)
 
+    # Use Polymarket API directly — positions at 99c+ with value are redeemable
+    # Skip the slow Gamma API check (1 call per position)
+    import requests as _req
+    all_api = []
+    _offset = 0
+    while True:
+        _r = _req.get("https://data-api.polymarket.com/positions", params={
+            "user": funder, "limit": 500, "offset": _offset, "sizeThreshold": 0
+        }, timeout=15)
+        if not _r.ok: break
+        _page = _r.json()
+        if not _page: break
+        all_api.extend(_page)
+        if len(_page) < 500: break
+        _offset += 500
+
     resolved = []
-    for p in positions:
-        cid = p.get("condition_id", "")
-        if not cid:
-            continue
-        try:
-            r = requests.get("https://gamma-api.polymarket.com/markets",
-                             params={"conditionId": cid}, timeout=5)
-            if r.ok and r.json():
-                m = r.json()[0]
-                if m.get("closed") or m.get("resolved"):
-                    resolved.append(p)
-        except Exception:
-            continue
+    for p in all_api:
+        cp = float(p.get("curPrice", 0) or 0)
+        cv = float(p.get("currentValue", 0) or 0)
+        cid = p.get("conditionId", "")
+        if cp >= 0.99 and cv > 0.05 and cid:
+            resolved.append({
+                "condition_id": cid,
+                "size": cv,
+                "side": p.get("outcome", ""),
+                "market_question": p.get("title", ""),
+            })
 
     if not resolved:
-        logger.info("No resolved positions to redeem!")
+        logger.info("No resolved positions with value to redeem!")
         return
 
     total = sum(p.get("size", 0) for p in resolved)
