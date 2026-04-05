@@ -363,6 +363,8 @@ def api_settings():
         {"key": "MIN_TRADE_SIZE", "value": _dlr(config.MIN_TRADE_SIZE), "desc": "Min $ per trade"},
         {"key": "RATIO_MIN", "value": _x(config.RATIO_MIN), "desc": "Min conviction multiplier"},
         {"key": "RATIO_MAX", "value": _x(config.RATIO_MAX), "desc": "Max conviction multiplier"},
+        {"key": "BET_SIZE_BASIS", "value": config.BET_SIZE_BASIS, "desc": "Sizing basis (cash or portfolio)"},
+        {"key": "BET_SIZE_MAP", "value": config.BET_SIZE_MAP or "default", "desc": "Per-trader bet size override"},
         # --- Price Signal ---
         {"key": "PRICE_MULT_HIGH", "value": _x(config.PRICE_MULT_HIGH), "desc": "Multiplier for strong signals (near 0c/100c)"},
         {"key": "PRICE_MULT_MED", "value": _x(config.PRICE_MULT_MED), "desc": "Multiplier for normal signals"},
