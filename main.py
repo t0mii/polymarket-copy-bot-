@@ -86,8 +86,8 @@ def update_prices():
             import requests as _rq
             import time as _t
             _r = _rq.get("https://data-api.polymarket.com/positions", params={
-                "user": config.POLYMARKET_FUNDER, "limit": 100, "sizeThreshold": 0
-            }, timeout=10)
+                "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
+            }, timeout=15)
             if _r.ok:
                 for _p in _r.json():
                     _cp = float(_p.get("curPrice", 0) or 0)
