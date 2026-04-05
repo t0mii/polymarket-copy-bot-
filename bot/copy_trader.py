@@ -47,6 +47,14 @@ for _entry in config.TRADER_EXPOSURE_MAP.split(","):
         _parts = _entry.split(":", 1)
         _EXPOSURE_MAP[_parts[0].strip().lower()] = float(_parts[1].strip())
 
+# Per-trader minimum trade size (parsed once at module load)
+_MIN_TRADER_USD_MAP: dict[str, float] = {}
+for _mtu_entry in config.MIN_TRADER_USD_MAP.split(","):
+    _mtu_entry = _mtu_entry.strip()
+    if ":" in _mtu_entry:
+        _mtu_parts = _mtu_entry.split(":", 1)
+        _MIN_TRADER_USD_MAP[_mtu_parts[0].strip().lower()] = float(_mtu_parts[1].strip())
+
 # Pending Buy Queue (in-memory: condition_id → {trade_data, queued_at})
 _pending_buys: dict = {}
 
@@ -56,6 +64,10 @@ _idle_replaced_at: dict = {}
 # Hedge-Detection Queue: holds trades for 120s to check if trader buys opposite side
 # Key: event_slug or market group → {sides: {side: trade_data}, queued_at: timestamp}
 _hedge_queue: dict = {}  # event_slug → {sides: {side: trade_data}, queued_at: ts, address: addr}
+
+# Event-Wait Queue: trades queued because event starts too far in the future
+# Key: condition_id → {trade_data, event_start_ts, queued_at}
+_event_wait_queue: dict = {}
 
 # Circuit Breaker: nach N aufeinanderfolgenden API-Fehlern → X Sekunden Pause
 _CB_THRESHOLD = config.CB_THRESHOLD
@@ -625,6 +637,47 @@ def copy_followed_wallets():
     balance = portfolio_value
     logger.info("PORTFOLIO: Wallet=$%.2f | Positions=$%.2f | Total=$%.2f (sizing base=$%.2f)", cash, _open_value, portfolio_value, balance)
 
+    # Event-Wait-Queue: fire trades whose events are now within the time window
+    if _event_wait_queue and config.MAX_HOURS_BEFORE_EVENT > 0:
+        _ew_now = _time.time()
+        _ew_expired = []
+        for _ew_cid, _ew in list(_event_wait_queue.items()):
+            hours_until = (_ew["event_start_ts"] - _ew_now) / 3600
+            # Event within window → execute
+            if 0 < hours_until <= config.MAX_HOURS_BEFORE_EVENT:
+                td = _ew["trade_data"]
+                _ew_size = _calculate_position_size(td["entry_price"], balance,
+                                                    portfolio_value=portfolio_value, trader_name=td["wallet_username"])
+                if _ew_size >= MIN_TRADE_SIZE and balance > _ew_size:
+                    if LIVE_MODE and _ew_cid:
+                        from bot.order_executor import get_wallet_balance as _gwb_ew
+                        if _gwb_ew() < _ew_size:
+                            continue
+                        order_resp = buy_shares(_ew_cid, td["side"], _ew_size, td["entry_price"])
+                        if not order_resp:
+                            continue
+                    td["size"] = _ew_size
+                    trade_id = db.create_copy_trade(td)
+                    if trade_id:
+                        new_trades += 1
+                        balance -= _ew_size
+                        _cached_open_trades.append(td)
+                        logger.info("[EVENT-WAIT] Trade #%d fired (event in %.1fh): %s @ %dc | $%.2f",
+                                    trade_id, hours_until, td["market_question"][:40],
+                                    round(td["entry_price"] * 100), _ew_size)
+                        db.log_activity("buy", "BUY", "Copied position from %s (event wait)" % td["wallet_username"],
+                                        "#%d %s @ %dc — $%.2f" % (trade_id, td["market_question"][:40],
+                                        round(td["entry_price"] * 100), _ew_size))
+                _ew_expired.append(_ew_cid)
+            # Event already started or passed → discard
+            elif hours_until <= 0:
+                _ew_expired.append(_ew_cid)
+            # Queued too long (>24h) → discard
+            elif _ew_now - _ew["queued_at"] > 86400:
+                _ew_expired.append(_ew_cid)
+        for _ek in _ew_expired:
+            _event_wait_queue.pop(_ek, None)
+
     # Pending-Buy-Queue abarbeiten
     new_trades += _process_pending_buys(balance, total_invested)
 
@@ -640,8 +693,11 @@ def copy_followed_wallets():
                 for side, td in q["sides"].items():
                     logger.info("[HEDGE-WAIT] No hedge after %ds → executing: %s %s",
                                 wait, side, td["question"][:40])
-                    # Re-inject into the activity feed by creating the trade directly
                     entry_price = td["entry_price"]
+                    # MAX_COPIES check: activity scan may have already copied this market
+                    if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= config.MAX_COPIES_PER_MARKET:
+                        logger.info("[HEDGE-WAIT] Already copied (activity scan was faster), skipping: %s", td["question"][:40])
+                        continue
                     # Check trader exposure limit (per-trader or default)
                     _max_t = portfolio_value * _EXPOSURE_MAP.get(td["username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
                     _t_inv = sum(x["size"] for x in _cached_open_trades if x["wallet_address"] == td["address"])
@@ -695,6 +751,16 @@ def copy_followed_wallets():
         for k in expired_keys:
             _hedge_queue.pop(k, None)
 
+    # Clean hedge queue: remove entries for markets already copied by activity scan
+    for _hk in list(_hedge_queue.keys()):
+        _hq_entry = _hedge_queue[_hk]
+        _hq_first = list(_hq_entry["sides"].values())[0]
+        _hq_addr = _hq_first.get("address", "")
+        _hq_cid = _hq_first.get("cid", _hk)
+        if _hq_cid and db.count_copies_for_market(_hq_addr, _hq_cid) >= config.MAX_COPIES_PER_MARKET:
+            logger.info("[HEDGE-WAIT] Removed from queue (already copied): %s", _hq_first.get("question", "")[:40])
+            del _hedge_queue[_hk]
+
     for wallet in followed:
         address = wallet["address"]
         username = wallet["username"] or address[:12]
@@ -733,18 +799,21 @@ def copy_followed_wallets():
                     username, len(all_buys), len(new_buy_trades), last_ts)
 
         # === FAST SELL DETECTION: RN1 SELLs sofort erkennen (alle 5s) ===
+        _already_sold_cids = set()  # prevent sell spam on same condition_id
         new_sells = [t for t in recent_trades if t["trade_type"] == "SELL" and t["timestamp"] > last_ts] if config.COPY_SELLS else []
         if new_sells:
             open_by_cid = {t["condition_id"]: t for t in _cached_open_trades if t["condition_id"] and t["wallet_address"] == address}
             for sell in new_sells:
                 _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                 sell_cid = sell.get("condition_id", "")
-                if sell_cid and sell_cid in open_by_cid:
+                if not sell_cid or sell_cid in _already_sold_cids:
+                    continue
+                if sell_cid in open_by_cid:
                     our_trade = open_by_cid[sell_cid]
                     sell_price = sell.get("price", 0)
                     if not sell_price:
                         sell_price = our_trade["current_price"] or our_trade["entry_price"]
-                    # LIVE: echte Sell Order
+                    # LIVE: echte Sell Order (once per condition_id)
                     if LIVE_MODE and sell_cid:
                         sell_resp = sell_shares(sell_cid, our_trade["side"], sell_price)
                         if sell_resp:
@@ -759,6 +828,14 @@ def copy_followed_wallets():
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
                                     "Position closed — sold",
                                     "#%d %s — P&L $%+.2f" % (our_trade["id"], our_trade["market_question"][:40], pnl), pnl)
+                    _already_sold_cids.add(sell_cid)
+                    # Close ALL other open trades on same condition_id (prevents sell spam from duplicates)
+                    _other_on_cid = [t for t in _cached_open_trades if t.get("condition_id") == sell_cid and t.get("id") != our_trade["id"]]
+                    for _ot in _other_on_cid:
+                        _ot_shares = _ot["size"] / _ot["entry_price"] if _ot.get("entry_price", 0) > 0 else 0
+                        _ot_pnl = round((sell_price - _ot["entry_price"]) * _ot_shares, 2)
+                        db.close_copy_trade(_ot["id"], _ot_pnl, close_price=sell_price)
+                        logger.info("[FAST-SELL] #%d also closed (same market): PnL=$%.2f", _ot["id"], _ot_pnl)
                     try:
                         from dashboard.app import broadcast_event
                         broadcast_event("trade_closed", {
@@ -802,11 +879,12 @@ def copy_followed_wallets():
                     pass
 
             # === RN1 SMART-FILTER ===
-            # 1) Min Trader USD: Nur echte Conviction-Trades kopieren, Noise ignorieren
+            # 1) Min Trader USD: per-trader override or global default
             dollar_value = t.get("usdc_size", 0)
-            if dollar_value < config.MIN_TRADER_USD:
+            _min_usd = _MIN_TRADER_USD_MAP.get(username.lower(), config.MIN_TRADER_USD)
+            if dollar_value < _min_usd:
                 logger.info("[FILTER] Size $%.1f < $%.0f: %s",
-                            dollar_value, config.MIN_TRADER_USD, question[:40])
+                            dollar_value, _min_usd, question[:40])
                 continue
 
             # 2) Preis-Range-Filter: Trash-Farming (1-3c) und Hedges (95-99c) ausfiltern
@@ -968,9 +1046,33 @@ def copy_followed_wallets():
                                 _now_utc = _dt.now(_tz.utc)
                                 _hours_until = (_start - _now_utc).total_seconds() / 3600
                                 if _hours_until > config.MAX_HOURS_BEFORE_EVENT:
-                                    logger.info("[SKIP] Event in %.1fh (max %.1fh): %s",
-                                                _hours_until, config.MAX_HOURS_BEFORE_EVENT, question[:40])
-                                    continue
+                                    # Enough cash → buy now despite distant event
+                                    if config.EVENT_WAIT_MIN_CASH > 0 and cash > config.EVENT_WAIT_MIN_CASH:
+                                        logger.info("[EVENT-WAIT] Event in %.1fh but cash $%.0f > $%.0f — buying now: %s",
+                                                    _hours_until, cash, config.EVENT_WAIT_MIN_CASH, question[:40])
+                                    else:
+                                        # Low cash (or always-queue mode) → queue for later
+                                        if cid and cid not in _event_wait_queue:
+                                            _event_wait_queue[cid] = {
+                                                "trade_data": {
+                                                    "wallet_address": address,
+                                                    "wallet_username": username,
+                                                    "market_question": question,
+                                                    "market_slug": t.get("market_slug", ""),
+                                                    "event_slug": t.get("event_slug", ""),
+                                                    "side": t["side"],
+                                                    "entry_price": trader_price,
+                                                    "size": 0,
+                                                    "end_date": t.get("end_date", ""),
+                                                    "outcome_label": t.get("outcome_label", ""),
+                                                    "condition_id": cid,
+                                                },
+                                                "event_start_ts": _start.timestamp(),
+                                                "queued_at": _time.time(),
+                                            }
+                                            logger.info("[EVENT-WAIT] Queued (event in %.1fh, cash $%.0f < $%.0f): %s",
+                                                        _hours_until, cash, config.EVENT_WAIT_MIN_CASH, question[:40])
+                                        continue
                     except Exception:
                         pass  # API fail → don't block, just skip check
 

@@ -38,12 +38,15 @@ TRADER_EXPOSURE_MAP = os.getenv("TRADER_EXPOSURE_MAP", "")
 
 # --- Trade Filters ---
 MIN_TRADER_USD = float(os.getenv("MIN_TRADER_USD", "3"))
+# Per-trader override: "name:amount,name:amount" (overrides MIN_TRADER_USD per trader)
+MIN_TRADER_USD_MAP = os.getenv("MIN_TRADER_USD_MAP", "")
 MIN_ENTRY_PRICE = float(os.getenv("MIN_ENTRY_PRICE", "0.15"))
 MAX_ENTRY_PRICE = float(os.getenv("MAX_ENTRY_PRICE", "0.92"))
 MAX_SPREAD = float(os.getenv("MAX_SPREAD", "0.05"))
 MAX_COPIES_PER_MARKET = int(os.getenv("MAX_COPIES_PER_MARKET", "1"))
 ENTRY_TRADE_SEC = int(os.getenv("ENTRY_TRADE_SEC", "300"))
 MAX_HOURS_BEFORE_EVENT = float(os.getenv("MAX_HOURS_BEFORE_EVENT", "0"))  # Only buy X hours before event starts (0=disabled)
+EVENT_WAIT_MIN_CASH = float(os.getenv("EVENT_WAIT_MIN_CASH", "0"))  # Only queue distant events when cash below $X (0=always queue)
 NO_REBUY_MINUTES = int(os.getenv("NO_REBUY_MINUTES", "0"))  # Don't re-enter closed markets for X min (0=disabled)
 MAX_PER_EVENT = float(os.getenv("MAX_PER_EVENT", "15"))  # Max $ invested per event/game (0=disabled)
 

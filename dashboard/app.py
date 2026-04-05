@@ -15,6 +15,24 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+
+def _check_auth() -> bool:
+    """Check dashboard secret from X-Dashboard-Key header, ?key= param, or JSON body."""
+    expected = os.getenv("DASHBOARD_SECRET", "changeme")
+    key = (request.headers.get("X-Dashboard-Key", "")
+           or request.args.get("key", "")
+           or ((request.json or {}).get("key", "") if request.is_json else ""))
+    return key == expected
+
+
+@app.route("/api/auth/check", methods=["POST"])
+def api_auth_check():
+    """Verify dashboard secret — used by frontend unlock button."""
+    if _check_auth():
+        return jsonify({"status": "ok", "authenticated": True})
+    return jsonify({"error": "invalid key", "authenticated": False}), 403
+
+
 # --- Server-Sent Events for Live Dashboard ---
 _sse_clients: list = []
 _sse_lock = threading.Lock()
@@ -78,14 +96,37 @@ def api_live_data():
                   "atp": "\U0001F3BE ATP", "wta": "\U0001F3BE WTA",
                   "soccer": "\u26BD", "epl": "\u26BD EPL", "ucl": "\u26BD UCL",
                   "efa-": "\u26BD EPL", "lal-": "\u26BD LAL",
-                  "copa": "\U0001F3BE", "charleston": "\U0001F3BE",
-                  "lol": "\U0001F3AE LOL", "csgo": "\U0001F3AE CS", "ncaa": "\U0001F3C0 NCAA",
+                  "copa": "\U0001F3BE", "charleston": "\U0001F3BE", "monte carlo": "\U0001F3BE",
+                  "lol": "\U0001F3AE LOL", "csgo": "\U0001F3AE CS", "cs2": "\U0001F3AE CS",
+                  "counter-strike": "\U0001F3AE CS", "dota": "\U0001F9D9 DOTA", "valorant": "\U0001F52B VAL",
+                  "ncaa": "\U0001F3C0 NCAA",
                   "bundesliga": "\u26BD BL", "freiburg": "\u26BD BL", "bayern": "\u26BD BL",
                   "mex-": "\u26BD MX", "liga mx": "\u26BD MX",
                   "puebla": "\u26BD MX", "juarez": "\u26BD MX", "cruz": "\u26BD MX",
                   "necaxa": "\u26BD MX", "tigre": "\u26BD MX", "tijuana": "\u26BD MX", "mazatl": "\u26BD MX",
                   "southampton": "\u26BD EPL", "barcelona": "\u26BD LAL", "madrid": "\u26BD LAL",
-                  "serie a": "\u26BD SA", "premier": "\u26BD EPL"}
+                  "serie a": "\u26BD SA", "premier": "\u26BD EPL",
+                  # NHL teams
+                  "avalanche": "\U0001F3D2 NHL", "blackhawks": "\U0001F3D2 NHL", "bruins": "\U0001F3D2 NHL",
+                  "canadiens": "\U0001F3D2 NHL", "canucks": "\U0001F3D2 NHL", "capitals": "\U0001F3D2 NHL",
+                  "coyotes": "\U0001F3D2 NHL", "devils": "\U0001F3D2 NHL", "ducks": "\U0001F3D2 NHL",
+                  "flames": "\U0001F3D2 NHL", "flyers": "\U0001F3D2 NHL", "hurricanes": "\U0001F3D2 NHL",
+                  "islanders": "\U0001F3D2 NHL", "jets": "\U0001F3D2 NHL", "kings": "\U0001F3D2 NHL",
+                  "kraken": "\U0001F3D2 NHL", "lightning": "\U0001F3D2 NHL", "maple leafs": "\U0001F3D2 NHL",
+                  "oilers": "\U0001F3D2 NHL", "panthers": "\U0001F3D2 NHL", "penguins": "\U0001F3D2 NHL",
+                  "predators": "\U0001F3D2 NHL", "rangers": "\U0001F3D2 NHL", "red wings": "\U0001F3D2 NHL",
+                  "sabres": "\U0001F3D2 NHL", "senators": "\U0001F3D2 NHL", "sharks": "\U0001F3D2 NHL",
+                  "blues": "\U0001F3D2 NHL", "stars": "\U0001F3D2 NHL", "wild": "\U0001F3D2 NHL",
+                  # MLB teams
+                  "astros": "\u26BE MLB", "athletics": "\u26BE MLB", "blue jays": "\u26BE MLB",
+                  "braves": "\u26BE MLB", "brewers": "\u26BE MLB", "cardinals": "\u26BE MLB",
+                  "cubs": "\u26BE MLB", "diamondbacks": "\u26BE MLB", "dodgers": "\u26BE MLB",
+                  "guardians": "\u26BE MLB", "mariners": "\u26BE MLB", "marlins": "\u26BE MLB",
+                  "mets": "\u26BE MLB", "nationals": "\u26BE MLB", "orioles": "\u26BE MLB",
+                  "padres": "\u26BE MLB", "phillies": "\u26BE MLB", "pirates": "\u26BE MLB",
+                  "rays": "\u26BE MLB", "red sox": "\u26BE MLB", "reds": "\u26BE MLB",
+                  "rockies": "\u26BE MLB", "royals": "\u26BE MLB", "tigers": "\u26BE MLB",
+                  "twins": "\u26BE MLB", "white sox": "\u26BE MLB", "yankees": "\u26BE MLB"}
 
     def _detect_sport(slug, title):
         s = (slug or "").lower() + " " + (title or "").lower()
@@ -389,13 +430,14 @@ def api_settings():
         {"key": "RATIO_MIN", "value": _x(config.RATIO_MIN), "desc": "Min conviction multiplier"},
         {"key": "RATIO_MAX", "value": _x(config.RATIO_MAX), "desc": "Max conviction multiplier"},
         {"key": "BET_SIZE_BASIS", "value": config.BET_SIZE_BASIS, "desc": "Sizing basis (cash or portfolio)"},
-        {"key": "BET_SIZE_MAP", "value": config.BET_SIZE_MAP or "default", "desc": "Per-trader bet size override"},
+        {"key": "BET_SIZE_MAP", "value": config.BET_SIZE_MAP or "default", "desc": "Per-trader base bet % (best traders get bigger bets)"},
         # --- Price Signal ---
         {"key": "PRICE_MULT_HIGH", "value": _x(config.PRICE_MULT_HIGH), "desc": "Multiplier for strong signals (near 0c/100c)"},
         {"key": "PRICE_MULT_MED", "value": _x(config.PRICE_MULT_MED), "desc": "Multiplier for normal signals"},
         {"key": "PRICE_MULT_LOW", "value": _x(config.PRICE_MULT_LOW), "desc": "Multiplier for weak signals (near 50c)"},
         # --- Trade Filters ---
-        {"key": "MIN_TRADER_USD", "value": _dlr(config.MIN_TRADER_USD), "desc": "Ignore trader buys below this"},
+        {"key": "MIN_TRADER_USD", "value": _dlr(config.MIN_TRADER_USD), "desc": "Default min trade size to copy"},
+        {"key": "MIN_TRADER_USD_MAP", "value": config.MIN_TRADER_USD_MAP or "default", "desc": "Per-trader min trade size override"},
         {"key": "MIN_ENTRY_PRICE", "value": str(int(config.MIN_ENTRY_PRICE * 100)) + "c", "desc": "Skip bets below this price"},
         {"key": "MAX_ENTRY_PRICE", "value": str(int(config.MAX_ENTRY_PRICE * 100)) + "c", "desc": "Skip bets above this price"},
         {"key": "MAX_COPIES_PER_MARKET", "value": str(config.MAX_COPIES_PER_MARKET), "desc": "Max copies per market"},
@@ -403,7 +445,8 @@ def api_settings():
         {"key": "MAX_SPREAD", "value": _pct(config.MAX_SPREAD), "desc": "Max bid/ask spread"},
         {"key": "ENTRY_TRADE_SEC", "value": _sec(config.ENTRY_TRADE_SEC), "desc": "Max trade age to copy"},
         {"key": "NO_REBUY_MINUTES", "value": str(config.NO_REBUY_MINUTES) + " min", "desc": "Block re-entry after close (0=off)"},
-        {"key": "MAX_HOURS_BEFORE_EVENT", "value": str(config.MAX_HOURS_BEFORE_EVENT) + "h", "desc": "Only buy X hours before event (0=off)"},
+        {"key": "MAX_HOURS_BEFORE_EVENT", "value": str(config.MAX_HOURS_BEFORE_EVENT) + "h", "desc": "Queue if event > Xh away (0=off)"},
+        {"key": "EVENT_WAIT_MIN_CASH", "value": _dlr(config.EVENT_WAIT_MIN_CASH) if config.EVENT_WAIT_MIN_CASH > 0 else "always queue", "desc": "Only queue when cash < $X (0=always)"},
         # --- Entry Mechanics ---
         {"key": "ENTRY_SLIPPAGE", "value": str(config.ENTRY_SLIPPAGE), "desc": "Added to entry price"},
         {"key": "MAX_ENTRY_PRICE_CAP", "value": str(int(config.MAX_ENTRY_PRICE_CAP * 100)) + "c", "desc": "Hard ceiling after slippage"},
@@ -479,8 +522,7 @@ def api_followed():
 
 @app.route("/api/wallet/<address>/follow", methods=["POST"])
 def api_follow(address):
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 1)
     return jsonify({"status": "ok", "followed": True})
@@ -488,8 +530,7 @@ def api_follow(address):
 
 @app.route("/api/wallet/<address>/unfollow", methods=["POST"])
 def api_unfollow(address):
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     db.toggle_follow(address, 0)
     return jsonify({"status": "ok", "followed": False})
@@ -598,6 +639,91 @@ def api_trader_stats():
     return jsonify(stats)
 
 
+@app.route("/api/copy/close/<int:trade_id>", methods=["POST"])
+def api_close_trade(trade_id):
+    """Manually close an open position — sells shares and marks as closed."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
+
+    from database.db import get_connection
+    from bot.order_executor import sell_shares, get_wallet_balance
+    from bot.ws_price_tracker import price_tracker
+
+    # Get the trade from DB
+    with get_connection() as conn:
+        trade = conn.execute(
+            "SELECT id, condition_id, side, entry_price, size, market_question, wallet_username "
+            "FROM copy_trades WHERE id=? AND status='open'", (trade_id,)
+        ).fetchone()
+
+    if not trade:
+        return jsonify({"error": "Trade not found or already closed"}), 404
+
+    cid = trade["condition_id"]
+    side = trade["side"]
+    entry_price = trade["entry_price"] or 0
+
+    # Get current price (WebSocket → API fallback)
+    current_price = None
+    if cid and price_tracker.is_connected:
+        current_price = price_tracker.get_price(cid, side)
+    if current_price is None:
+        # Fallback: fetch from API
+        try:
+            import requests as _req
+            r = _req.get("https://data-api.polymarket.com/positions", params={
+                "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
+            }, timeout=10)
+            if r.ok:
+                for p in r.json():
+                    if p.get("conditionId") == cid:
+                        current_price = float(p.get("curPrice", 0) or 0)
+                        break
+        except Exception:
+            pass
+    if current_price is None:
+        current_price = entry_price  # last resort
+
+    # LIVE: sell shares on Polymarket
+    sell_ok = False
+    if config.LIVE_MODE and cid:
+        resp = sell_shares(cid, side, current_price)
+        sell_ok = resp is not None
+        if not sell_ok:
+            return jsonify({"error": "Sell order failed", "trade_id": trade_id}), 500
+    else:
+        sell_ok = True  # paper mode
+
+    # Calculate PnL and close in DB
+    shares = trade["size"] / entry_price if entry_price > 0 else 0
+    pnl = round((current_price - entry_price) * shares, 2)
+
+    db.close_copy_trade(trade_id, pnl, close_price=current_price)
+    db.log_activity("sell", "WIN" if pnl >= 0 else "LOSS",
+                     "Manual close — %s" % trade["wallet_username"],
+                     "#%d %s — P&L $%+.2f" % (trade_id, (trade["market_question"] or "")[:35], pnl), pnl)
+
+    logger.info("[MANUAL-CLOSE] #%d sold @ %.0fc | PnL $%+.2f | %s",
+                trade_id, current_price * 100, pnl, (trade["market_question"] or "")[:40])
+
+    try:
+        broadcast_event("trade_closed", {
+            "id": trade_id, "trader": trade["wallet_username"],
+            "market": (trade["market_question"] or "")[:60],
+            "pnl": pnl, "price": round(current_price * 100),
+        })
+    except Exception:
+        pass
+
+    return jsonify({
+        "status": "closed",
+        "trade_id": trade_id,
+        "pnl": pnl,
+        "sell_price": current_price,
+        "market": trade["market_question"],
+    })
+
+
 @app.route("/api/copy/scan", methods=["POST"])
 def api_copy_scan():
     """Manually trigger copy-trade scan of followed wallets."""
@@ -627,8 +753,7 @@ def api_copy_update():
 @app.route("/api/copy/reset", methods=["POST"])
 def api_copy_reset():
     """Reset copy trading: delete all trades, baselines, snapshots. Keep followed wallets."""
-    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
-    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+    if not _check_auth():
         return jsonify({"error": "unauthorized"}), 403
     confirm = request.args.get("confirm", "")
     if not confirm and request.is_json:

@@ -144,7 +144,7 @@ All settings are optional — defaults work out of the box. Only `POLYMARKET_PRI
 | `RATIO_MIN` | 0.2 | Floor multiplier (small trader bet → small copy) |
 | `RATIO_MAX` | 2.0 | Ceiling multiplier (big trader bet → bigger copy) |
 | `BET_SIZE_BASIS` | cash | `cash` = size from wallet, `portfolio` = wallet + positions |
-| `BET_SIZE_MAP` | | Per-trader: `name:pct,name:pct` (overrides BET_SIZE_PCT) |
+| `BET_SIZE_MAP` | | Per-trader base bet override (e.g. `xsaghav:0.08,sovereign2013:0.03`) |
 | `DEFAULT_AVG_TRADER_SIZE` | 10.0 | Fallback avg trade size when no trader data |
 
 ### Price Signal Multipliers
@@ -168,12 +168,14 @@ Price 45c → edge 0.05 → weak signal  → bet × 0.6
 ### Trade Filters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `MIN_TRADER_USD` | 3 | Ignore trader buys below $3 (noise filter) |
+| `MIN_TRADER_USD` | 3 | Default min trade size to copy |
+| `MIN_TRADER_USD_MAP` | | Per-trader: `name:amount` (e.g. `sovereign2013:500`) |
 | `MIN_ENTRY_PRICE` | 0.15 | Skip lottery tickets below 15c |
 | `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92c |
 | `MAX_COPIES_PER_MARKET` | 1 | One copy per market (prevents doubling up) |
 | `ENTRY_TRADE_SEC` | 300 | Ignore trades older than 5 minutes |
-| `MAX_HOURS_BEFORE_EVENT` | 0 | Only buy X hours before event (0=disabled) |
+| `MAX_HOURS_BEFORE_EVENT` | 0 | Queue trades if event > X hours away (0=disabled) |
+| `EVENT_WAIT_MIN_CASH` | 0 | Only queue distant events when cash < $X (0=always queue) |
 | `MAX_PER_EVENT` | 15 | Max $ per event/game (0=disabled) |
 | `NO_REBUY_MINUTES` | 0 | Block re-entry after close (0=disabled) |
 | `MAX_SPREAD` | 0.05 | Max bid/ask spread tolerance (5%) |
@@ -337,6 +339,25 @@ Waits 60s before executing a trade. If the trader buys the opposite side within 
 ### Proportional Sizing
 Small trader bets (noise/testing) get small copies. Large trader bets (high conviction) get larger copies. Your bet mirrors the trader's conviction level, not just a flat amount.
 
+### Per-Trader Bet Sizing
+Give your best-performing traders bigger bets via `BET_SIZE_MAP`. The full sizing formula:
+
+```
+final_size = base × price_multiplier × conviction_ratio
+
+base = wallet × BET_SIZE_MAP[trader]   (or BET_SIZE_PCT if no override)
+price_multiplier = 1.5x (strong), 1.0x (normal), 0.6x (weak signal)
+conviction_ratio = trader's bet / trader's average (clamped RATIO_MIN–RATIO_MAX)
+```
+
+```env
+# Example: trust xsaghav most, sovereign least
+BET_SIZE_MAP=xsaghav:0.08,sovereign2013:0.03,Jargs:0.05
+
+# At $300 wallet, xsaghav bets 2x his average on a 20c market:
+# base=$24 × 1.5x(strong) × 2.0x(conviction) = $72 → capped to MAX_POSITION_SIZE=$30
+```
+
 ### Auto-Sell at 96¢
 Won positions are automatically sold at 96¢+ to recycle capital. No need to wait for market resolution — the bot takes profit and frees up cash for new trades.
 
@@ -362,15 +383,25 @@ NO_REBUY_MINUTES=0    # Disabled (default) — allow re-entry
 ```
 
 ### Event Timing Filter (optional)
-When enabled, the bot only copies trades if the event starts within X hours. This prevents capital being locked in positions hours before games start. Uses the Polymarket Gamma API to fetch event start times.
+When enabled, trades on events starting more than X hours from now are **queued** instead of bought immediately. When the event enters the time window, the trade is executed with fresh pricing. This prevents capital being locked in positions hours before games start.
 
 ```env
 # Disabled (default) — copies immediately when trader buys
 MAX_HOURS_BEFORE_EVENT=0
 
-# Only copy if game starts within 3 hours
+# Always wait: queue if event > 3 hours away, buy when < 3 hours
 MAX_HOURS_BEFORE_EVENT=3
+EVENT_WAIT_MIN_CASH=0
+
+# Wait only when low on cash: queue if event > 3h AND cash < $100
+MAX_HOURS_BEFORE_EVENT=3
+EVENT_WAIT_MIN_CASH=100
 ```
+
+| Scenario | Cash $200, Event in 5h | Cash $50, Event in 5h | Event in 2h |
+|----------|----------------------|---------------------|-------------|
+| `MIN_CASH=0` | Queue | Queue | Buy now |
+| `MIN_CASH=100` | Buy now | Queue | Buy now |
 
 Works for all sports (NBA, MLB, NHL, NCAA). For esports where the Gamma API doesn't have start times, the check is skipped and trades copy normally.
 
