@@ -541,8 +541,8 @@ def copy_followed_wallets():
         cash = 0
     balance = cash
     total_invested = 0
-    # Cache open trades for this scan (avoid repeated DB queries in loops)
-    _cached_open_trades = list(db.get_open_copy_trades())
+    # Cache open trades for this scan (convert Row→dict so .get() works everywhere)
+    _cached_open_trades = [dict(t) for t in db.get_open_copy_trades()]
     # Portfolio value from Polymarket API (real value, not DB sizes)
     _open_value = 0
     try:

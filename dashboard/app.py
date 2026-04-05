@@ -263,7 +263,7 @@ def api_live_data():
     # Counts from bot-copies only
     bot_wins = wins
     bot_losses = losses
-    bot_wr = round(bot_wins / max(bot_wins + bot_losses, 1) * 100, 1)
+    bot_wr = round(bot_wins / max(total_closed, 1) * 100, 1)
 
     summary = {
         "total_value": round(total_value, 2),
