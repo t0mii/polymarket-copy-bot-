@@ -683,12 +683,8 @@ def copy_followed_wallets():
         buy_sizes = [t.get("usdc_size", 0) for t in recent_trades if t["trade_type"] == "BUY" and t.get("usdc_size", 0) > 0]
         avg_trader_size = (sum(buy_sizes) / len(buy_sizes)) if buy_sizes else config.DEFAULT_AVG_TRADER_SIZE
 
-        # Update timestamp to newest trade seen (for next scan)
         max_ts = max(t["timestamp"] for t in recent_trades)
-        logger.debug("[SCAN] %s: last_ts=%d, max_ts=%d, delta=%ds",
-                     username, last_ts, max_ts, max_ts - last_ts)
-        if max_ts > last_ts:
-            db.set_last_trade_timestamp(address, max_ts)
+        _last_processed_ts = last_ts  # tracks the last trade we actually processed
 
         # Only BUY trades that happened AFTER our last seen timestamp
         new_buy_trades = [
@@ -705,6 +701,7 @@ def copy_followed_wallets():
         if new_sells:
             open_by_cid = {t["condition_id"]: t for t in _cached_open_trades if t["condition_id"] and t["wallet_address"] == address}
             for sell in new_sells:
+                _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                 sell_cid = sell.get("condition_id", "")
                 if sell_cid and sell_cid in open_by_cid:
                     our_trade = open_by_cid[sell_cid]
@@ -741,6 +738,7 @@ def copy_followed_wallets():
             new_trades += _position_diff_scan(address, username, balance, total_invested)
 
         for t in new_buy_trades:
+            _last_processed_ts = max(_last_processed_ts, t["timestamp"])
             cid = t.get("condition_id", "")
             question = t["market_question"]
             logger.info("[NEW] %s: %s | $%.2f | %dc | cid=%s",
@@ -1074,6 +1072,11 @@ def copy_followed_wallets():
                 if new_trades >= MAX_TRADES_PER_SCAN:
                     logger.info("[SCAN] MAX_TRADES_PER_SCAN (%d) erreicht — naechster Scan.", MAX_TRADES_PER_SCAN)
                     break  # inner loop break
+
+        # Update timestamp to last processed trade (not max_ts!)
+        # If MAX_TRADES_PER_SCAN cut off some trades, they'll reappear next scan
+        if _last_processed_ts > last_ts:
+            db.set_last_trade_timestamp(address, _last_processed_ts)
 
         if new_trades >= MAX_TRADES_PER_SCAN:
             break  # outer wallet loop break
