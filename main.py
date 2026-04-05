@@ -122,50 +122,55 @@ def update_prices():
                         pass
                     # Close lost positions in DB (price went to 0)
                     if _cp <= 0.01 and _iv > 0.01:
+                        _close_pnl = round(-_iv, 2)
+                        _close_title = (_p.get("title") or "")[:50]
+                        _did_close = False
                         try:
                             from database.db import get_connection
                             with get_connection() as _conn:
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                _updated = _conn.execute(
+                                _did_close = _conn.execute(
                                     "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
                                     "WHERE condition_id=? AND status='open'",
-                                    (round(-_iv, 2), _now, _cid_pos)).rowcount
-                                if _updated:
-                                    logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, (_p.get("title") or "")[:40])
-                                    _recently_closed[_cid_pos] = _t.time()
-                                    _db.log_activity("resolved", "LOSS", "Position lost",
-                                                     "%s — P&L $%.2f" % ((_p.get("title") or "")[:35], round(-_iv, 2)), round(-_iv, 2))
-                                    try:
-                                        from dashboard.app import broadcast_event
-                                        broadcast_event("trade_closed", {"market": (_p.get("title") or "")[:50], "pnl": round(-_iv, 2), "price": 0, "trader": "auto"})
-                                    except Exception:
-                                        pass
+                                    (_close_pnl, _now, _cid_pos)).rowcount > 0
                         except Exception:
                             pass
+                        if _did_close:
+                            logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, _close_title[:40])
+                            _recently_closed[_cid_pos] = _t.time()
+                            try:
+                                _db.log_activity("resolved", "LOSS", "Position lost",
+                                                 "%s — P&L $%.2f" % (_close_title[:35], _close_pnl), _close_pnl)
+                                from dashboard.app import broadcast_event
+                                broadcast_event("trade_closed", {"market": _close_title, "pnl": _close_pnl, "price": 0, "trader": "auto"})
+                            except Exception:
+                                pass
                         continue  # Already handled — skip auto-sell
                     # Close won positions in DB (price at 100c, resolved)
                     elif _cp >= 0.99 and _iv > 0.01:
+                        _pnl_won = round(_cv - _iv, 2)
+                        _close_title = (_p.get("title") or "")[:50]
+                        _did_close = False
                         try:
                             from database.db import get_connection
                             with get_connection() as _conn:
-                                _pnl_won = round(_cv - _iv, 2)
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                _updated = _conn.execute(
+                                _did_close = _conn.execute(
                                     "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
                                     "WHERE condition_id=? AND status='open'",
-                                    (_pnl_won, _now, _cid_pos)).rowcount
-                                if _updated:
-                                    logger.info("[AUTO-CLOSE] Won position marked closed: +$%.2f | %s", _pnl_won, (_p.get("title") or "")[:40])
-                                    _recently_closed[_cid_pos] = _t.time()
-                                    _db.log_activity("resolved", "WIN", "Position won",
-                                                     "#%s — P&L $+%.2f" % ((_p.get("title") or "")[:35], _pnl_won), _pnl_won)
-                                    try:
-                                        from dashboard.app import broadcast_event
-                                        broadcast_event("trade_closed", {"market": (_p.get("title") or "")[:50], "pnl": _pnl_won, "price": 100, "trader": "auto"})
-                                    except Exception:
-                                        pass
+                                    (_pnl_won, _now, _cid_pos)).rowcount > 0
                         except Exception:
                             pass
+                        if _did_close:
+                            logger.info("[AUTO-CLOSE] Won position marked closed: +$%.2f | %s", _pnl_won, _close_title[:40])
+                            _recently_closed[_cid_pos] = _t.time()
+                            try:
+                                _db.log_activity("resolved", "WIN", "Position won",
+                                                 "#%s — P&L $+%.2f" % (_close_title[:35], _pnl_won), _pnl_won)
+                                from dashboard.app import broadcast_event
+                                broadcast_event("trade_closed", {"market": _close_title, "pnl": _pnl_won, "price": 100, "trader": "auto"})
+                            except Exception:
+                                pass
                         continue  # Already handled — skip auto-sell
                     if _cp >= 0.96 and _cv > 0.50 and _pnl_check > 0:
                         _out = _p.get("outcome", "")
