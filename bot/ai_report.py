@@ -104,6 +104,7 @@ def _gather_data() -> dict:
         trader_stats.append(ts)
 
     # Per-trader copy performance + open positions from DB
+    # Exclude imported/wallet positions — they are not bot-copied trades
     copy_perf = []
     trader_positions = {}  # address -> list of open positions
     try:
@@ -118,7 +119,8 @@ def _gather_data() -> dict:
                 "SUM(CASE WHEN status='closed' AND pnl_realized < 0 THEN 1 ELSE 0 END) as losses, "
                 "ROUND(SUM(CASE WHEN status='closed' THEN COALESCE(pnl_realized,0) ELSE 0 END), 2) as realized, "
                 "ROUND(SUM(CASE WHEN status='open' THEN COALESCE(pnl_unrealized,0) ELSE 0 END), 2) as unrealized "
-                "FROM copy_trades GROUP BY wallet_address"
+                "FROM copy_trades WHERE wallet_username NOT IN ('(manual)', '(wallet)') "
+                "GROUP BY wallet_address"
             ).fetchall()
             for r in rows:
                 copy_perf.append({
@@ -131,11 +133,12 @@ def _gather_data() -> dict:
                     "realized": r["realized"] or 0,
                     "unrealized": r["unrealized"] or 0,
                 })
-            # Last 10 trades per trader (recent copies, not baselines)
+            # Last 10 trades per trader (recent copies, not baselines or imports)
             pos_rows = conn.execute(
                 "SELECT wallet_username, wallet_address, market_question, side, "
                 "entry_price, current_price, size, pnl_unrealized, pnl_realized, status "
                 "FROM copy_trades WHERE status != 'baseline' "
+                "AND wallet_username NOT IN ('(manual)', '(wallet)') "
                 "ORDER BY created_at DESC"
             ).fetchall()
             for p in pos_rows:
