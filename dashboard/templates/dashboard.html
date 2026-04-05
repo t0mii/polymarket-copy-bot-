@@ -140,6 +140,10 @@ tr:hover{background:rgba(201,168,76,0.03)}
 
 /* ═══ CHART ═══ */
 .chart-box{background:var(--bg2);border:1px solid var(--border);padding:20px;height:260px}
+.cp-btn{background:transparent;border:1px solid var(--border);color:var(--text-dim);font-family:var(--font);
+  font-size:.65rem;font-weight:600;letter-spacing:.1em;padding:4px 10px;cursor:pointer;transition:all .2s}
+.cp-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.cp-btn.act{background:rgba(201,168,76,0.12);border-color:var(--gold);color:var(--gold)}
 
 /* ═══ TRADER CARDS ═══ */
 .tg{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
@@ -290,7 +294,16 @@ tr:hover{background:rgba(201,168,76,0.03)}
   </div>
 
   <div class="sec fi d4">
-    <div class="sec-hd"><span class="sec-t">Equity Curve</span></div>
+    <div class="sec-hd" style="display:flex;align-items:center;justify-content:space-between">
+      <span class="sec-t">Equity Curve</span>
+      <div id="chartPeriods" style="display:flex;gap:4px">
+        <button class="cp-btn" data-p="4h">4H</button>
+        <button class="cp-btn act" data-p="1d">1D</button>
+        <button class="cp-btn" data-p="1w">1W</button>
+        <button class="cp-btn" data-p="1m">1M</button>
+        <button class="cp-btn" data-p="all">A</button>
+      </div>
+    </div>
     <div class="chart-box"><canvas id="chart"></canvas></div>
   </div>
 
@@ -583,9 +596,14 @@ function renderLog(){
   else{hp.innerHTML='<div class="cl"><div class="cl-p d">\u00B7</div><div class="cl-msg" style="color:#4a4a5a">no history yet \u2014 buys, sells, wins, losses and redeems appear here</div><div class="cl-pnl"></div></div>'}
 }
 
-function chart(){fetch('/api/copy/chart').then(r=>r.json()).then(d=>{
+let CP='1d';
+function chart(period){
+  if(period)CP=period;
+  fetch('/api/copy/chart?period='+CP).then(r=>r.json()).then(d=>{
   const c=$('chart');if(!c||!d.labels.length)return;
-  const lb=d.labels.map(l=>{const x=new Date(l+'Z');return x.toLocaleDateString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})});
+  const lb=d.labels.map(l=>{const x=new Date(l+'Z');
+    if(CP==='4h'||CP==='1d')return x.toLocaleTimeString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'});
+    return x.toLocaleDateString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})});
   if(CI){CI.data.labels=lb;CI.data.datasets[0].data=d.values;CI.update();return}
   CI=new Chart(c,{type:'line',data:{labels:lb,datasets:[{data:d.values,
     borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,0.04)',
@@ -595,6 +613,9 @@ function chart(){fetch('/api/copy/chart').then(r=>r.json()).then(d=>{
         borderColor:'#1e1e30',borderWidth:1,callbacks:{label:x=>'$'+x.parsed.y.toFixed(2)}}},
       scales:{x:{ticks:{color:'#5c5a6a',maxTicksLimit:8,font:{size:11,family:'Manrope'}},grid:{color:'#12121c'}},
               y:{ticks:{color:'#5c5a6a',callback:v=>'$'+v.toFixed(0),font:{size:11,family:'Manrope'}},grid:{color:'#12121c'}}}}})}).catch(e=>console.log('chart:',e))}
+document.querySelectorAll('.cp-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.cp-btn').forEach(x=>x.classList.remove('act'));
+  b.classList.add('act');CI=null;chart(b.dataset.p)}))
 
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot()}catch(e){console.error('fetch:',e);dot()}}
 load();setInterval(load,10000);setTimeout(initSSE,2000);

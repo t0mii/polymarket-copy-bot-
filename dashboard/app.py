@@ -576,9 +576,21 @@ def api_copy_reset():
 
 @app.route("/api/copy/chart")
 def api_copy_chart():
-    """Portfolio chart data for copy trading."""
-    snapshots = db.get_copy_portfolio_snapshots(limit=168)
-    snapshots = list(reversed(snapshots))
+    """Portfolio chart data for copy trading. Supports ?period=4h|1d|1w|1m|all"""
+    period = request.args.get("period", "1d")
+    now = datetime.now()
+    if period == "4h":
+        start = (now - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
+    elif period == "1d":
+        start = (now - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    elif period == "1w":
+        start = (now - timedelta(weeks=1)).strftime("%Y-%m-%d %H:%M:%S")
+    elif period == "1m":
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        start = "2020-01-01"
+    end = now.strftime("%Y-%m-%d %H:%M:%S")
+    snapshots = db.get_copy_snapshots_in_range(start, end)
     return jsonify({
         "labels": [s["created_at"] for s in snapshots],
         "values": [round(s["pnl_total"], 2) for s in snapshots],
