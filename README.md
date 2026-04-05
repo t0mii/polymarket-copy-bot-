@@ -144,7 +144,7 @@ All settings are optional — defaults work out of the box. Only `POLYMARKET_PRI
 | `RATIO_MIN` | 0.2 | Floor multiplier (small trader bet → small copy) |
 | `RATIO_MAX` | 2.0 | Ceiling multiplier (big trader bet → bigger copy) |
 | `BET_SIZE_BASIS` | cash | `cash` = size from wallet, `portfolio` = wallet + positions |
-| `BET_SIZE_MAP` | | Per-trader: `name:pct,name:pct` (overrides BET_SIZE_PCT) |
+| `BET_SIZE_MAP` | | Per-trader base bet override (e.g. `xsaghav:0.08,sovereign2013:0.03`) |
 | `DEFAULT_AVG_TRADER_SIZE` | 10.0 | Fallback avg trade size when no trader data |
 
 ### Price Signal Multipliers
@@ -338,6 +338,25 @@ Waits 60s before executing a trade. If the trader buys the opposite side within 
 
 ### Proportional Sizing
 Small trader bets (noise/testing) get small copies. Large trader bets (high conviction) get larger copies. Your bet mirrors the trader's conviction level, not just a flat amount.
+
+### Per-Trader Bet Sizing
+Give your best-performing traders bigger bets via `BET_SIZE_MAP`. The full sizing formula:
+
+```
+final_size = base × price_multiplier × conviction_ratio
+
+base = wallet × BET_SIZE_MAP[trader]   (or BET_SIZE_PCT if no override)
+price_multiplier = 1.5x (strong), 1.0x (normal), 0.6x (weak signal)
+conviction_ratio = trader's bet / trader's average (clamped RATIO_MIN–RATIO_MAX)
+```
+
+```env
+# Example: trust xsaghav most, sovereign least
+BET_SIZE_MAP=xsaghav:0.08,sovereign2013:0.03,Jargs:0.05
+
+# At $300 wallet, xsaghav bets 2x his average on a 20c market:
+# base=$24 × 1.5x(strong) × 2.0x(conviction) = $72 → capped to MAX_POSITION_SIZE=$30
+```
 
 ### Auto-Sell at 96¢
 Won positions are automatically sold at 96¢+ to recycle capital. No need to wait for market resolution — the bot takes profit and frees up cash for new trades.
