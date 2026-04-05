@@ -283,7 +283,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <span class="sec-t">Trader Performance</span>
       <span id="reportTime" style="font-size:.65rem;color:var(--text-dim);letter-spacing:.06em"></span>
     </div>
-    <div id="reportBox" style="background:var(--bg2);border:1px solid var(--border);padding:16px;cursor:pointer" onclick="showReportModal()">
+    <div id="reportBox" style="background:var(--bg2);border:1px solid var(--border);padding:16px">
       <div id="reportText" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px"></div>
     </div>
   </div>
@@ -795,7 +795,7 @@ function buildPreview(raw){
     const crown=isBest?'<span style="font-size:.7em;margin-left:4px" title="Best performer">\uD83D\uDC51</span>':'';
     const bH=best?'<div style="color:var(--green);font-size:.72em;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">\u25B2 '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>').replace(/ W$/,' <span style="background:var(--green);color:#0a0a0a;padding:0 3px;border-radius:2px;font-weight:700;font-size:.9em">W</span>')+'</div>':'';
     const wH=worst?'<div style="color:var(--red);font-size:.72em;margin-top:2px">\u25BC '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>').replace(/ L$/,' <span style="background:var(--red);color:#0a0a0a;padding:0 3px;border-radius:2px;font-weight:700;font-size:.9em">L</span>')+'</div>':'';
-    return`<div style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;border-radius:6px">
+    return`<div onclick="showTraderDetail('${name}')" style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;border-radius:6px;cursor:pointer;transition:border-color .2s" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="color:var(--gold);font-weight:700;font-size:1em">${name}${crown}</span>
         <span style="color:${vc};font-weight:700;font-size:.62em;letter-spacing:.06em;background:${vBg};padding:2px 7px;border-radius:3px;text-transform:uppercase">${verdict}</span>
@@ -829,7 +829,8 @@ function loadReport(){
       const parts=d.report.split('\n---\n');
       const previewText=parts[0]||'';
       const fullText=parts[1]||d.report;
-      $('reportText').innerHTML=buildPreview(previewText)+'<div style="margin-top:8px;font-size:.68rem;color:var(--gold);letter-spacing:.1em;opacity:.5;cursor:pointer">DETAILS \u25B8</div>';
+      window._reportFull=fullText;
+      $('reportText').innerHTML=buildPreview(previewText);
       $('reportModalText').innerHTML=fmtReport(fullText);
       const t=d.created_at||'';
       if(t){try{const dt=new Date(t+'Z');const ts=dt.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
@@ -838,7 +839,21 @@ function loadReport(){
   }).catch(()=>{})
 }
 function showReportModal(){
-  const m=$('reportModal');m.style.display='flex';
+  $('reportModalText').innerHTML=fmtReport(window._reportFull||'');
+  $('reportModal').style.display='flex';
+}
+function showTraderDetail(traderName){
+  if(!window._reportFull)return showReportModal();
+  const lines=window._reportFull.split('\n');
+  const filtered=[];let inTrader=false;
+  for(const line of lines){
+    if(line.match(new RegExp('^'+traderName+' \\u2014'))){inTrader=true;filtered.push(line);continue}
+    if(inTrader&&line.match(/^\w+ \u2014/)){inTrader=false;continue}
+    if(inTrader&&line.trim()){filtered.push(line)}
+    if(line.startsWith('Recommendation:'))filtered.push('',line);
+  }
+  $('reportModalText').innerHTML=fmtReport(filtered.join('\n'));
+  $('reportModal').style.display='flex';
 }
 loadReport();
 
