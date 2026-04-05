@@ -112,9 +112,9 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* ═══ TABLES ═══ */
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
-.tw table{width:100%}
-.tw th,.tw td{padding:8px 10px}
-.c-id{width:40px}.c-mkt{}.c-sm{width:50px}.c-md{width:60px}.c-lg{width:70px}
+.tw table{width:100%;table-layout:fixed}
+.tw th,.tw td{padding:8px 8px;overflow:hidden;text-overflow:ellipsis}
+.c-mkt2{width:30%}.c-side2{width:10%}.c-num{width:5%;text-align:right;white-space:nowrap}.c-pnl{width:8%;text-align:right;white-space:nowrap}.c-evt2{width:11%;white-space:nowrap}
 th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--gold)}th.sort.asc::after{content:' ▲';font-size:.6em}th.sort.desc::after{content:' ▼';font-size:.6em}
 .tw::-webkit-scrollbar{width:3px;height:3px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
@@ -136,9 +136,6 @@ tr:hover{background:rgba(201,168,76,0.03)}
 .c-tr a{color:var(--text);text-decoration:none;font-weight:500}.c-tr a:hover{color:var(--gold)}
 .c-id{color:var(--text-dim);font-family:var(--mono);font-size:.82rem}
 .c-dt{color:var(--text-dim);font-size:.82rem}
-.row2{border-bottom:1px solid var(--border)}
-.row2 td{padding:2px 10px 8px;border:0;font-size:.78rem;color:var(--text-dim)}
-tr.row1 td{padding-bottom:2px;border-bottom:0}
 
 /* ═══ CHART ═══ */
 .chart-box{background:var(--bg2);border:1px solid var(--border);padding:20px;height:260px}
@@ -315,13 +312,13 @@ tr.row1 td{padding-bottom:2px;border-bottom:0}
       <span class="badge">Tracking</span>
     </div>
     <div class="tw"><table><thead><tr>
-      <th class="sort" data-sort="market" data-table="open" style="text-align:left">Market</th>
-      <th class="sort" data-sort="side" data-table="open">Side</th>
-      <th class="sort" data-sort="entry" data-table="open">Entry</th>
-      <th class="sort" data-sort="now" data-table="open">Now</th>
-      <th class="sort" data-sort="size" data-table="open">Size</th>
-      <th class="sort" data-sort="pnl" data-table="open">P&L</th>
-      <th class="sort" data-sort="event" data-table="open">Event</th>
+      <th class="c-mkt2 sort" data-sort="market" data-table="open" style="text-align:left">Market</th>
+      <th class="c-side2 sort" data-sort="side" data-table="open">Side</th>
+      <th class="c-num sort" data-sort="entry" data-table="open">Ent.</th>
+      <th class="c-num sort" data-sort="now" data-table="open">Now</th>
+      <th class="c-num sort" data-sort="size" data-table="open">$</th>
+      <th class="c-pnl sort" data-sort="pnl" data-table="open">P&L</th>
+      <th class="c-evt2 sort" data-sort="event" data-table="open">Event</th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
@@ -579,17 +576,15 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
     const{e:oe,l:ol}=dSp(t);const spH=(oe?oe+' '+ol:'\uD83D\uDCCA');
     const mktFull=t.market_question||'';
     const mktLink=t.event_slug||t.market_slug?`<a href="https://polymarket.com/event/${t.event_slug||t.market_slug}" target="_blank" title="${mktFull}">${mktFull}</a>`:mktFull;
-    const timeStr=t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return''}})():'';
-    return`<tr class="row1">
-      <td style="font-weight:500"><span style="font-size:.75rem;margin-right:5px">${spH}</span>${mktLink}</td>
-      <td>${sH(t.side,t.outcome_label)}</td>
-      <td>${Math.round((t.entry_price||0)*100)}\u00A2</td>
-      <td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
-      <td>$${fm(t.size)}</td>
-      <td class="p-${pc(p)}" style="font-weight:600">${sg(p)}$${fm(p)}</td>
-      <td style="white-space:nowrap">${evtTime(t.event_start)}</td>
-    </tr><tr class="row2">
-      <td colspan="7"><span style="color:var(--text-dim);margin-right:12px">Trader: ${tL(t)}</span><span style="margin-right:12px">ID #${t.id}</span><span style="margin-right:12px">${timeStr}</span></td>
+    const trName=t.wallet_username||'';
+    return`<tr>
+      <td class="c-mkt2" style="white-space:normal;line-height:1.4"><div style="font-weight:500"><span style="font-size:.72rem;margin-right:4px">${spH}</span>${mktLink}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${trName!=='\u2014'?trName:''} #${t.id}</div></td>
+      <td class="c-side2">${sH(t.side,t.outcome_label)}</td>
+      <td class="c-num">${Math.round((t.entry_price||0)*100)}\u00A2</td>
+      <td class="c-num">${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
+      <td class="c-num">$${t.size>=10?fm(t.size,1):fm(t.size)}</td>
+      <td class="c-pnl p-${pc(p)}" style="font-weight:600">${sg(p)}$${Math.abs(p)>=10?fm(Math.abs(p),1):fm(Math.abs(p))}</td>
+      <td class="c-evt2" style="white-space:nowrap;font-size:.78rem">${evtTime(t.event_start)}</td>
     </tr>`}).join('')
     :'<tr><td colspan="7" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
