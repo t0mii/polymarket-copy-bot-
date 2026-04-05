@@ -168,7 +168,8 @@ Price 45c → edge 0.05 → weak signal  → bet × 0.6
 ### Trade Filters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `MIN_TRADER_USD` | 3 | Ignore trader buys below $3 (noise filter) |
+| `MIN_TRADER_USD` | 3 | Default min trade size to copy |
+| `MIN_TRADER_USD_MAP` | | Per-trader: `name:amount` (e.g. `sovereign2013:500`) |
 | `MIN_ENTRY_PRICE` | 0.15 | Skip lottery tickets below 15c |
 | `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92c |
 | `MAX_COPIES_PER_MARKET` | 1 | One copy per market (prevents doubling up) |
