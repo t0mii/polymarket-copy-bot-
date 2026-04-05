@@ -40,6 +40,14 @@ PENDING_BUY_MIN_SECS = 210
 PENDING_BUY_MAX_SECS = 900
 MAX_TRADES_PER_SCAN = 3
 
+# Per-trader exposure map (parsed once at module load)
+_EXPOSURE_MAP: dict[str, float] = {}
+for _entry in config.TRADER_EXPOSURE_MAP.split(","):
+    _entry = _entry.strip()
+    if ":" in _entry:
+        _parts = _entry.split(":", 1)
+        _EXPOSURE_MAP[_parts[0].strip().lower()] = float(_parts[1].strip())
+
 # Pending Buy Queue (in-memory: condition_id → {trade_data, queued_at})
 _pending_buys: dict = {}
 
@@ -348,13 +356,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 continue
 
             # Max exposure per trader (per-trader or default)
-            _diff_exp_map = {}
-            for _e in config.TRADER_EXPOSURE_MAP.split(","):
-                _e = _e.strip()
-                if ":" in _e:
-                    _ep = _e.split(":", 1)
-                    _diff_exp_map[_ep[0].strip().lower()] = float(_ep[1].strip())
-            _max_exp = (balance + sum(t["size"] for t in db.get_open_copy_trades())) * _diff_exp_map.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
+            _max_exp = (balance + sum(t["size"] for t in db.get_open_copy_trades())) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
             _t_exp = sum(t["size"] for t in db.get_open_copy_trades() if t["wallet_address"] == address)
             if _t_exp >= _max_exp:
                 logger.info("[DIFF] Trader exposure $%.0f >= max $%.0f, skipping: %s",
@@ -572,13 +574,7 @@ def copy_followed_wallets():
                     # Re-inject into the activity feed by creating the trade directly
                     entry_price = td["entry_price"]
                     # Check trader exposure limit (per-trader or default)
-                    _hw_exp_map = {}
-                    for _e in config.TRADER_EXPOSURE_MAP.split(","):
-                        _e = _e.strip()
-                        if ":" in _e:
-                            _ep = _e.split(":", 1)
-                            _hw_exp_map[_ep[0].strip().lower()] = float(_ep[1].strip())
-                    _max_t = portfolio_value * _hw_exp_map.get(td["username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
+                    _max_t = portfolio_value * _EXPOSURE_MAP.get(td["username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
                     _t_inv = sum(x["size"] for x in _cached_open_trades if x["wallet_address"] == td["address"])
                     if _t_inv >= _max_t:
                         logger.info("[HEDGE-WAIT] Trader exposure $%.0f >= max $%.0f, skipping: %s", _t_inv, _max_t, td["question"][:40])
@@ -591,7 +587,7 @@ def copy_followed_wallets():
                             if _hw_evt_inv >= config.MAX_PER_EVENT:
                                 logger.info("[HEDGE-WAIT] Event exposure $%.0f >= max $%.0f, skipping: %s",
                                             _hw_evt_inv, config.MAX_PER_EVENT, td["question"][:40])
-                        continue
+                                continue
                     size = _calculate_position_size(entry_price, cash, 1.0)
                     if size < MIN_TRADE_SIZE or cash < size:
                         continue
@@ -928,13 +924,7 @@ def copy_followed_wallets():
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, 0.97), 4)
 
             # Max exposure per trader (per-trader override or default)
-            _exp_map = {}
-            for _entry in config.TRADER_EXPOSURE_MAP.split(","):
-                _entry = _entry.strip()
-                if ":" in _entry:
-                    _parts = _entry.split(":", 1)
-                    _exp_map[_parts[0].strip().lower()] = float(_parts[1].strip())
-            _trader_pct = _exp_map.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
+            _trader_pct = _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
             max_per_trader = portfolio_value * _trader_pct
             trader_invested = sum(
                 ot["size"] for ot in _cached_open_trades
@@ -1006,10 +996,11 @@ def copy_followed_wallets():
                     bal_after = get_wallet_balance()
                     real_fill = round(bal_before - bal_after, 2)
                     if real_fill > 0.10:
+                        planned_size = size
                         trade["size"] = real_fill
                         size = real_fill
                         logger.info("[LIVE] BUY FILLED: $%.2f echt (geplant $%.2f) @ %.0fc | %s",
-                                    real_fill, size, entry_price * 100, question[:40])
+                                    real_fill, planned_size, entry_price * 100, question[:40])
                     else:
                         logger.info("[LIVE] BUY Order OK: $%.2f @ %.0fc | %s", size, entry_price * 100, question[:40])
                 except Exception:

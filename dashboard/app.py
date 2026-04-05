@@ -562,6 +562,9 @@ def api_copy_update():
 @app.route("/api/copy/reset", methods=["POST"])
 def api_copy_reset():
     """Reset copy trading: delete all trades, baselines, snapshots. Keep followed wallets."""
+    secret = request.args.get("key", "") or ((request.json or {}).get("key", "") if request.is_json else "")
+    if secret != os.getenv("DASHBOARD_SECRET", "changeme"):
+        return jsonify({"error": "unauthorized"}), 403
     confirm = request.args.get("confirm", "")
     if not confirm and request.is_json:
         confirm = (request.json or {}).get("confirm", "")

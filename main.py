@@ -84,6 +84,7 @@ def update_prices():
         try:
             from bot.order_executor import sell_shares, get_wallet_balance
             import requests as _rq
+            import time as _t
             _r = _rq.get("https://data-api.polymarket.com/positions", params={
                 "user": config.POLYMARKET_FUNDER, "limit": 100, "sizeThreshold": 0
             }, timeout=10)
@@ -94,7 +95,6 @@ def update_prices():
                     _iv = float(_p.get("initialValue", 0) or 0)
                     _pnl_check = _cv - _iv
                     _cid_pos = _p.get("conditionId", "")
-                    import time as _t
                     if _cid_pos in _recently_closed and (_t.time() - _recently_closed[_cid_pos]) < 300:
                         continue
                     # Only auto-sell/close positions that are tracked in copy_trades
@@ -130,6 +130,7 @@ def update_prices():
                                         pass
                         except Exception:
                             pass
+                        continue  # Already handled — skip auto-sell
                     # Close won positions in DB (price at 100c, resolved)
                     elif _cp >= 0.99 and _iv > 0.01:
                         try:
@@ -153,6 +154,7 @@ def update_prices():
                                         pass
                         except Exception:
                             pass
+                        continue  # Already handled — skip auto-sell
                     if _cp >= 0.96 and _cv > 0.50 and _pnl_check > 0:
                         _out = _p.get("outcome", "")
                         if _out.lower() in ("yes", "y"): _side = "YES"

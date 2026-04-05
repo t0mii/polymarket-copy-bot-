@@ -78,7 +78,6 @@ class PriceTracker:
             if bid is None or ask is None or ask <= 0:
                 return None
             return round(ask - bid, 4)
-        return None
 
     def subscribe_condition(self, condition_id: str):
         """Non-blocking: resolve condition_id to token IDs and subscribe."""
