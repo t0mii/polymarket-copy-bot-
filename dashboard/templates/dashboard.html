@@ -114,7 +114,12 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
 .tw table{width:100%;table-layout:fixed}
 .tw th,.tw td{padding:8px 8px;overflow:hidden;text-overflow:ellipsis}
-.c-mkt2{width:28%}.c-side2{width:10%;text-align:left}.c-num{width:5%;text-align:right;white-space:nowrap}.c-pnl{width:8%;text-align:right;white-space:nowrap}.c-evt2{width:10%;white-space:nowrap}.c-time{width:7%;white-space:nowrap;color:var(--text-dim);font-size:.8rem}
+.c-mkt2{width:26%}.c-side2{width:10%;text-align:left}.c-num{width:5%;text-align:right;white-space:nowrap}.c-pnl{width:7%;text-align:right;white-space:nowrap}.c-evt2{width:9%;white-space:nowrap}.c-time{width:6%;white-space:nowrap;color:var(--text-dim);font-size:.8rem}
+.c-close{width:9%;text-align:center;white-space:nowrap}
+.close-btn{display:inline-block;padding:4px 10px;border-radius:4px;font-size:.75rem;font-weight:700;cursor:pointer;border:none;min-width:70px;transition:opacity .2s}
+.close-btn:hover{opacity:.8}
+.close-btn.win{background:rgba(52,211,153,.15);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+.close-btn.loss{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
 th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--gold)}th.sort.asc::after{content:' ▲';font-size:.6em}th.sort.desc::after{content:' ▼';font-size:.6em}
 .tw::-webkit-scrollbar{width:3px;height:3px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
@@ -242,6 +247,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
     </div>
     <div class="hd-right">
       <button class="sfx-btn" id="sfxBtn" onclick="togSfx()"><span id="sfxIco">&#128264;</span> Sound</button>
+      <button class="sfx-btn" id="lockBtn" onclick="togLock()" title="Unlock to enable manual close"><span id="lockIco">&#128274;</span></button>
       <nav class="nav">
         <a href="/copy">Terminal</a>
         <a href="/wallets">Settings</a>
@@ -320,6 +326,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <th class="c-pnl sort" data-sort="pnl" data-table="open">P&L</th>
       <th class="c-evt2 sort" data-sort="event" data-table="open">Event</th>
       <th class="c-time sort" data-sort="time" data-table="open">Time</th>
+      <th class="c-close">Close</th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
@@ -524,10 +531,12 @@ function evtTime(iso){
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
     const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
-      return`<span class="tk-i"><span class="s">#${t.id} ${te} ${tl}</span>${(t.market_question||'').substring(0,30)} \u00B7 ${t.side} @ ${Math.round((t.entry_price||0)*100)}\u00A2 \u00B7 <span class="${p>=0?'up':'dn'}">${sg(p)}$${fm(p)}</span></span>`});
+      const ev=evtTime(t.event_start);
+      return`<span class="tk-i"><span style="color:var(--text);font-weight:600">#${t.id}</span><span style="color:var(--text);font-weight:600">${te} ${tl}</span><span style="color:var(--gold)">${(t.market_question||'').substring(0,35)}</span><span style="background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.25);padding:1px 8px;border-radius:3px;font-weight:600;font-size:.78em">${t.side} @ ${Math.round((t.entry_price||0)*100)}\u00A2</span><span class="${p>=0?'up':'dn'}">${sg(p)}$${fm(p)}</span>${ev}</span>`});
     el.innerHTML=it.join('')+it.join('');return}
-  if(hist.length){const it=hist.slice(0,12).map(t=>
-    `<span class="tk-i"><span class="s">\u26A1</span>${t.trader} \u2192 ${(t.market||'').substring(0,25)} \u00B7 ${t.side} @ ${t.price}\u00A2 \u00B7 <span class="up">$${fm(t.size)}</span></span>`);
+  if(hist.length){const it=hist.slice(0,12).map(t=>{
+    const{e:te,l:tl}=dSp({market_slug:t.market||'',market_question:t.market||''});
+    return`<span class="tk-i"><span style="color:var(--text);font-weight:600">\u26A1 ${te} ${tl}</span><span style="color:var(--gold)">${(t.market||'').substring(0,30)}</span><span style="background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.25);padding:1px 8px;border-radius:3px;font-weight:600;font-size:.78em">${t.side} @ ${t.price}\u00A2</span><span class="up">$${fm(t.size)}</span></span>`});
     el.innerHTML=it.join('')+it.join('')}}
 
 function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
@@ -587,8 +596,9 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-pnl p-${pc(p)}" style="font-weight:600">${sg(p)}$${Math.abs(p)>=10?fm(Math.abs(p),1):fm(Math.abs(p))}</td>
       <td class="c-evt2" style="font-size:.78rem">${evtTime(t.event_start)}</td>
       <td class="c-time">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})}catch(e){return''}})():''}</td>
+      <td class="c-close"><button class="close-btn ${p>=0?'win':'loss'}" onclick="closeTrade(${t.id},this)" title="Close position #${t.id}">${sg(p)}$${fm(Math.abs(p))}</button></td>
     </tr>`}).join('')
-    :'<tr><td colspan="8" class="empty" style="border:0">Waiting for signals...</td></tr>';
+    :'<tr><td colspan="9" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
   const sortedClosed=_sortList(D.closed_trades,'closed');
@@ -799,6 +809,37 @@ function showReportModal(){
   const m=$('reportModal');m.style.display='flex';
 }
 loadReport();
+
+// --- Auth Lock/Unlock ---
+function _updateLockIcon(){
+  const key=localStorage.getItem('dashSecret');
+  $('lockIco').innerHTML=key?'\uD83D\uDD13':'\uD83D\uDD12';
+  $('lockBtn').title=key?'Unlocked (click to lock)':'Click to unlock';
+}
+_updateLockIcon();
+
+function togLock(){
+  const key=localStorage.getItem('dashSecret');
+  if(key){localStorage.removeItem('dashSecret');_updateLockIcon();return}
+  const input=prompt('Dashboard Secret eingeben:');
+  if(!input)return;
+  fetch('/api/auth/check',{method:'POST',headers:{'X-Dashboard-Key':input,'Content-Type':'application/json'}})
+    .then(r=>{if(r.ok){localStorage.setItem('dashSecret',input);_updateLockIcon();alert('Unlocked!')}else{alert('Falscher Key')}})
+    .catch(()=>alert('Verbindungsfehler'));
+}
+
+function closeTrade(tradeId,btn){
+  const key=localStorage.getItem('dashSecret');
+  if(!key){alert('Unlock required - klick auf das Schloss-Icon');return}
+  if(!confirm('Position #'+tradeId+' wirklich schliessen?'))return;
+  btn.disabled=true;btn.textContent='...';
+  fetch('/api/copy/close/'+tradeId,{method:'POST',headers:{'X-Dashboard-Key':key}})
+    .then(r=>r.json().then(d=>({ok:r.ok,data:d})))
+    .then(({ok,data})=>{
+      if(ok){btn.closest('tr').style.opacity='.3';btn.textContent='\u2714';setTimeout(load,2000)}
+      else{alert(data.error||'Fehler');btn.disabled=false;btn.textContent='\u2716'}
+    }).catch(()=>{alert('Verbindungsfehler');btn.disabled=false;btn.textContent='\u2716'});
+}
 </script>
 </body>
 </html>
