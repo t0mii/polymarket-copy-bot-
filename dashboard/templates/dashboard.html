@@ -171,8 +171,9 @@ tr:hover{background:rgba(201,168,76,0.03)}
   align-items:flex-start;justify-content:center;padding-top:80px}
 .al-ban{pointer-events:auto;background:var(--bg);border:1px solid var(--gold);padding:32px 52px;
   text-align:center;box-shadow:0 0 80px rgba(201,168,76,0.18),0 20px 60px rgba(0,0,0,0.7);
-  animation:alIn .35s cubic-bezier(.17,.67,.35,1.2),alOut .5s 3.5s ease-in forwards;
+  animation:alIn .35s cubic-bezier(.17,.67,.35,1.2),alOut .5s 5.2s ease-in forwards;
   max-width:620px;width:92%;position:relative}
+.al-ban.big-win{animation:alIn .35s cubic-bezier(.17,.67,.35,1.2),alOut .5s 5.5s ease-in forwards}
 .al-ban::before{content:'';position:absolute;inset:-1px;
   background:linear-gradient(45deg,var(--gold),transparent,var(--gold));opacity:.15;z-index:-1;
   animation:borderShift 3s linear infinite}
@@ -246,7 +247,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       </div>
     </div>
     <div class="hd-right">
-      <button class="sfx-btn" id="sfxBtn" onclick="togSfx()"><span id="sfxIco">&#128264;</span> Sound</button>
+      <button class="sfx-btn" id="sfxBtn" onclick="togSfxPanel()"><span id="sfxIco">&#128264;</span> Sound</button>
       <button class="sfx-btn" id="lockBtn" onclick="togLock()" title="Unlock to enable manual close"><span id="lockIco">&#128274;</span></button>
       <nav class="nav">
         <a href="/copy">Terminal</a>
@@ -298,6 +299,21 @@ tr:hover{background:rgba(201,168,76,0.03)}
     </div>
   </div>
 
+  <!-- SOUND SETTINGS PANEL -->
+  <div id="sfxPanel" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.4)">
+    <div style="position:absolute;top:60px;right:120px;background:#0c0c12;border:1px solid var(--border);padding:16px 20px;width:240px;border-radius:8px;box-shadow:0 16px 48px rgba(0,0,0,.8)">
+      <div style="font-size:.68rem;color:var(--text-dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px;font-weight:600">Sound Settings</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:.85rem;color:var(--text)">Trade Alerts</span>
+        <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <span style="font-size:.85rem;color:var(--text)">Pop Out Sound</span>
+        <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
+      </div>
+    </div>
+  </div>
+
   <div class="sec fi d4">
     <div class="sec-hd" style="display:flex;align-items:center;justify-content:space-between">
       <span class="sec-t">Equity Curve</span>
@@ -344,7 +360,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
 <div class="al-ov" id="alOv" style="display:none"></div>
 
 <script>
-let D=null,CI=null,sfx=false,sseOk=false;
+let D=null,CI=null,sfx=false,sfxPop=false,sseOk=false;
 let _sortOpen={col:'time',dir:'desc'};
 let _sortClosed={col:'closed_at',dir:'desc'};
 function sortTable(table,col){
@@ -390,7 +406,14 @@ const mL=t=>{const sl=t.event_slug||t.market_slug||'';const q=(t.market_question
   return sl?`<a href="https://polymarket.com/event/${sl}" target="_blank" title="${t.market_question||''}">${q}</a>`:q};
 const tL=t=>`<a href="https://polymarket.com/profile/${t.wallet_address||t.address||''}" target="_blank">${t.wallet_username||t.username||(t.wallet_address||'').substring(0,10)}</a>`;
 
-function togSfx(){sfx=!sfx;$('sfxBtn').classList.toggle('on',sfx);$('sfxIco').textContent=sfx?'\u{1F50A}':'\u{1F508}';if(sfx)AC.resume()}
+function _updSfxUI(){
+  const any=sfx||sfxPop;$('sfxBtn').classList.toggle('on',any);$('sfxIco').textContent=any?'\u{1F50A}':'\u{1F508}';
+  $('sfxTogTrade').textContent=sfx?'ON':'OFF';$('sfxTogTrade').style.color=sfx?'var(--green)':'var(--text-dim)';$('sfxTogTrade').style.borderColor=sfx?'var(--green)':'var(--border)';
+  $('sfxTogPop').textContent=sfxPop?'ON':'OFF';$('sfxTogPop').style.color=sfxPop?'var(--green)':'var(--text-dim)';$('sfxTogPop').style.borderColor=sfxPop?'var(--green)':'var(--border)';
+}
+function togSfxPanel(){const p=$('sfxPanel');p.style.display=p.style.display==='none'?'block':'none'}
+function togSfxTrade(){sfx=!sfx;if(sfx)AC.resume();_updSfxUI()}
+function togSfxPop(){sfxPop=!sfxPop;_updSfxUI()}
 function beep(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);
   o.type='sine';o.frequency.setValueAtTime(660,AC.currentTime);o.frequency.exponentialRampToValueAtTime(1320,AC.currentTime+.1);
   o.frequency.exponentialRampToValueAtTime(330,AC.currentTime+.25);g.gain.setValueAtTime(.12,AC.currentTime);
@@ -401,11 +424,17 @@ function beepClose(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.creat
   g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.5);o.start();o.stop(AC.currentTime+.5)}catch(e){}}
 function alertClose(t){const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
-  o.innerHTML=`<div class="al-ban" style="border-color:${w?'var(--green)':'var(--red)'}">
-    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED — WIN':'\u274C POSITION CLOSED — LOSS'}</div>
+  const bigWin=t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
+  const gifUrl=bigWin?'https://media1.tenor.com/m/sIBXbAf_oEcAAAAC/ref-with-yellow-cards-fifa18.gif':w?'https://media1.tenor.com/m/WYdYdbMfNBgAAAAC/money.gif':'';
+  const gifHtml=gifUrl?'<img src="'+gifUrl+'" style="width:120px;border-radius:8px;margin-left:14px;flex-shrink:0" alt="GIF">':'';
+  o.innerHTML=`<div class="al-ban${bigWin?' big-win':''}" style="border-color:${w?'var(--green)':'var(--red)'}; display:flex;align-items:center;text-align:left">
+    <div style="flex:1">
+    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED \u2014 WIN':'\u274C POSITION CLOSED \u2014 LOSS'}${bigWin?' \uD83D\uDCB0':''}</div>
     <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
-    <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div></div>`;
-  setTimeout(()=>{o.style.display='none'},4200)}
+    <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
+    </div>${gifHtml}</div>`;
+  if(bigWin&&sfxPop){try{const a=new Audio('/static/money-button.mp3');a.volume=0.02;a.play()}catch(e){}}
+  setTimeout(()=>{o.style.display='none'},6000)}
 
 function initSSE(){try{const es=new EventSource('/api/stream');
   es.onopen=()=>{sseOk=true;dot()};
