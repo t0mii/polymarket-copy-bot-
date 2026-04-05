@@ -242,6 +242,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
     </div>
     <div class="hd-right">
       <button class="sfx-btn" id="sfxBtn" onclick="togSfx()"><span id="sfxIco">&#128264;</span> Sound</button>
+      <button class="sfx-btn" id="lockBtn" onclick="togLock()" title="Unlock to enable manual close"><span id="lockIco">&#128274;</span></button>
       <nav class="nav">
         <a href="/copy">Terminal</a>
         <a href="/wallets">Settings</a>
@@ -320,6 +321,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <th class="c-pnl sort" data-sort="pnl" data-table="open">P&L</th>
       <th class="c-evt2 sort" data-sort="event" data-table="open">Event</th>
       <th class="c-time sort" data-sort="time" data-table="open">Time</th>
+      <th style="width:30px"></th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
@@ -587,8 +589,9 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-pnl p-${pc(p)}" style="font-weight:600">${sg(p)}$${Math.abs(p)>=10?fm(Math.abs(p),1):fm(Math.abs(p))}</td>
       <td class="c-evt2" style="font-size:.78rem">${evtTime(t.event_start)}</td>
       <td class="c-time">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})}catch(e){return''}})():''}</td>
+      <td style="padding:4px;text-align:center"><button onclick="closeTrade(${t.id},this)" title="Close position" style="background:none;border:1px solid var(--border);color:var(--red);cursor:pointer;font-size:.7rem;padding:2px 5px;border-radius:3px;opacity:.5;transition:opacity .2s" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.5'">\u2716</button></td>
     </tr>`}).join('')
-    :'<tr><td colspan="8" class="empty" style="border:0">Waiting for signals...</td></tr>';
+    :'<tr><td colspan="9" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
   const sortedClosed=_sortList(D.closed_trades,'closed');
@@ -799,6 +802,37 @@ function showReportModal(){
   const m=$('reportModal');m.style.display='flex';
 }
 loadReport();
+
+// --- Auth Lock/Unlock ---
+function _updateLockIcon(){
+  const key=localStorage.getItem('dashSecret');
+  $('lockIco').innerHTML=key?'\uD83D\uDD13':'\uD83D\uDD12';
+  $('lockBtn').title=key?'Unlocked (click to lock)':'Click to unlock';
+}
+_updateLockIcon();
+
+function togLock(){
+  const key=localStorage.getItem('dashSecret');
+  if(key){localStorage.removeItem('dashSecret');_updateLockIcon();return}
+  const input=prompt('Dashboard Secret eingeben:');
+  if(!input)return;
+  fetch('/api/auth/check',{method:'POST',headers:{'X-Dashboard-Key':input,'Content-Type':'application/json'}})
+    .then(r=>{if(r.ok){localStorage.setItem('dashSecret',input);_updateLockIcon();alert('Unlocked!')}else{alert('Falscher Key')}})
+    .catch(()=>alert('Verbindungsfehler'));
+}
+
+function closeTrade(tradeId,btn){
+  const key=localStorage.getItem('dashSecret');
+  if(!key){alert('Unlock required - klick auf das Schloss-Icon');return}
+  if(!confirm('Position #'+tradeId+' wirklich schliessen?'))return;
+  btn.disabled=true;btn.textContent='...';
+  fetch('/api/copy/close/'+tradeId,{method:'POST',headers:{'X-Dashboard-Key':key}})
+    .then(r=>r.json().then(d=>({ok:r.ok,data:d})))
+    .then(({ok,data})=>{
+      if(ok){btn.closest('tr').style.opacity='.3';btn.textContent='\u2714';setTimeout(load,2000)}
+      else{alert(data.error||'Fehler');btn.disabled=false;btn.textContent='\u2716'}
+    }).catch(()=>{alert('Verbindungsfehler');btn.disabled=false;btn.textContent='\u2716'});
+}
 </script>
 </body>
 </html>
