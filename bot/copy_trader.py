@@ -1428,8 +1428,9 @@ def update_copy_positions():
                                                     "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:35], pnl), round(pnl, 2))
                                     continue
 
-                            # Take-Profit: auto-sell if gain exceeds threshold
-                            # Per-trader override via TAKE_PROFIT_MAP (0=disabled for that trader)
+                            # Take-Profit: per-trader override via TAKE_PROFIT_MAP
+                            # Custom value fully replaces global (0=disabled for that trader)
+                            # AUTO_SELL_PRICE (96c) catches everything regardless of TP
                             _tp_trader = (trade.get("wallet_username") or "").lower()
                             _tp_pct = _TAKE_PROFIT_MAP.get(_tp_trader, config.TAKE_PROFIT_PCT)
                             if _tp_pct > 0 and trade["entry_price"] > 0:
