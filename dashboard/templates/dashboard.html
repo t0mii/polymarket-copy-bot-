@@ -112,9 +112,9 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* ═══ TABLES ═══ */
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
-.tw table{table-layout:fixed;width:100%;min-width:900px}
-.tw th,.tw td{padding:10px 8px}
-.c-id{width:3%}.c-tr{width:7%}.c-mkt{width:22%}.c-side{width:7%}.c-sm{width:5%}.c-md{width:6%}.c-lg{width:7%}.c-evt{width:9%}
+.tw table{width:100%}
+.tw th,.tw td{padding:8px 10px}
+.c-id{width:40px}.c-mkt{}.c-sm{width:50px}.c-md{width:60px}.c-lg{width:70px}
 th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--gold)}th.sort.asc::after{content:' ▲';font-size:.6em}th.sort.desc::after{content:' ▼';font-size:.6em}
 .tw::-webkit-scrollbar{width:3px;height:3px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
@@ -131,12 +131,14 @@ tr:hover{background:rgba(201,168,76,0.03)}
 .side.yes{background:rgba(52,211,153,0.08);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
 .side.no{background:rgba(248,113,113,0.08);color:var(--red);border:1px solid rgba(248,113,113,0.2)}
 .side.oth{background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.25)}
-.c-mkt{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .c-mkt a{color:var(--gold);text-decoration:none;transition:opacity .2s}
 .c-mkt a:hover{opacity:.7}
 .c-tr a{color:var(--text);text-decoration:none;font-weight:500}.c-tr a:hover{color:var(--gold)}
 .c-id{color:var(--text-dim);font-family:var(--mono);font-size:.82rem}
 .c-dt{color:var(--text-dim);font-size:.82rem}
+.row2{border-bottom:1px solid var(--border)}
+.row2 td{padding:2px 10px 8px;border:0;font-size:.78rem;color:var(--text-dim)}
+tr.row1 td{padding-bottom:2px;border-bottom:0}
 
 /* ═══ CHART ═══ */
 .chart-box{background:var(--bg2);border:1px solid var(--border);padding:20px;height:260px}
@@ -313,8 +315,13 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <span class="badge">Tracking</span>
     </div>
     <div class="tw"><table><thead><tr>
-      <th class="c-id sort" data-sort="id" data-table="open">ID</th><th class="c-tr sort" data-sort="trader" data-table="open">Trader</th><th class="c-mkt sort" data-sort="market" data-table="open">Market</th><th class="c-side sort" data-sort="side" data-table="open">Side</th>
-      <th class="c-sm sort" data-sort="entry" data-table="open">Entry</th><th class="c-sm sort" data-sort="now" data-table="open">Now</th><th class="c-md sort" data-sort="size" data-table="open">Size</th><th class="c-lg sort" data-sort="pnl" data-table="open">P&L</th><th class="c-evt sort" data-sort="event" data-table="open">Event</th><th class="c-lg sort" data-sort="time" data-table="open">Time</th>
+      <th class="sort" data-sort="market" data-table="open" style="text-align:left">Market</th>
+      <th class="sort" data-sort="side" data-table="open">Side</th>
+      <th class="sort" data-sort="entry" data-table="open">Entry</th>
+      <th class="sort" data-sort="now" data-table="open">Now</th>
+      <th class="sort" data-sort="size" data-table="open">Size</th>
+      <th class="sort" data-sort="pnl" data-table="open">P&L</th>
+      <th class="sort" data-sort="event" data-table="open">Event</th>
     </tr></thead><tbody id="tOpen"></tbody></table></div>
   </div>
 
@@ -569,15 +576,22 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('nOpen').textContent=D.open_trades.length;
   const sortedOpen=_sortList(D.open_trades,'open');
   $('tOpen').innerHTML=sortedOpen.length?sortedOpen.map(t=>{const p=t.pnl_unrealized||0;
-    const pot=t.entry_price>0&&t.entry_price<1?t.size*(1-t.entry_price)/t.entry_price:0;
-    const{e:oe,l:ol}=dSp(t);const spH='<span style="font-size:.75rem;margin-right:4px">'+(oe?oe+' '+ol:'\uD83D\uDCCA')+'</span>';
-    return`<tr><td class="c-id">${t.id}</td><td class="c-tr">${tL(t)}</td>
-      <td class="c-mkt">${spH}${mL(t)}</td><td>${sH(t.side,t.outcome_label)}</td>
-      <td>${Math.round((t.entry_price||0)*100)}\u00A2</td><td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
-      <td>$${fm(t.size)}</td><td class="p-${pc(p)}">${sg(p)}$${fm(p)}</td>
-      <td class="c-evt" style="white-space:nowrap;font-size:.82rem">${evtTime(t.event_start)}</td>
-      <td class="c-dt">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return t.created_at.substring(5,16)}})():''}</td></tr>`}).join('')
-    :'<tr><td colspan="10" class="empty" style="border:0">Waiting for signals...</td></tr>';
+    const{e:oe,l:ol}=dSp(t);const spH=(oe?oe+' '+ol:'\uD83D\uDCCA');
+    const mktFull=t.market_question||'';
+    const mktLink=t.event_slug||t.market_slug?`<a href="https://polymarket.com/event/${t.event_slug||t.market_slug}" target="_blank" title="${mktFull}">${mktFull}</a>`:mktFull;
+    const timeStr=t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return''}})():'';
+    return`<tr class="row1">
+      <td style="font-weight:500"><span style="font-size:.75rem;margin-right:5px">${spH}</span>${mktLink}</td>
+      <td>${sH(t.side,t.outcome_label)}</td>
+      <td>${Math.round((t.entry_price||0)*100)}\u00A2</td>
+      <td>${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
+      <td>$${fm(t.size)}</td>
+      <td class="p-${pc(p)}" style="font-weight:600">${sg(p)}$${fm(p)}</td>
+      <td style="white-space:nowrap">${evtTime(t.event_start)}</td>
+    </tr><tr class="row2">
+      <td colspan="7"><span style="color:var(--text-dim);margin-right:12px">Trader: ${tL(t)}</span><span style="margin-right:12px">ID #${t.id}</span><span style="margin-right:12px">${timeStr}</span></td>
+    </tr>`}).join('')
+    :'<tr><td colspan="7" class="empty" style="border:0">Waiting for signals...</td></tr>';
 
   $('nClosed').textContent=D.closed_trades.length;
   const sortedClosed=_sortList(D.closed_trades,'closed');
