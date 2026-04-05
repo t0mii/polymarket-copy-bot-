@@ -1046,9 +1046,6 @@ def copy_followed_wallets():
 
 MISS_COUNT_TO_CLOSE = 180  # Position muss 180x hintereinander fehlen (= 30 Min bei 10s-Intervall)
 
-# Track which positions already got a loss warning (avoid log spam)
-_loss_warned: set = set()  # trade_id set
-
 
 def _fetch_live_price(event_slug: str, market_question: str, side: str, condition_id: str = "") -> float | None:
     """Holt den aktuellen Live-Preis: zuerst WebSocket-Cache, dann Gamma API als Fallback."""
@@ -1216,15 +1213,7 @@ def update_copy_positions():
                             db.update_copy_trade_price(trade["id"], effective_price, round(pnl, 2))
                             logger.debug("Trade #%d: %.0f%c | P&L=$%.2f", trade["id"], effective_price * 100, 0xa2, pnl)
 
-                            # Log when position is essentially dead (price <=5c, entry was >=15c)
-                            if effective_price <= 0.05 and trade["entry_price"] >= 0.15 and trade["id"] not in _loss_warned:
-                                _loss_warned.add(trade["id"])
-                                db.log_activity("warning", "DROP",
-                                                "Position near zero — %s" % trade["wallet_username"],
-                                                "#%d %s — now %dc (entry %dc), P&L $%.2f" % (
-                                                    trade["id"], (trade["market_question"] or "")[:35],
-                                                    round(effective_price * 100), round(trade["entry_price"] * 100), round(pnl, 2)),
-                                                round(pnl, 2))
+
 
                     else:
                         # --- NOT IN OPEN: Check if trader closed it ---
