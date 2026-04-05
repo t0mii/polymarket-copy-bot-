@@ -247,20 +247,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       </div>
     </div>
     <div class="hd-right">
-      <div style="position:relative">
-        <button class="sfx-btn" id="sfxBtn" onclick="togSfxPanel()"><span id="sfxIco">&#128264;</span> Sound</button>
-        <div id="sfxPanel" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;background:var(--bg);border:1px solid var(--border);padding:12px 16px;z-index:9998;width:220px;border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.7)">
-          <div style="font-size:.65rem;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Sound Settings</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:.82rem;color:var(--text)">Trade Alerts</span>
-            <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.72rem;padding:3px 12px;border-radius:3px;min-width:40px">OFF</button>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
-            <span style="font-size:.82rem;color:var(--text)">Pop Out Sound</span>
-            <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.72rem;padding:3px 12px;border-radius:3px;min-width:40px">OFF</button>
-          </div>
-        </div>
-      </div>
+      <button class="sfx-btn" id="sfxBtn" onclick="togSfxPanel()"><span id="sfxIco">&#128264;</span> Sound</button>
       <button class="sfx-btn" id="lockBtn" onclick="togLock()" title="Unlock to enable manual close"><span id="lockIco">&#128274;</span></button>
       <nav class="nav">
         <a href="/copy">Terminal</a>
@@ -309,6 +296,21 @@ tr:hover{background:rgba(201,168,76,0.03)}
         <span id="reportModalTime" style="font-size:.65rem;color:var(--text-dim);letter-spacing:.06em"></span>
       </div>
       <div id="reportModalText" style="font-size:.9rem;line-height:1.9;color:var(--text)"></div>
+    </div>
+  </div>
+
+  <!-- SOUND SETTINGS PANEL -->
+  <div id="sfxPanel" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.4)">
+    <div style="position:absolute;top:60px;right:120px;background:#0c0c12;border:1px solid var(--border);padding:16px 20px;width:240px;border-radius:8px;box-shadow:0 16px 48px rgba(0,0,0,.8)">
+      <div style="font-size:.68rem;color:var(--text-dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px;font-weight:600">Sound Settings</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:.85rem;color:var(--text)">Trade Alerts</span>
+        <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <span style="font-size:.85rem;color:var(--text)">Pop Out Sound</span>
+        <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
+      </div>
     </div>
   </div>
 
@@ -412,7 +414,6 @@ function _updSfxUI(){
 function togSfxPanel(){const p=$('sfxPanel');p.style.display=p.style.display==='none'?'block':'none'}
 function togSfxTrade(){sfx=!sfx;if(sfx)AC.resume();_updSfxUI()}
 function togSfxPop(){sfxPop=!sfxPop;_updSfxUI()}
-document.addEventListener('click',function(e){const p=$('sfxPanel');if(p.style.display!=='none'&&!e.target.closest('#sfxBtn')&&!e.target.closest('#sfxPanel'))p.style.display='none'})
 function beep(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);
   o.type='sine';o.frequency.setValueAtTime(660,AC.currentTime);o.frequency.exponentialRampToValueAtTime(1320,AC.currentTime+.1);
   o.frequency.exponentialRampToValueAtTime(330,AC.currentTime+.25);g.gain.setValueAtTime(.12,AC.currentTime);
