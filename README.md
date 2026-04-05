@@ -124,6 +124,17 @@ python redeem_positions.py --exec
 
 ## Configuration Reference
 
+All settings are optional — defaults work out of the box. Only `POLYMARKET_PRIVATE_KEY`, `POLYMARKET_FUNDER`, and `FOLLOWED_TRADERS` are required.
+
+### Core
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `LIVE_MODE` | false | false = paper trading, true = real money |
+| `STARTING_BALANCE` | 320 | Your deposit amount (for P&L calculation) |
+| `COPY_SCAN_INTERVAL` | 5 | Seconds between scans |
+| `DASHBOARD_PORT` | 8090 | Web dashboard port |
+| `DASHBOARD_SECRET` | changeme | Secret key for follow/unfollow/reset API |
+
 ### Position Sizing
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -132,37 +143,132 @@ python redeem_positions.py --exec
 | `MIN_TRADE_SIZE` | 1.0 | Minimum bet size |
 | `RATIO_MIN` | 0.2 | Floor multiplier (small trader bet → small copy) |
 | `RATIO_MAX` | 2.0 | Ceiling multiplier (big trader bet → bigger copy) |
+| `DEFAULT_AVG_TRADER_SIZE` | 10.0 | Fallback avg trade size when no trader data |
 
-### Filters
+### Price Signal Multipliers
+
+The bot adjusts bet size based on how far the price is from 50c. Extreme prices (near 0c or 100c) indicate stronger trader conviction.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `PRICE_EDGE_HIGH` | 0.30 | Edge threshold for strong signal (20c or 80c) |
+| `PRICE_MULT_HIGH` | 1.50 | Bet multiplier for strong signal |
+| `PRICE_EDGE_MED` | 0.15 | Edge threshold for normal signal (35c or 65c) |
+| `PRICE_MULT_MED` | 1.00 | Bet multiplier for normal signal |
+| `PRICE_MULT_LOW` | 0.60 | Bet multiplier for weak signal (near 50c coinflips) |
+
+```
+Price 15c → edge 0.35 → strong signal → bet × 1.5
+Price 30c → edge 0.20 → normal signal → bet × 1.0
+Price 45c → edge 0.05 → weak signal  → bet × 0.6
+```
+
+### Trade Filters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `MIN_TRADER_USD` | 3 | Ignore trader buys below $3 (noise filter) |
-| `MIN_ENTRY_PRICE` | 0.05 | Skip trash farming below 5¢ |
-| `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92¢ |
+| `MIN_ENTRY_PRICE` | 0.15 | Skip lottery tickets below 15c |
+| `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92c |
 | `MAX_COPIES_PER_MARKET` | 1 | One copy per market (prevents doubling up) |
 | `ENTRY_TRADE_SEC` | 300 | Ignore trades older than 5 minutes |
 | `MAX_HOURS_BEFORE_EVENT` | 0 | Only buy X hours before event (0=disabled) |
 | `MAX_PER_EVENT` | 15 | Max $ per event/game (0=disabled) |
 | `NO_REBUY_MINUTES` | 0 | Block re-entry after close (0=disabled) |
+| `MAX_SPREAD` | 0.05 | Max bid/ask spread tolerance (5%) |
+
+### Entry Mechanics
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ENTRY_SLIPPAGE` | 0.0 | Added to entry price (e.g. 0.01 = 1c buffer) |
+| `MAX_ENTRY_PRICE_CAP` | 0.97 | Hard ceiling after slippage applied |
+| `TRADE_SEC_FROM_RESOLVE` | 120 | Stop buying within X seconds of market close |
+| `CASH_RESERVE` | 0 | Dollars permanently reserved (never used for betting) |
 
 ### Hedge Detection
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `HEDGE_WAIT_SECS` | 60 | Default hedge detection window |
+| `HEDGE_WAIT_SECS` | 60 | Default hedge detection window (seconds) |
 | `HEDGE_WAIT_TRADERS` | | Per-trader: `name:seconds,name:seconds` |
 
-### Other
+### Cash Management
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `LIVE_MODE` | false | false = paper trading, true = real money |
-| `STARTING_BALANCE` | 320 | Your deposit amount (for P&L calculation) |
-| `COPY_SCAN_INTERVAL` | 5 | Seconds between scans |
 | `CASH_FLOOR` | 0 | Stop buying below this cash level |
+| `CASH_RECOVERY` | 6 | Must recover $X above floor before resuming |
+| `SAVE_POINT_STEP` | 1.0 | Floor increases by $X per recovery cycle |
 | `MAX_OPEN_POSITIONS` | 100 | Maximum simultaneous positions |
-| `MAX_EXPOSURE_PER_TRADER` | 0.33 | Default max % per trader |
+| `MAX_EXPOSURE_PER_TRADER` | 0.33 | Default max % of portfolio per trader |
 | `TRADER_EXPOSURE_MAP` | | Per-trader: `name:pct,name:pct` |
-| `DASHBOARD_PORT` | 8090 | Web dashboard port |
-| `DASHBOARD_SECRET` | changeme | Secret key for follow/unfollow API |
+
+### Risk Management
+
+All disabled by default (0 = off). Enable by setting a value > 0.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAX_DAILY_LOSS` | 0 | Stop trading if daily realized losses exceed $X |
+| `MAX_DAILY_TRADES` | 0 | Maximum new trades per calendar day |
+| `STOP_LOSS_PCT` | 0 | Auto-sell if position drops by X% (e.g. 0.50 = 50%) |
+| `TAKE_PROFIT_PCT` | 0 | Auto-sell if position gains X% (e.g. 1.00 = 100%) |
+
+```env
+# Example: conservative risk settings
+MAX_DAILY_LOSS=50           # Stop after $50 daily loss
+MAX_DAILY_TRADES=20         # Max 20 trades per day
+STOP_LOSS_PCT=0.60          # Sell if position drops 60%
+TAKE_PROFIT_PCT=2.00        # Sell if position gains 200%
+```
+
+### Pending Buy Queue
+
+Queue trades below a price threshold and wait for confirmation before executing. Disabled by default.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `BUY_THRESHOLD` | 0.0 | Queue trades below this price (0=disabled) |
+| `PENDING_BUY_MIN_SECS` | 210 | Min wait before firing queued trade |
+| `PENDING_BUY_MAX_SECS` | 900 | Max wait before discarding |
+
+### Feature Toggles
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `COPY_SELLS` | true | Copy sell signals from traders (false = hold until resolve) |
+| `POSITION_DIFF_ENABLED` | true | Enable position-diff fallback scan |
+| `IDLE_REPLACE_ENABLED` | false | Auto-replace inactive traders from leaderboard |
+| `IDLE_TRIGGER_SECS` | 1200 | Seconds of inactivity before replacement (20 min) |
+| `IDLE_REPLACE_COOLDOWN` | 1800 | Cooldown after replacing a trader (30 min) |
+
+### Scan Throttling
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAX_TRADES_PER_SCAN` | 3 | Max new trades per 5-second scan cycle |
+| `RECENT_TRADES_LIMIT` | 50 | Trades to fetch per wallet per scan |
+
+### Circuit Breaker
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `CB_THRESHOLD` | 8 | Consecutive API failures to trip breaker |
+| `CB_PAUSE_SECS` | 60 | Seconds to pause when breaker trips |
+
+### API Tuning
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `API_TIMEOUT` | 10 | GET request timeout (seconds) |
+| `API_MAX_RETRIES` | 3 | Retry attempts per failed request |
+| `LIVE_PRICE_MIN` | 0.05 | Min live price to accept (below = use trader price) |
+| `LIVE_PRICE_MAX_DEVIATION` | 0.50 | Max % deviation from trader price to accept live price |
+
+### Fill Verification
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `FILL_VERIFY_DELAY_SECS` | 2 | Seconds to wait after buy before checking fill amount |
+| `MIN_FILL_AMOUNT` | 0.10 | Min fill amount ($) to count as valid |
+
+### Position Tracking
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MIN_POSITION_SIZE_FILTER` | 0.50 | Min position size to include in scans |
+| `MISS_COUNT_TO_CLOSE` | 180 | Consecutive scan misses before closing stale position |
 
 ## Dashboard
 
@@ -272,7 +378,7 @@ Works for all sports (NBA, MLB, NHL, NCAA). For esports where the Gamma API does
 - **Fees** — Polymarket charges 2% (200 bps) per trade
 - **Losses** — Traders can lose. Past performance doesn't guarantee future results
 - **Liquidity** — Small markets may not have enough liquidity for your orders
-- **Binary outcomes** — Positions go to $0 or $1, no stop-loss possible
+- **Binary outcomes** — Positions go to $0 or $1. Optional stop-loss via `STOP_LOSS_PCT`
 
 ## Tech Stack
 
