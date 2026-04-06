@@ -360,7 +360,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
 <div class="al-ov" id="alOv" style="display:none"></div>
 
 <script>
-let D=null,CI=null,sfx=false,sfxPop=false,sseOk=false;
+let D=null,CI=null,sfx=localStorage.getItem('sfx')!=='off',sfxPop=localStorage.getItem('sfxPop')!=='off',sseOk=false;
 // Blockie avatar generator (Ethereum-style pixel identicon)
 function mkBlockie(addr,sz=24){
   const seed=addr.toLowerCase();let h=0;for(let i=0;i<seed.length;i++){h=((h<<5)-h)+seed.charCodeAt(i);h|=0}
@@ -428,8 +428,9 @@ function _updSfxUI(){
   $('sfxTogPop').textContent=sfxPop?'ON':'OFF';$('sfxTogPop').style.color=sfxPop?'var(--green)':'var(--text-dim)';$('sfxTogPop').style.borderColor=sfxPop?'var(--green)':'var(--border)';
 }
 function togSfxPanel(){const p=$('sfxPanel');p.style.display=p.style.display==='none'?'block':'none'}
-function togSfxTrade(){sfx=!sfx;if(sfx)AC.resume();_updSfxUI()}
-function togSfxPop(){sfxPop=!sfxPop;_updSfxUI()}
+_updSfxUI();
+function togSfxTrade(){sfx=!sfx;localStorage.setItem('sfx',sfx?'on':'off');if(sfx)AC.resume();_updSfxUI()}
+function togSfxPop(){sfxPop=!sfxPop;localStorage.setItem('sfxPop',sfxPop?'on':'off');_updSfxUI()}
 function beep(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);
   o.type='sine';o.frequency.setValueAtTime(660,AC.currentTime);o.frequency.exponentialRampToValueAtTime(1320,AC.currentTime+.1);
   o.frequency.exponentialRampToValueAtTime(330,AC.currentTime+.25);g.gain.setValueAtTime(.12,AC.currentTime);
