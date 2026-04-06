@@ -670,14 +670,48 @@ def copy_followed_wallets():
             # Event within window → execute
             if 0 < hours_until <= config.MAX_HOURS_BEFORE_EVENT:
                 td = _ew["trade_data"]
-                _ew_size = _calculate_position_size(td["entry_price"], balance,
+                _orig_price = td["entry_price"]
+
+                # --- Queue Drift Filter ---
+                # Get live price and check if it drifted too far from trader's original price
+                _live_price = _orig_price
+                try:
+                    _lp = price_tracker.get_price(_ew_cid, td["side"]) if price_tracker.is_connected else None
+                    if _lp and _lp > 0:
+                        _live_price = _lp
+                except Exception:
+                    pass
+
+                # Max allowed drift depends on price range (configurable)
+                if _orig_price < 0.20:
+                    _max_drift = config.QUEUE_DRIFT_LOTTERY
+                elif _orig_price < 0.40:
+                    _max_drift = config.QUEUE_DRIFT_UNDERDOG
+                elif _orig_price < 0.60:
+                    _max_drift = config.QUEUE_DRIFT_COINFLIP
+                else:
+                    _max_drift = config.QUEUE_DRIFT_FAVORITE
+
+                _drift_pct = (_live_price - _orig_price) / _orig_price if _orig_price > 0 else 0
+                if _drift_pct > _max_drift:
+                    logger.info("[EVENT-WAIT] SKIP drift %.0f%% > %.0f%% max (%.0fc->%.0fc): %s",
+                                _drift_pct * 100, _max_drift * 100,
+                                _orig_price * 100, _live_price * 100, td["market_question"][:40])
+                    _ew_expired.append(_ew_cid)
+                    continue
+
+                # Use live price for entry if available
+                _entry_price = _live_price if _live_price != _orig_price else _orig_price
+                td["entry_price"] = _entry_price
+
+                _ew_size = _calculate_position_size(_entry_price, balance,
                                                     portfolio_value=portfolio_value, trader_name=td["wallet_username"])
                 if _ew_size >= MIN_TRADE_SIZE and balance > _ew_size:
                     if LIVE_MODE and _ew_cid:
                         from bot.order_executor import get_wallet_balance as _gwb_ew
                         if _gwb_ew() < _ew_size:
                             continue
-                        order_resp = buy_shares(_ew_cid, td["side"], _ew_size, td["entry_price"])
+                        order_resp = buy_shares(_ew_cid, td["side"], _ew_size, _entry_price)
                         if not order_resp:
                             continue
                     td["size"] = _ew_size
@@ -686,12 +720,13 @@ def copy_followed_wallets():
                         new_trades += 1
                         balance -= _ew_size
                         _cached_open_trades.append(td)
-                        logger.info("[EVENT-WAIT] Trade #%d fired (event in %.1fh): %s @ %dc | $%.2f",
+                        _drift_info = " (drift %+.0f%%)" % (_drift_pct * 100) if abs(_drift_pct) > 0.01 else ""
+                        logger.info("[EVENT-WAIT] Trade #%d fired (event in %.1fh): %s @ %dc | $%.2f%s",
                                     trade_id, hours_until, td["market_question"][:40],
-                                    round(td["entry_price"] * 100), _ew_size)
+                                    round(_entry_price * 100), _ew_size, _drift_info)
                         db.log_activity("buy", "BUY", "Copied position from %s (event wait)" % td["wallet_username"],
                                         "#%d %s @ %dc — $%.2f" % (trade_id, td["market_question"][:40],
-                                        round(td["entry_price"] * 100), _ew_size))
+                                        round(_entry_price * 100), _ew_size))
                 _ew_expired.append(_ew_cid)
             # Event already started or passed → discard
             elif hours_until <= 0:

@@ -425,6 +425,26 @@ EVENT_WAIT_MIN_CASH=100
 
 Works for all sports (NBA, MLB, NHL, NCAA). For esports where the Gamma API doesn't have start times, the check is skipped and trades copy normally.
 
+### Queue Drift Filter
+
+When a queued trade fires, the bot checks the current live price against the trader's original price. If the price drifted too far, the trade is skipped — based on historical P&L analysis:
+
+| Entry Price | Max Drift | Why |
+|---|---|---|
+| <20c (lottery) | 30% | Unprofitable range, tight filter |
+| 20-40c (underdog) | 40% | Strong edge, tolerates drift |
+| 40-60c (coinflip) | 3% | Paper-thin edge, any drift kills profit |
+| 60-85c (favorite) | 5% | Marginal edge, tight filter |
+
+```env
+QUEUE_DRIFT_LOTTERY=0.30    # <20c: max 30% price increase
+QUEUE_DRIFT_UNDERDOG=0.40   # 20-40c: max 40%
+QUEUE_DRIFT_COINFLIP=0.03   # 40-60c: max 3%
+QUEUE_DRIFT_FAVORITE=0.05   # 60-85c: max 5%
+```
+
+Example: Trader buys at 50c (coinflip), event is in 6h. Trade queued. 2h before event, live price is 53c (+6%). Drift 6% > 3% max → **trade skipped**. If live price is 51c (+2%), drift OK → **trade executes at 51c**.
+
 ## Risks
 
 - **Slippage** — 5s scan delay means you get worse prices than the trader

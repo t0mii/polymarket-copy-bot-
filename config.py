@@ -54,6 +54,11 @@ MAX_COPIES_PER_MARKET = int(os.getenv("MAX_COPIES_PER_MARKET", "1"))
 ENTRY_TRADE_SEC = int(os.getenv("ENTRY_TRADE_SEC", "300"))
 MAX_HOURS_BEFORE_EVENT = float(os.getenv("MAX_HOURS_BEFORE_EVENT", "0"))  # Only buy X hours before event starts (0=disabled)
 EVENT_WAIT_MIN_CASH = float(os.getenv("EVENT_WAIT_MIN_CASH", "0"))  # Only queue distant events when cash below $X (0=always queue)
+# Max price drift allowed when executing queued trades (per price range)
+QUEUE_DRIFT_LOTTERY = float(os.getenv("QUEUE_DRIFT_LOTTERY", "0.30"))   # <20c: 30%
+QUEUE_DRIFT_UNDERDOG = float(os.getenv("QUEUE_DRIFT_UNDERDOG", "0.40")) # 20-40c: 40%
+QUEUE_DRIFT_COINFLIP = float(os.getenv("QUEUE_DRIFT_COINFLIP", "0.03")) # 40-60c: 3%
+QUEUE_DRIFT_FAVORITE = float(os.getenv("QUEUE_DRIFT_FAVORITE", "0.05")) # 60-85c: 5%
 NO_REBUY_MINUTES = int(os.getenv("NO_REBUY_MINUTES", "0"))  # Don't re-enter closed markets for X min (0=disabled)
 MAX_PER_EVENT = float(os.getenv("MAX_PER_EVENT", "15"))  # Max $ invested per event/game (0=disabled)
 

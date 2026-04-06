@@ -449,6 +449,7 @@ def api_settings():
         {"key": "NO_REBUY_MINUTES", "value": str(config.NO_REBUY_MINUTES) + " min", "desc": "Block re-entry after close (0=off)"},
         {"key": "MAX_HOURS_BEFORE_EVENT", "value": str(config.MAX_HOURS_BEFORE_EVENT) + "h", "desc": "Queue if event > Xh away (0=off)"},
         {"key": "EVENT_WAIT_MIN_CASH", "value": _dlr(config.EVENT_WAIT_MIN_CASH) if config.EVENT_WAIT_MIN_CASH > 0 else "always queue", "desc": "Only queue when cash < $X (0=always)"},
+        {"key": "QUEUE_DRIFT", "value": "<20c:%d%% 20-40c:%d%% 40-60c:%d%% 60c+:%d%%" % (config.QUEUE_DRIFT_LOTTERY*100, config.QUEUE_DRIFT_UNDERDOG*100, config.QUEUE_DRIFT_COINFLIP*100, config.QUEUE_DRIFT_FAVORITE*100), "desc": "Max price drift for queued trades (per range)"},
         # --- Entry Mechanics ---
         {"key": "ENTRY_SLIPPAGE", "value": str(config.ENTRY_SLIPPAGE), "desc": "Added to entry price"},
         {"key": "MAX_ENTRY_PRICE_CAP", "value": str(int(config.MAX_ENTRY_PRICE_CAP * 100)) + "c", "desc": "Hard ceiling after slippage"},
