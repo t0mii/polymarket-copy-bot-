@@ -438,7 +438,7 @@ function beepClose(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.creat
   o.type='triangle';o.frequency.setValueAtTime(880,AC.currentTime);o.frequency.exponentialRampToValueAtTime(440,AC.currentTime+.15);
   o.frequency.exponentialRampToValueAtTime(220,AC.currentTime+.3);g.gain.setValueAtTime(.15,AC.currentTime);
   g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.5);o.start();o.stop(AC.currentTime+.5)}catch(e){}}
-let _alertTimer=null,_alertIsWin=false,_alertQueue=[];
+let _alertTimer=null,_alertIsWin=false,_alertIsBigWin=false,_alertQueue=[];
 function _showCloseAlert(t){
   const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
@@ -452,9 +452,9 @@ function _showCloseAlert(t){
     <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
     </div>${gifHtml}</div>`;
   if(bigWin&&sfxPop){try{const a=new Audio('/static/money-button.mp3');a.volume=0.02;a.play()}catch(e){}}
-  _alertIsWin=w;
+  _alertIsWin=w;_alertIsBigWin=bigWin;
   if(_alertTimer)clearTimeout(_alertTimer);
-  _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_processAlertQueue()},6000);
+  _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_alertIsBigWin=false;_processAlertQueue()},6000);
 }
 function _processAlertQueue(){
   if(!_alertQueue.length)return;
@@ -463,11 +463,16 @@ function _processAlertQueue(){
 }
 function alertClose(t){
   const w=t.pnl>=0;
+  const bigWin=t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
   const isShowing=_alertTimer!==null;
   if(!isShowing){_showCloseAlert(t);return}
-  // Win showing: new win replaces, loss queued
+  // Big win (50%+) showing: NOTHING replaces it, everything queued
+  if(_alertIsBigWin){_alertQueue.push(t);return}
+  // Big win incoming: always replaces immediately
+  if(bigWin){_showCloseAlert(t);return}
+  // Normal win showing: new win replaces, loss queued
   if(_alertIsWin&&!w){_alertQueue.push(t);return}
-  // Loss showing: win replaces immediately
+  // Loss showing: any win replaces immediately
   if(!_alertIsWin&&w){_showCloseAlert(t);return}
   // Same type: new replaces
   _showCloseAlert(t);
