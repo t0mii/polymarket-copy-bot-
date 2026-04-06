@@ -734,7 +734,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
     const mktLink=t.event_slug||t.market_slug?`<a href="https://polymarket.com/event/${t.event_slug||t.market_slug}" target="_blank" title="${mktFull}">${mktFull}</a>`:mktFull;
     const trName=t.wallet_username||'';
     return`<tr>
-      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500"><span style="font-size:.72rem;margin-right:4px;color:var(--text)">${spH}</span>${mktLink}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${trName!=='\u2014'?trName:''} #${t.id}</div></td>
+      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500;font-size:.95rem"><span style="font-size:.78rem;margin-right:4px;color:var(--text)">${spH}</span>${mktLink}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${trName!=='\u2014'?trName:''} #${t.id}</div></td>
       <td class="c-side2">${sH(t.side,t.outcome_label)}</td>
       <td class="c-num">${Math.round((t.entry_price||0)*100)}\u00A2</td>
       <td class="c-num">${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
@@ -750,7 +750,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('tClosed').innerHTML=sortedClosed.length?sortedClosed.map(t=>{const p=t.pnl_realized||0;
     const{e:ce,l:cl2}=dSp(t);const spH2='<span style="font-size:.75rem;margin-right:4px">'+(ce?ce+' '+cl2:'\uD83D\uDCCA')+'</span>';
     return`<tr>
-      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500">${spH2}${mL(t)}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${t.wallet_username||''} #${t.id}</div></td>
+      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500;font-size:.95rem">${spH2}${mL(t)}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${t.wallet_username||''} #${t.id}</div></td>
       <td class="c-side2">${sH(t.side,t.outcome_label)}</td>
       <td class="c-num">${Math.round((t.entry_price||0)*100)}\u00A2</td>
       <td class="c-num">${Math.round((t.current_price||0)*100)}\u00A2</td>
