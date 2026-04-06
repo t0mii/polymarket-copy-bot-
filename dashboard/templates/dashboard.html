@@ -818,8 +818,9 @@ function buildPreview(raw){
           <div style="color:var(--text-dim);font-size:.85em">Win Rate</div>
         </div>
       </div>
-      ${openN?'<div style="text-align:center;margin-top:6px;font-size:.72em;color:var(--text-dim)">'+openN+' open positions</div>':''}
-      ${(bH||wH)?bH+wH:''}
+      ${openN?'<div style="text-align:center;margin-top:6px;font-size:.72em;color:var(--text-dim)">'+openN+' open</div>':''}
+      ${best?'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:.72em"><div style="color:var(--green);margin-bottom:3px">\u25B2 Best: '+best.replace(/(\+\$[\d.]+)/,'<b>$1</b>')+'</div>':''}
+      ${worst?'<div style="color:var(--red);font-size:.72em">\u25BC Worst: '+worst.replace(/(\$-[\d.]+)/,'<b>$1</b>')+'</div></div>':''}
     </div>`;
   }).join('');
 }
@@ -845,14 +846,29 @@ function showReportModal(){
 function showTraderDetail(traderName){
   if(!window._reportFull)return showReportModal();
   const lines=window._reportFull.split('\n');
-  const filtered=[];let inTrader=false;
+  // Extract trader section
+  const filtered=[];let inTrader=false;let headerLine='';
   for(const line of lines){
-    if(line.match(new RegExp('^'+traderName+' \\u2014'))){inTrader=true;filtered.push(line);continue}
+    if(line.match(new RegExp('^'+traderName+' \\u2014'))){inTrader=true;headerLine=line;filtered.push(line);continue}
     if(inTrader&&line.match(/^\w+ \u2014/)){inTrader=false;continue}
     if(inTrader&&line.trim()){filtered.push(line)}
-    if(line.startsWith('Recommendation:'))filtered.push('',line);
   }
-  $('reportModalText').innerHTML=fmtReport(filtered.join('\n'));
+  // Parse wins/losses from header
+  const hm=headerLine.match(/(\d+)W\/(\d+)L\s+(\d+)%/);
+  const w=hm?+hm[1]:0, l=hm?+hm[2]:0, wr=hm?+hm[3]:0;
+  const total=w+l||1;
+  const wp=Math.round(w/total*100), lp=100-wp;
+  // Pie chart via conic-gradient
+  const pieHtml=`<div style="display:flex;align-items:center;gap:20px;margin:16px 0;padding:16px;background:var(--bg3);border-radius:8px">
+    <div style="width:100px;height:100px;border-radius:50%;background:conic-gradient(#34d399 0% ${wp}%, #f87171 ${wp}% 100%);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+      <div style="width:60px;height:60px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--text)">${w+l} Trades</div>
+    </div>
+    <div style="flex:1">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:12px;height:12px;border-radius:2px;background:#34d399"></div><span style="font-size:.85rem;color:var(--text)">Wins: ${w}</span><span style="font-size:.85rem;font-weight:700;color:#0a0a0a;background:#34d399;padding:1px 8px;border-radius:3px">${wp}%</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:#f87171"></div><span style="font-size:.85rem;color:var(--text)">Losses: ${l}</span><span style="font-size:.85rem;font-weight:700;color:#0a0a0a;background:#f87171;padding:1px 8px;border-radius:3px">${lp}%</span></div>
+    </div>
+  </div>`;
+  $('reportModalText').innerHTML=pieHtml+fmtReport(filtered.join('\n'));
   $('reportModal').style.display='flex';
 }
 loadReport();
