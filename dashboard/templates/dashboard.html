@@ -42,21 +42,27 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* ═══ LAYOUT ═══ */
 .app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 5% 40px}
-.wide .app{max-width:none;padding:0 24px 20px}
-.wide .cards{grid-template-columns:repeat(5,1fr);gap:8px}
-.wide .card{padding:12px 14px}
-.wide .card-val{font-size:1.2rem}
-.wide .sec{margin-bottom:8px}
-.wide .sec-hd{padding:6px 0}
-.wide .wide-grid{display:grid;grid-template-columns:340px 1fr;gap:12px;height:calc(100vh - 180px)}
-.wide .wide-left{display:flex;flex-direction:column;gap:10px;overflow:hidden}
-.wide .wide-left>.sec{flex:1;min-height:0;overflow:hidden}
-.wide .wide-left .chart-box{height:160px}
-.wide .wide-left .cli-panel{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-left #reportBox{max-height:200px;overflow-y:auto}
-.wide .wide-right{display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.wide .app{max-width:none;padding:0 20px 10px}
+.wide .cards{grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:8px}
+.wide .card{padding:8px 10px}
+.wide .card-val{font-size:1.1rem}
+.wide .card-lbl{font-size:.55rem;margin-bottom:2px}
+.wide .card-sub{font-size:.6rem}
+.wide .card.w-hide{display:none}
+.wide .sec{margin-bottom:0}
+.wide .sec-hd{padding:4px 0}
+.wide .tk-wrap{padding:4px 0;margin-bottom:6px}
+.wide .hd{padding:6px 0;margin-bottom:6px}
+.wide .wide-grid{display:grid;grid-template-columns:320px 1fr;gap:10px;height:calc(100vh - 140px)}
+.wide .wide-left{display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.wide .wide-left>.sec{min-height:0;overflow:hidden}
+.wide .wide-left .chart-box{height:140px}
+.wide .wide-left .cli-panel{max-height:180px;overflow-y:auto}
+.wide .wide-left #reportBox{max-height:none;overflow-y:auto}
+.wide .wide-right{display:flex;flex-direction:column;gap:6px;overflow:hidden}
 .wide .wide-right>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .wide .wide-right .tw{max-height:none;flex:1;overflow-y:auto}
+.wide .wide-right .sec-hd{padding:2px 0}
 
 /* ═══ HEADER ═══ */
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
@@ -285,10 +291,10 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="card fi d3"><div class="card-lbl">Wallet</div><div class="card-val neu" id="v-cash">$---</div><div class="card-sub">available</div></div>
     <div class="card fi d4"><div class="card-lbl">Open Positions</div><div class="card-val gld" id="v-active">$---</div><div class="card-sub" id="v-open-detail"></div></div>
     <div class="card fi d1"><div class="card-lbl">Open P&L</div><div class="card-val neu" id="v-pnl-main">---</div><div class="card-sub" id="v-pnl-sub"></div></div>
-    <div class="card fi d2"><div class="card-lbl">Pending Payout</div><div class="card-val neu" id="v-pending">$---</div><div class="card-sub">won, auto-redeeming</div></div>
-    <div class="card fi d3"><div class="card-lbl">Return</div><div class="card-val neu" id="v-roi">---</div><div class="card-sub" id="v-roi-detail"></div></div>
-    <div class="card fi d4"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-open-sub"></div></div>
-    <div class="card fi d1"><div class="card-lbl">Record</div><div class="card-val-sm" id="v-record-line1">---</div><div class="card-val-sm" id="v-record-line2">---</div><div class="card-sub" id="v-record-detail"></div></div>
+    <div class="card fi d2 w-hide"><div class="card-lbl">Pending Payout</div><div class="card-val neu" id="v-pending">$---</div><div class="card-sub">won, auto-redeeming</div></div>
+    <div class="card fi d3 w-hide"><div class="card-lbl">Return</div><div class="card-val neu" id="v-roi">---</div><div class="card-sub" id="v-roi-detail"></div></div>
+    <div class="card fi d4 w-hide"><div class="card-lbl">Active Positions</div><div class="card-val neu" id="v-open">---</div><div class="card-sub" id="v-open-sub"></div></div>
+    <div class="card fi d1 w-hide"><div class="card-lbl">Record</div><div class="card-val-sm" id="v-record-line1">---</div><div class="card-val-sm" id="v-record-line2">---</div><div class="card-sub" id="v-record-detail"></div></div>
     <div class="card fi d2"><div class="card-lbl">Win Rate</div><div class="card-val neu" id="v-wr">---</div><div class="card-sub" id="v-wr-detail"></div></div>
   </div>
 
