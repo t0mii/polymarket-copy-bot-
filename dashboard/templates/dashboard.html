@@ -47,27 +47,36 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .wide .sec-hd{padding:4px 0}
 .wide .tk-wrap{padding:3px 0;margin-bottom:4px}
 .wide .hd{padding:4px 0;margin-bottom:4px}
-/* Cards: 5 columns, compact */
-.wide .cards{grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:6px}
-.wide .card{padding:7px 10px}
-.wide .card-val{font-size:1rem}
-.wide .card-lbl{font-size:.52rem;margin-bottom:1px}
-.wide .card-sub{font-size:.55rem}
-/* Content: main left + trader sidebar right */
-.wide .wide-content{display:grid;grid-template-columns:1fr 280px;gap:10px;height:calc(100vh - 220px)}
-/* Left: 3 rows (equity, active, closed) */
-.wide .wide-left{display:grid;grid-template-rows:140px 1fr 1fr;gap:6px;min-height:0;overflow:hidden}
+/* Full layout: sidebar right, everything else left */
+.wide .wide-content{display:grid;grid-template-columns:1fr 260px;gap:10px;height:calc(100vh - 60px)}
+/* Left: top bar (cards+chart) + 3 lists */
+.wide .wide-left{display:grid;grid-template-rows:auto 1fr 1fr 1fr;gap:6px;min-height:0;overflow:hidden}
+/* Top bar: cards + equity side by side */
+.wide .wide-topbar{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center}
+.wide .wide-topbar .cards{grid-template-columns:repeat(5,1fr);gap:3px;margin:0}
+.wide .wide-topbar .card{padding:4px 8px}
+.wide .wide-topbar .card-val{font-size:.85rem}
+.wide .wide-topbar .card-lbl{font-size:.48rem;margin-bottom:0;letter-spacing:.08em}
+.wide .wide-topbar .card-sub{display:none}
+.wide .wide-topbar .chart-box{height:80px}
+.wide .wide-topbar .sec{margin:0}
+.wide .wide-topbar .sec-hd{display:none}
+/* Lists take remaining space equally */
 .wide .wide-left>.sec{min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .wide .wide-left .tw{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-left .chart-box{height:100%}
 .wide .wide-left .sec-hd{padding:2px 0}
-/* Right sidebar: trader perf (top) + activity log (bottom) */
+/* Right sidebar: trader perf + activity log full height */
 .wide .wide-right{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
 .wide .wide-right>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .wide .wide-right .cli-panel{max-height:none;flex:1;overflow-y:auto}
 .wide .wide-right #reportBox{overflow-y:auto;flex:1}
 .wide .wide-right #reportText{grid-template-columns:1fr!important}
 .wide .wide-right .sec-hd{padding:2px 0}
+/* Hide ticker + header padding in wide */
+.wide .tk-wrap{display:none}
+.wide .hd{padding:2px 0;margin-bottom:2px}
+.wide .hd .logo{font-size:1rem}
+.wide .hd .nav a{padding:4px 10px;font-size:.7rem}
 
 /* ═══ HEADER ═══ */
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
@@ -775,16 +784,20 @@ if(new URLSearchParams(location.search).has('wide')){
   // secs: 0=activity, 1=trader perf, 2=equity, 3=active pos, 4=closed pos
   // Cards + ticker stay in place. Build 2-column content below.
   const content=document.createElement('div');content.className='wide-content';
-  // Left: equity + active positions + closed positions
+  const cards=document.querySelector('.cards');
+  // Left: topbar (cards+chart) + 3 lists
   const left=document.createElement('div');left.className='wide-left';
-  if(secs[2])left.appendChild(secs[2]);
-  if(secs[3])left.appendChild(secs[3]);
-  if(secs[4])left.appendChild(secs[4]);
+  const topbar=document.createElement('div');topbar.className='wide-topbar';
+  topbar.appendChild(cards);
+  if(secs[2])topbar.appendChild(secs[2]); // equity chart
+  left.appendChild(topbar);
+  if(secs[3])left.appendChild(secs[3]); // active positions
+  if(secs[4])left.appendChild(secs[4]); // closed positions
+  if(secs[0])left.appendChild(secs[0]); // activity log
   content.appendChild(left);
-  // Right sidebar: trader performance + activity log (full height)
+  // Right sidebar: trader performance (full height)
   const right=document.createElement('div');right.className='wide-right';
-  if(secs[1])right.appendChild(secs[1]);
-  if(secs[0])right.appendChild(secs[0]);
+  if(secs[1])right.appendChild(secs[1]); // trader perf
   content.appendChild(right);
   app.appendChild(content);
 }
