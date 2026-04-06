@@ -414,7 +414,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <th class="c-num sort" data-sort="sell" data-table="closed">Sell</th>
       <th class="c-num sort" data-sort="size" data-table="closed">$</th>
       <th class="c-pnl sort" data-sort="pnl" data-table="closed">P&L</th>
-      <th class="c-evt2"></th>
+      <th class="c-evt2" style="text-align:center">Result</th>
       <th class="c-time sort" data-sort="closed_at" data-table="closed">Closed</th>
     </tr></thead><tbody id="tClosed"></tbody></table></div>
   </div>
@@ -755,7 +755,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-num">${Math.round((t.current_price||0)*100)}\u00A2</td>
       <td class="c-num">$${fm(t.size)}</td>
       <td class="c-pnl p-${pc(p)}" style="font-weight:600">${sg(p)}$${fm(Math.abs(p))}</td>
-      <td class="c-evt2" style="font-size:.72rem">${(()=>{const ep=t.entry_price||0;const cp=t.current_price||0;if(!ep)return'';const chg=Math.round((cp-ep)/ep*100);const cc=chg>=0?'var(--green)':'var(--red)';const s=chg>=0?'+':'';return'<span style="color:'+cc+';font-weight:600">'+s+chg+'%</span><div style="font-size:.6rem;color:var(--text-dim)">'+Math.round(ep*100)+'\u2192'+Math.round(cp*100)+'\u00A2</div>'})()}</td>
+      <td class="c-evt2" style="font-size:.72rem;text-align:center">${(()=>{const ep=t.entry_price||0;const cp=t.current_price||0;if(!ep)return'';const chg=Math.round((cp-ep)/ep*100);const cc=chg>=0?'var(--green)':'var(--red)';const s=chg>=0?'+':'';return'<div style="color:'+cc+';font-weight:600">'+s+chg+'%</div><div style="font-size:.6rem;color:var(--text-dim)">'+Math.round(ep*100)+'\u2192'+Math.round(cp*100)+'\u00A2</div>'})()}</td>
       <td class="c-time">${t.closed_at?(()=>{try{const d=new Date(t.closed_at.replace(' ','T')+'Z');return'<div>'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+'</div><div style="font-size:.6rem;color:var(--text-dim)">'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+'</div>'}catch(e){return''}})():''}</td>
     </tr>`}).join('')
     :'<tr><td colspan="8" class="empty" style="border:0">No closed trades yet</td></tr>';
