@@ -52,25 +52,27 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .wide .hd .logo{font-size:1rem}
 .wide .hd .nav a{padding:4px 10px;font-size:.7rem}
 .wide .tk-wrap{padding:3px 0;margin-bottom:4px}
-.wide .wide-content{display:grid;grid-template-columns:1fr 1fr;gap:14px;height:calc(100vh - 80px)}
-/* Left: cards + equity + trader perf */
-.wide .wide-left{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
-.wide .wide-left .cards{grid-template-columns:repeat(5,1fr);gap:5px;margin:0}
+.wide .wide-content{display:grid;grid-template-columns:1fr 300px;gap:12px}
+/* Left: scrollable column */
+.wide .wide-left{overflow-y:auto;padding-right:4px}
+.wide .wide-left::-webkit-scrollbar{width:3px}
+.wide .wide-left::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
+.wide .wide-left .cards{grid-template-columns:repeat(5,1fr);gap:5px;margin:0 0 8px}
 .wide .wide-left .card{padding:7px 10px}
 .wide .wide-left .card-val{font-size:1rem}
 .wide .wide-left .card-lbl{font-size:.52rem;margin-bottom:1px}
 .wide .wide-left .card-sub{font-size:.55rem}
 .wide .wide-left .chart-box{height:160px}
-.wide .wide-left .sec{margin:0}
-.wide .wide-left #reportBox{overflow-y:auto;flex:1}
-.wide .wide-left #reportText{grid-template-columns:1fr!important}
-.wide .wide-left>.sec:last-child{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
-/* Right: log + active + closed */
-.wide .wide-right{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
-.wide .wide-right>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
-.wide .wide-right .tw{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-right .cli-panel{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-right .sec-hd{padding:2px 0}
+.wide .wide-left .sec{margin-bottom:8px}
+.wide .wide-left .tw{max-height:none}
+.wide .wide-left .cli-panel{max-height:240px}
+/* Right: trader perf full height, sticky */
+.wide .wide-right{overflow-y:auto;padding-left:4px;border-left:1px solid var(--border)}
+.wide .wide-right::-webkit-scrollbar{width:3px}
+.wide .wide-right::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
+.wide .wide-right .sec{margin:0}
+.wide .wide-right .sec-hd{padding:4px 0}
+.wide .wide-right #reportText{grid-template-columns:1fr!important}
 
 /* ═══ HEADER ═══ */
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
@@ -779,17 +781,17 @@ if(new URLSearchParams(location.search).has('wide')){
   // Cards + ticker stay in place. Build 2-column content below.
   const content=document.createElement('div');content.className='wide-content';
   const cards=document.querySelector('.cards');
-  // Left: cards + equity curve + trader performance
+  // Left: cards + curve + log + active + closed (scrollable)
   const left=document.createElement('div');left.className='wide-left';
   left.appendChild(cards);
   if(secs[2])left.appendChild(secs[2]); // equity curve
-  if(secs[1])left.appendChild(secs[1]); // trader performance
+  if(secs[0])left.appendChild(secs[0]); // activity log
+  if(secs[3])left.appendChild(secs[3]); // active positions
+  if(secs[4])left.appendChild(secs[4]); // closed positions
   content.appendChild(left);
-  // Right: activity log + active positions + closed positions
+  // Right: trader performance (full height)
   const right=document.createElement('div');right.className='wide-right';
-  if(secs[0])right.appendChild(secs[0]); // activity log
-  if(secs[3])right.appendChild(secs[3]); // active positions
-  if(secs[4])right.appendChild(secs[4]); // closed positions
+  if(secs[1])right.appendChild(secs[1]); // trader performance
   content.appendChild(right);
   app.appendChild(content);
 }
