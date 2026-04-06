@@ -47,21 +47,27 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .wide .sec-hd{padding:4px 0}
 .wide .tk-wrap{padding:3px 0;margin-bottom:4px}
 .wide .hd{padding:4px 0;margin-bottom:4px}
-/* Cards: 5 columns, compact, fixed width */
+/* Cards: 5 columns, compact */
 .wide .cards{grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:6px}
 .wide .card{padding:7px 10px}
 .wide .card-val{font-size:1rem}
 .wide .card-lbl{font-size:.52rem;margin-bottom:1px}
 .wide .card-sub{font-size:.55rem}
-/* Content: 2 columns below cards */
-.wide .wide-content{display:grid;grid-template-columns:1fr 1fr;gap:8px;height:calc(100vh - 220px)}
-.wide .wide-col{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
-.wide .wide-col>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
-.wide .wide-col .tw{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-col .chart-box{height:140px}
-.wide .wide-col .cli-panel{max-height:none;flex:1;overflow-y:auto}
-.wide .wide-col #reportBox{overflow-y:auto;flex:1}
-.wide .wide-col .sec-hd{padding:2px 0}
+/* Content: main left + trader sidebar right */
+.wide .wide-content{display:grid;grid-template-columns:1fr 280px;gap:10px;height:calc(100vh - 220px)}
+/* Left: 3 rows (equity, active, closed) */
+.wide .wide-left{display:grid;grid-template-rows:140px 1fr 1fr;gap:6px;min-height:0;overflow:hidden}
+.wide .wide-left>.sec{min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.wide .wide-left .tw{max-height:none;flex:1;overflow-y:auto}
+.wide .wide-left .chart-box{height:100%}
+.wide .wide-left .sec-hd{padding:2px 0}
+/* Right sidebar: trader perf (top) + activity log (bottom) */
+.wide .wide-right{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
+.wide .wide-right>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.wide .wide-right .cli-panel{max-height:none;flex:1;overflow-y:auto}
+.wide .wide-right #reportBox{overflow-y:auto;flex:1}
+.wide .wide-right #reportText{grid-template-columns:1fr!important}
+.wide .wide-right .sec-hd{padding:2px 0}
 
 /* ═══ HEADER ═══ */
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
@@ -769,17 +775,17 @@ if(new URLSearchParams(location.search).has('wide')){
   // secs: 0=activity, 1=trader perf, 2=equity, 3=active pos, 4=closed pos
   // Cards + ticker stay in place. Build 2-column content below.
   const content=document.createElement('div');content.className='wide-content';
-  // Left: equity curve + active + closed positions
-  const colL=document.createElement('div');colL.className='wide-col';
-  if(secs[2])colL.appendChild(secs[2]);
-  if(secs[3])colL.appendChild(secs[3]);
-  if(secs[4])colL.appendChild(secs[4]);
-  content.appendChild(colL);
-  // Right: trader performance + activity log
-  const colR=document.createElement('div');colR.className='wide-col';
-  if(secs[1])colR.appendChild(secs[1]);
-  if(secs[0])colR.appendChild(secs[0]);
-  content.appendChild(colR);
+  // Left: equity + active positions + closed positions
+  const left=document.createElement('div');left.className='wide-left';
+  if(secs[2])left.appendChild(secs[2]);
+  if(secs[3])left.appendChild(secs[3]);
+  if(secs[4])left.appendChild(secs[4]);
+  content.appendChild(left);
+  // Right sidebar: trader performance + activity log (full height)
+  const right=document.createElement('div');right.className='wide-right';
+  if(secs[1])right.appendChild(secs[1]);
+  if(secs[0])right.appendChild(secs[0]);
+  content.appendChild(right);
   app.appendChild(content);
 }
 load();setInterval(load,10000);setTimeout(initSSE,2000);
