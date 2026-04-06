@@ -223,10 +223,16 @@ tr:hover{background:rgba(201,168,76,0.03)}
   .hd{flex-direction:column;align-items:flex-start}
   .tg{grid-template-columns:1fr}
   .card{padding:18px}.card-val{font-size:1.3rem}
-  .tw{max-height:320px}
-  .app{padding:0 16px 40px}
+  .tw{max-height:320px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tw table{table-layout:auto;min-width:700px}
+  .tw th,.tw td{font-size:.75rem;padding:6px 5px}
+  .app{padding:0 10px 40px}
 }
-@media(max-width:480px){.cards{grid-template-columns:1fr 1fr;gap:8px}.card-val{font-size:1.1rem}}
+@media(max-width:480px){.cards{grid-template-columns:1fr 1fr;gap:8px}.card-val{font-size:1.1rem}
+  .tw table{min-width:600px}
+  .tw th,.tw td{font-size:.7rem;padding:5px 4px}
+  td{font-size:.72rem;padding:6px 4px}
+}
 </style>
 </head>
 <body>
