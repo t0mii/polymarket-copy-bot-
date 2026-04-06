@@ -65,8 +65,17 @@ def main():
         if len(_page) < 500: break
         _offset += 500
 
+    # On-chain verification: check payoutDenominator directly on Polygon
+    from web3 import Web3
+    _w3 = Web3(Web3.HTTPProvider("https://polygon-bor-rpc.publicnode.com"))
+    CTF_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
+    # Minimal ABI for payoutDenominator(bytes32) -> uint256
+    CTF_ABI = [{"inputs":[{"name":"","type":"bytes32"}],"name":"payoutDenominator","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
+    _ctf = _w3.eth.contract(address=Web3.to_checksum_address(CTF_ADDRESS), abi=CTF_ABI)
+
     resolved = []
     skipped_awaiting = 0
+    skipped_not_onchain = 0
     skipped_dust = 0
     for p in all_api:
         cp = float(p.get("curPrice", 0) or 0)
@@ -74,13 +83,24 @@ def main():
         cid = p.get("conditionId", "")
         if cp < 0.99 or cv <= 0.05 or not cid:
             continue
-        # Only redeem positions that are actually resolved on-chain
+        # API says not redeemable — skip
         if not p.get("redeemable", False):
             skipped_awaiting += 1
             continue
-        # Skip dust positions (redeem costs more than value)
+        # Skip dust positions
         if cv < 0.20:
             skipped_dust += 1
+            continue
+        # On-chain check: payoutDenominator must be > 0
+        try:
+            cid_bytes = bytes.fromhex(cid.replace("0x", ""))
+            payout_den = _ctf.functions.payoutDenominator(cid_bytes).call()
+            if payout_den == 0:
+                skipped_not_onchain += 1
+                continue
+        except Exception as e:
+            logger.debug("On-chain check failed for %s: %s", cid[:16], e)
+            skipped_not_onchain += 1
             continue
         resolved.append({
             "condition_id": cid,
@@ -90,6 +110,8 @@ def main():
         })
     if skipped_awaiting:
         logger.info("Skipped %d positions awaiting on-chain resolve", skipped_awaiting)
+    if skipped_not_onchain:
+        logger.info("Skipped %d positions (API says ready but on-chain NOT resolved)", skipped_not_onchain)
     if skipped_dust:
         logger.info("Skipped %d dust positions (< $0.20)", skipped_dust)
 
