@@ -307,9 +307,13 @@ tr:hover{background:rgba(201,168,76,0.03)}
         <span style="font-size:.85rem;color:var(--text)">Trade Alerts</span>
         <button id="sfxTogTrade" onclick="togSfxTrade()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:.85rem;color:var(--text)">Pop Out Sound</span>
         <button id="sfxTogPop" onclick="togSfxPop()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;min-width:44px;font-weight:600">OFF</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <span style="font-size:.85rem;color:var(--text)">Test Alert</span>
+        <button onclick="sfxPop=true;_updSfxUI();alertClose({market:'Test Win +50%',pnl:5,price:80,trader:'test',size:3})" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:.75rem;padding:4px 14px;border-radius:4px;font-weight:600">TEST</button>
       </div>
     </div>
   </div>
