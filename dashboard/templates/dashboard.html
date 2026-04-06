@@ -66,8 +66,8 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .wide .wide-topbar .card-sub{font-size:.58rem}
 .wide .wide-topbar .sec{margin:0;display:flex;flex-direction:column;overflow:hidden}
 .wide .wide-topbar .sec-hd{padding:2px 0}
-.wide .wide-topbar .chart-box{flex:1;min-height:0;overflow:hidden;position:relative}
-.wide .wide-topbar .chart-box canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+.wide .wide-topbar .chart-box{flex:1;min-height:0;overflow:hidden;position:relative;padding:8px}
+.wide .wide-topbar .chart-box canvas{position:absolute;top:8px;left:8px;right:8px;bottom:8px;width:calc(100% - 16px)!important;height:calc(100% - 16px)!important}
 .wide .wide-left .sec{margin-bottom:8px}
 .wide .wide-left .tw{max-height:none}
 .wide .wide-left .cli-panel{max-height:240px}
