@@ -42,10 +42,21 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* ═══ LAYOUT ═══ */
 .app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 5% 40px}
-.wide .app{max-width:none;padding:0 30px 40px}
-.wide .cards{grid-template-columns:repeat(6,1fr)}
-.wide .tg{grid-template-columns:1fr 1fr}
-.wide .tw{max-height:600px}
+.wide .app{max-width:none;padding:0 24px 20px}
+.wide .cards{grid-template-columns:repeat(5,1fr);gap:8px}
+.wide .card{padding:12px 14px}
+.wide .card-val{font-size:1.2rem}
+.wide .sec{margin-bottom:8px}
+.wide .sec-hd{padding:6px 0}
+.wide .wide-grid{display:grid;grid-template-columns:340px 1fr;gap:12px;height:calc(100vh - 180px)}
+.wide .wide-left{display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.wide .wide-left>.sec{flex:1;min-height:0;overflow:hidden}
+.wide .wide-left .chart-box{height:160px}
+.wide .wide-left .cli-panel{max-height:none;flex:1;overflow-y:auto}
+.wide .wide-left #reportBox{max-height:200px;overflow-y:auto}
+.wide .wide-right{display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.wide .wide-right>.sec{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.wide .wide-right .tw{max-height:none;flex:1;overflow-y:auto}
 
 /* ═══ HEADER ═══ */
 .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
@@ -746,7 +757,23 @@ document.querySelectorAll('.cp-btn').forEach(b=>b.addEventListener('click',()=>{
 
 let _reportLoaded=false;
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot();if(!_reportLoaded&&D.followed){_reportLoaded=true;loadReport()}}catch(e){console.error('fetch:',e);dot()}}
-if(new URLSearchParams(location.search).has('wide'))document.body.classList.add('wide');
+if(new URLSearchParams(location.search).has('wide')){
+  document.body.classList.add('wide');
+  // Restructure DOM for wide layout
+  const app=document.querySelector('.app');
+  const secs=app.querySelectorAll('.sec');
+  // secs: 0=activity, 1=trader perf, 2=equity, 3=active pos, 4=closed pos
+  const grid=document.createElement('div');grid.className='wide-grid';
+  const left=document.createElement('div');left.className='wide-left';
+  const right=document.createElement('div');right.className='wide-right';
+  if(secs[2])left.appendChild(secs[2]); // equity curve
+  if(secs[1])left.appendChild(secs[1]); // trader performance
+  if(secs[0])left.appendChild(secs[0]); // activity
+  if(secs[3])right.appendChild(secs[3]); // active positions
+  if(secs[4])right.appendChild(secs[4]); // closed positions
+  grid.appendChild(left);grid.appendChild(right);
+  app.appendChild(grid);
+}
 load();setInterval(load,10000);setTimeout(initSSE,2000);
 // Auto-refresh report every 60s
 setInterval(loadReport,60000);
