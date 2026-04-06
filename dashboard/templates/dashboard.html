@@ -78,13 +78,13 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .wide .wide-log-row .cli-panel{max-height:none;flex:1;overflow-y:auto}
 .wide .wide-log-row>.sec{max-height:310px}
 .wide .expo-box{background:var(--bg2);border:1px solid var(--border);padding:14px 16px;flex:1;display:flex;flex-direction:column;justify-content:space-evenly}
-.wide .expo-row{display:flex;flex-direction:column;gap:4px;padding:6px 0;border-bottom:1px solid rgba(30,30,48,0.4)}
-.wide .expo-row:last-child{border-bottom:none}
-.wide .expo-top{display:flex;justify-content:space-between;align-items:baseline}
-.wide .expo-name{font-size:.78rem;font-weight:600;color:var(--gold);letter-spacing:.02em}
-.wide .expo-bar-bg{width:100%;height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;position:relative}
-.wide .expo-bar-fill{height:100%;border-radius:5px;transition:width .5s;box-shadow:0 0 6px rgba(0,0,0,0.3)}
-.wide .expo-pct{font-size:.68rem;color:var(--text-mid);font-family:var(--mono)}
+.expo-row{display:flex;flex-direction:column;gap:4px;padding:6px 0;border-bottom:1px solid rgba(30,30,48,0.4)}
+.expo-row:last-child{border-bottom:none}
+.expo-top{display:flex;justify-content:space-between;align-items:baseline}
+.expo-name{font-size:.78rem;font-weight:600;color:var(--gold);letter-spacing:.02em}
+.expo-bar-bg{width:100%;height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;position:relative}
+.expo-bar-fill{height:100%;border-radius:5px;transition:width .5s;box-shadow:0 0 6px rgba(0,0,0,0.3)}
+.expo-pct{font-size:.68rem;color:var(--text-mid);font-family:var(--mono)}
 /* Right: trader perf full height, sticky */
 .wide .wide-right{overflow-y:auto;padding-left:4px;border-left:1px solid var(--border)}
 .wide .wide-right::-webkit-scrollbar{width:3px}
@@ -332,6 +332,12 @@ tr:hover{background:rgba(201,168,76,0.03)}
   <div class="sec fi d3">
     <div class="sec-hd"><span class="sec-t">Recent Activity</span></div>
     <div class="cli-panel" id="histPanel"></div>
+  </div>
+
+  <!-- EXPOSURE METER -->
+  <div class="sec fi d3">
+    <div class="sec-hd"><span class="sec-t">Exposure</span></div>
+    <div class="expo-box" id="expoBoxNormal" style="background:var(--bg2);border:1px solid var(--border);padding:14px 16px"></div>
   </div>
 
   <!-- PERFORMANCE REPORT (auto-generated) -->
@@ -791,12 +797,12 @@ function renderLog(){
 }
 
 function renderExposure(){
-  const box=$('expoBox');if(!box||!D||!D.followed)return;
+  if(!D||!D.followed)return;
   const expoMap={'xsaghav':0.60,'sovereign2013':0.40,'jargs':0.40,'king7777777':0.30,'fsavhlc':0.20};
   const defMax=0.33;
   const totalVal=(D.summary?D.summary.total_value:0)||400;
   const trades=D.open_trades||[];
-  box.innerHTML=D.followed.map(f=>{
+  const html=D.followed.map(f=>{
     const name=f.username||f.address.substring(0,10);
     const cap=totalVal*(expoMap[name.toLowerCase()]||defMax);
     const used=trades.filter(t=>(t.wallet_username||'')==name).reduce((a,t)=>a+(t.size||0),0);
@@ -807,6 +813,8 @@ function renderExposure(){
       <div class="expo-bar-bg"><div class="expo-bar-fill" style="width:${pct}%;background:${color}"></div></div>
     </div>`;
   }).join('');
+  const b1=$('expoBox');if(b1)b1.innerHTML=html;
+  const b2=$('expoBoxNormal');if(b2)b2.innerHTML=html;
 }
 
 let CP='1d';
