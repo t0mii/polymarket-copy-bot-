@@ -695,7 +695,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('v-roi-detail').textContent='all time';
   $('v-cash').textContent='$'+fm(w);
   $('v-active').textContent='$'+fm(av);$('v-active').className='card-val gld';
-  $('v-open-detail').innerHTML='$'+fm(av+pv)+' total'+(pv>0.5?' · $'+fm(pv)+' pending':'');
+  $('v-open-detail').innerHTML='$'+fm(av+pv)+' total';
   $('v-pending').textContent=pv>0.5?'$'+fm(pv):'$0.00';
   $('v-pending').className='card-val '+(pv>0.5?'up':'neu');
 
