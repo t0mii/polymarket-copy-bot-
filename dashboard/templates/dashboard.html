@@ -920,7 +920,7 @@ function showTraderDetail(traderName){
     sportCounts[key].count++;
   }
   const sportsSorted=Object.entries(sportCounts).sort((a,b)=>b[1].count-a[1].count);
-  const sportsHtml=sportsSorted.length?'<div style="display:flex;flex-direction:column;gap:5px">'+sportsSorted.map(([name,{count,emoji}])=>
+  const sportsHtml=sportsSorted.length?'<div style="display:flex;flex-wrap:wrap;gap:5px;align-content:center">'+sportsSorted.map(([name,{count,emoji}])=>
     `<span title="${name}: ${count} trades" style="background:var(--bg);padding:4px 10px;border-radius:4px;font-size:.82rem;cursor:default;border:1px solid var(--border);white-space:nowrap">${emoji} <span style="font-weight:600">${count}</span></span>`
   ).join('')+'</div>':'';
   // Pie chart via conic-gradient
