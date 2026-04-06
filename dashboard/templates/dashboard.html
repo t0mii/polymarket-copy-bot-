@@ -476,7 +476,7 @@ function _sortList(list,table){
 const AC=new(window.AudioContext||window.webkitAudioContext)();
 let _moneyBuffer=null;
 fetch('/static/money-button.mp3').then(r=>r.arrayBuffer()).then(b=>AC.decodeAudioData(b)).then(buf=>{_moneyBuffer=buf}).catch(()=>{});
-function playMoney(){if(!_moneyBuffer)return;try{AC.resume();const s=AC.createBufferSource(),g=AC.createGain();s.buffer=_moneyBuffer;g.gain.value=0.02;s.connect(g);g.connect(AC.destination);s.start()}catch(e){}}
+function playMoney(){if(!_moneyBuffer)return;try{AC.resume();const s=AC.createBufferSource(),g=AC.createGain();s.buffer=_moneyBuffer;g.gain.value=0.18;s.connect(g);g.connect(AC.destination);s.start()}catch(e){}}
 document.addEventListener('click',()=>{if(AC.state==='suspended')AC.resume()});
 const hist=[];
 const $=id=>document.getElementById(id);
