@@ -461,7 +461,8 @@ function _sortList(list,table){
     return s.dir==='asc'?cmp:-cmp});
 }
 const AC=new(window.AudioContext||window.webkitAudioContext)();
-document.addEventListener('click',()=>{if(AC.state==='suspended')AC.resume()},{once:true});
+const _moneyAudio=new Audio('/static/money-button.mp3');_moneyAudio.volume=0.02;_moneyAudio.preload='auto';
+document.addEventListener('click',()=>{if(AC.state==='suspended')AC.resume();_moneyAudio.play().then(()=>_moneyAudio.pause()).catch(()=>{})},{once:true});
 const hist=[];
 const $=id=>document.getElementById(id);
 const pc=v=>v>=0?'up':'dn';
@@ -505,7 +506,7 @@ function _showCloseAlert(t){
     <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
     <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
     </div>${gifHtml}</div>`;
-  if(bigWin&&sfxPop){try{AC.resume();const a=new Audio('/static/money-button.mp3');a.volume=0.02;a.play().catch(()=>{})}catch(e){}}
+  if(bigWin&&sfxPop){try{_moneyAudio.currentTime=0;_moneyAudio.play().catch(()=>{})}catch(e){}}
   _alertIsWin=w;_alertIsBigWin=bigWin;
   if(_alertTimer)clearTimeout(_alertTimer);
   _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_alertIsBigWin=false;_processAlertQueue()},6000);
