@@ -300,6 +300,7 @@ tr:hover{background:rgba(201,168,76,0.03)}
     <div class="hd-right">
       <button class="sfx-btn" id="sfxBtn" onclick="togSfxPanel()"><span id="sfxIco">&#128264;</span> Sound</button>
       <button class="sfx-btn" id="lockBtn" onclick="togLock()" title="Unlock to enable manual close"><span id="lockIco">&#128274;</span></button>
+      <button class="sfx-btn" id="wideBtn" onclick="togWide()" title="Toggle widescreen">&#9724; Wide</button>
       <nav class="nav">
         <a href="/copy">Terminal</a>
         <a href="/wallets">Settings</a>
@@ -808,6 +809,11 @@ document.querySelectorAll('.cp-btn').forEach(b=>b.addEventListener('click',()=>{
 
 let _reportLoaded=false;
 async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot();if(!_reportLoaded&&D.followed){_reportLoaded=true;loadReport()}}catch(e){console.error('fetch:',e);dot()}}
+function togWide(){
+  const u=new URL(location);
+  if(u.searchParams.has('wide')){u.searchParams.delete('wide')}else{u.searchParams.set('wide','1')}
+  location.href=u.toString();
+}
 if(new URLSearchParams(location.search).has('wide')){
   document.body.classList.add('wide');
   const app=document.querySelector('.app');
