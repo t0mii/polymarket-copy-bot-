@@ -66,17 +66,32 @@ def main():
         _offset += 500
 
     resolved = []
+    skipped_awaiting = 0
+    skipped_dust = 0
     for p in all_api:
         cp = float(p.get("curPrice", 0) or 0)
         cv = float(p.get("currentValue", 0) or 0)
         cid = p.get("conditionId", "")
-        if cp >= 0.99 and cv > 0.05 and cid:
-            resolved.append({
-                "condition_id": cid,
-                "size": cv,
-                "side": p.get("outcome", ""),
-                "market_question": p.get("title", ""),
-            })
+        if cp < 0.99 or cv <= 0.05 or not cid:
+            continue
+        # Only redeem positions that are actually resolved on-chain
+        if not p.get("redeemable", False):
+            skipped_awaiting += 1
+            continue
+        # Skip dust positions (redeem costs more than value)
+        if cv < 0.20:
+            skipped_dust += 1
+            continue
+        resolved.append({
+            "condition_id": cid,
+            "size": cv,
+            "side": p.get("outcome", ""),
+            "market_question": p.get("title", ""),
+        })
+    if skipped_awaiting:
+        logger.info("Skipped %d positions awaiting on-chain resolve", skipped_awaiting)
+    if skipped_dust:
+        logger.info("Skipped %d dust positions (< $0.20)", skipped_dust)
 
     if not resolved:
         logger.info("No resolved positions with value to redeem!")
