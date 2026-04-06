@@ -60,13 +60,14 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 /* Top bar: cards left + chart right */
 .wide .wide-topbar{display:grid;grid-template-columns:55% 1fr;gap:10px;margin-bottom:8px;align-items:stretch;overflow:hidden}
 .wide .wide-topbar .cards{grid-template-columns:repeat(5,1fr);gap:4px;margin:0}
-.wide .wide-topbar .card{padding:8px 10px;text-align:center;display:flex;flex-direction:column;justify-content:center}
-.wide .wide-topbar .card-val{font-size:1.2rem}
-.wide .wide-topbar .card-lbl{font-size:.52rem;margin-bottom:2px}
-.wide .wide-topbar .card-sub{font-size:.55rem}
-.wide .wide-topbar .sec{margin:0;display:flex;flex-direction:column}
+.wide .wide-topbar .card{padding:10px 10px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.wide .wide-topbar .card-val{font-size:1.35rem}
+.wide .wide-topbar .card-lbl{font-size:.58rem;margin-bottom:3px}
+.wide .wide-topbar .card-sub{font-size:.58rem}
+.wide .wide-topbar .sec{margin:0;display:flex;flex-direction:column;overflow:hidden}
 .wide .wide-topbar .sec-hd{padding:2px 0}
-.wide .wide-topbar .chart-box{flex:1;min-height:120px;overflow:hidden}
+.wide .wide-topbar .chart-box{flex:1;min-height:0;overflow:hidden;position:relative}
+.wide .wide-topbar .chart-box canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
 .wide .wide-left .sec{margin-bottom:8px}
 .wide .wide-left .tw{max-height:none}
 .wide .wide-left .cli-panel{max-height:240px}
