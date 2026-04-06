@@ -438,7 +438,9 @@ function beepClose(){if(!sfx)return;try{const o=AC.createOscillator(),g=AC.creat
   o.type='triangle';o.frequency.setValueAtTime(880,AC.currentTime);o.frequency.exponentialRampToValueAtTime(440,AC.currentTime+.15);
   o.frequency.exponentialRampToValueAtTime(220,AC.currentTime+.3);g.gain.setValueAtTime(.15,AC.currentTime);
   g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.5);o.start();o.stop(AC.currentTime+.5)}catch(e){}}
-function alertClose(t){const o=$('alOv');o.style.display='flex';
+let _alertTimer=null,_alertIsWin=false,_alertQueue=[];
+function _showCloseAlert(t){
+  const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
   const bigWin=t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
   const gifUrl=bigWin?'https://media1.tenor.com/m/sIBXbAf_oEcAAAAC/ref-with-yellow-cards-fifa18.gif':w?'https://media1.tenor.com/m/WYdYdbMfNBgAAAAC/money.gif':'';
@@ -450,7 +452,26 @@ function alertClose(t){const o=$('alOv');o.style.display='flex';
     <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
     </div>${gifHtml}</div>`;
   if(bigWin&&sfxPop){try{const a=new Audio('/static/money-button.mp3');a.volume=0.02;a.play()}catch(e){}}
-  setTimeout(()=>{o.style.display='none'},6000)}
+  _alertIsWin=w;
+  if(_alertTimer)clearTimeout(_alertTimer);
+  _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_processAlertQueue()},6000);
+}
+function _processAlertQueue(){
+  if(!_alertQueue.length)return;
+  const next=_alertQueue.shift();
+  _showCloseAlert(next);
+}
+function alertClose(t){
+  const w=t.pnl>=0;
+  const isShowing=_alertTimer!==null;
+  if(!isShowing){_showCloseAlert(t);return}
+  // Win showing: new win replaces, loss queued
+  if(_alertIsWin&&!w){_alertQueue.push(t);return}
+  // Loss showing: win replaces immediately
+  if(!_alertIsWin&&w){_showCloseAlert(t);return}
+  // Same type: new replaces
+  _showCloseAlert(t);
+}
 
 function initSSE(){try{const es=new EventSource('/api/stream');
   es.onopen=()=>{sseOk=true;dot()};
