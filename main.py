@@ -111,12 +111,17 @@ def update_prices():
                         continue
                     # Only auto-sell/close positions that are tracked in copy_trades
                     _our_trade = None
+                    _pos_side = _p.get("outcome", "")
                     try:
                         from database.db import get_connection as _gc_check
                         with _gc_check() as _cc:
                             _our_trade = _cc.execute(
-                                "SELECT id, size, entry_price FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
+                                "SELECT id, size, entry_price, side FROM copy_trades WHERE condition_id=? AND side=? AND status='open'", (_cid_pos, _pos_side)
                             ).fetchone()
+                            if not _our_trade:
+                                _our_trade = _cc.execute(
+                                    "SELECT id, size, entry_price, side FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
+                                ).fetchone()
                         if not _our_trade:
                             continue  # not our bot's position, skip
                     except Exception:
@@ -135,8 +140,13 @@ def update_prices():
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _did_close = _conn.execute(
                                     "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
-                                    "WHERE condition_id=? AND status='open'",
-                                    (_close_pnl, _now, _cid_pos)).rowcount > 0
+                                    "WHERE condition_id=? AND side=? AND status='open'",
+                                    (_close_pnl, _now, _cid_pos, _pos_side)).rowcount > 0
+                                if not _did_close:
+                                    _did_close = _conn.execute(
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
+                                        "WHERE condition_id=? AND status='open'",
+                                        (_close_pnl, _now, _cid_pos)).rowcount > 0
                         except Exception:
                             pass
                         if _did_close:
@@ -162,8 +172,13 @@ def update_prices():
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _did_close = _conn.execute(
                                     "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
-                                    "WHERE condition_id=? AND status='open'",
-                                    (_pnl_won, _now, _cid_pos)).rowcount > 0
+                                    "WHERE condition_id=? AND side=? AND status='open'",
+                                    (_pnl_won, _now, _cid_pos, _pos_side)).rowcount > 0
+                                if not _did_close:
+                                    _did_close = _conn.execute(
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
+                                        "WHERE condition_id=? AND status='open'",
+                                        (_pnl_won, _now, _cid_pos)).rowcount > 0
                         except Exception:
                             pass
                         if _did_close:
