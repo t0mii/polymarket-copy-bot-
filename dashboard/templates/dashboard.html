@@ -98,7 +98,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   border-bottom:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap;gap:12px}
 .hd-left{display:flex;align-items:center;gap:8px}
 .hd-center{display:flex;align-items:center;gap:16px;margin:0 auto}
-.digiclock{display:none;font-family:var(--font);font-size:1.4rem;font-weight:300;letter-spacing:.12em;color:var(--text);text-shadow:0 0 20px rgba(201,168,76,0.15)}
+.digiclock{display:none;font-family:var(--font);font-size:1.4rem;font-weight:300;letter-spacing:.12em;color:var(--gold);text-shadow:0 0 20px rgba(201,168,76,0.15)}
 .wide .digiclock{display:block}
 .status-tags{display:flex;gap:10px}
 .st{font-size:.65rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;letter-spacing:.06em}
@@ -669,7 +669,7 @@ function _checkStreaks(pnl){
   const cfg=isWin?_streakWinCfg:_streakLossCfg;
   const streak=isWin?_winStreak:_lossStreak;
   let match=null;
-  for(let i=cfg.length-1;i>=0;i--){if(streak>=cfg[i].n&&streak===cfg[i].n){match=cfg[i];break}}
+  for(let i=cfg.length-1;i>=0;i--){if(streak===cfg[i].n){match=cfg[i];break}}
   if(!match)return;
   if(isWin&&!sfxStreak)return;
   if(!isWin&&!sfxLStreak)return;
@@ -699,7 +699,7 @@ function _showCloseAlert(t){
   if(!sfx&&!t._test)return;
   const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
-  const bigWin=w&&t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
+  const bigWin=t._bigWin||(w&&t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5);
   const winGif=bigWin?'https://media.giphy.com/media/x0GeFXErpcRk4/giphy.gif':'https://gifdb.com/images/high/internet-star-hasbulla-counting-money-money-money-zr98gdcan97a4hn8.gif';
   const gifUrl=w?winGif:_lossGif;
   const gifHtml='<img src="'+gifUrl+'" style="width:150px;max-height:120px;object-fit:contain;border-radius:8px;margin-left:14px;flex-shrink:0" alt="GIF">';
@@ -726,13 +726,14 @@ function _processAlertQueue(){
 function alertClose(t){
   const w=t.pnl>=0;
   const bigWin=t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5;
+  t._bigWin=bigWin;
   const isShowing=_alertTimer!==null;
   if(!isShowing){_showCloseAlert(t);return}
   if(_alertIsBigWin){_alertQueue.push(t);return}
   if(bigWin){_showCloseAlert(t);return}
   if(_alertIsWin&&!w){_alertQueue.push(t);return}
   if(!_alertIsWin&&w){_showCloseAlert(t);return}
-  _showCloseAlert(t);
+  _alertQueue.push(t);
 }
 
 function initSSE(){try{const es=new EventSource('/api/stream');
@@ -742,7 +743,7 @@ function initSSE(){try{const es=new EventSource('/api/stream');
     if(sfxTrade){_showMeme({gif:_rnd(_tradeGifs),lbl:_rnd(_tradeLabels),snd:_sndBell,vol:0.2,dur:4000,color:'var(--gold)'})}
     hist.unshift(d);if(hist.length>20)hist.pop();ticker();setTimeout(load,1500)}catch(x){}});
   es.addEventListener('trade_closed',e=>{try{const d=JSON.parse(e.data);alertClose(d);beepClose();
-    _checkStreaks(d.pnl||0);
+    _checkStreaks(d.pnl??0);
     setTimeout(load,1500)}catch(x){}})}catch(e){console.log('SSE not available')}}
 function dot(){
   $('st-ws-dot').className='st-dot '+(sseOk?'on':'off');
