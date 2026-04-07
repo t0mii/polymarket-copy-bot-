@@ -2,6 +2,99 @@
 
 Automated copy-trading bot for [Polymarket](https://polymarket.com). Follows top traders and copies their positions with real money via the Polymarket CLOB API.
 
+## ELI5 — Was macht der Bot? (Deutsch)
+
+<details>
+<summary>Klick hier wenn du keine Ahnung von Trading hast</summary>
+
+### Was ist Polymarket?
+
+Stell dir vor, du kannst auf alles wetten: "Gewinnt Bayern heute?" oder "Wird Trump angeklagt?". Polymarket ist genau das — eine Wettboerse im Internet. Der Preis zeigt, wie wahrscheinlich etwas ist:
+
+- **10 Cent** = "Wird wahrscheinlich nicht passieren" (10% Chance)
+- **50 Cent** = "Kann so oder so ausgehen" (Muenzwurf)
+- **90 Cent** = "Wird fast sicher passieren" (90% Chance)
+
+Wenn du fuer 30 Cent kaufst und es passiert, bekommst du **1 Dollar** zurueck. Passiert es nicht, bekommst du **0 Dollar**. Dein Gewinn waere also 70 Cent pro Anteil.
+
+### Was macht der Bot?
+
+Es gibt Leute auf Polymarket die richtig gut sind — die analysieren den ganzen Tag Statistiken und machen damit Millionen. Unser Bot **schaut denen ueber die Schulter** und kopiert ihre Wetten automatisch.
+
+```
+Trader kauft "Lakers gewinnen" fuer $500 bei 40 Cent
+     ↓ (5 Sekunden spaeter)
+Bot kauft dasselbe fuer $15 bei 40 Cent
+     ↓ (Lakers gewinnen)
+Trader bekommt $1250 (Gewinn: $750)
+Bot bekommt $37.50 (Gewinn: $22.50)
+```
+
+Du musst nichts wissen. Der Bot kopiert einfach die Profis.
+
+### Warum nicht einfach alles kopieren?
+
+Weil die Profis manchmal Mist bauen. Deshalb hat der Bot **Filter**:
+
+**Hedge-Erkennung** — Manche Trader kaufen BEIDE Seiten (Team A UND Team B). Das ist wie gleichzeitig auf Rot und Schwarz setzen — du verlierst immer die Gebuehren. Der Bot erkennt das und kopiert beides NICHT.
+
+```
+Trader kauft "Lakers gewinnen"  → Bot wartet 60 Sekunden...
+Trader kauft "Celtics gewinnen" → HEDGE! Bot: "Nee, lass mal."
+```
+
+**Groessen-Erkennung** — Wenn ein Trader normalerweise $100 setzt, aber diesmal nur $5, ist das wahrscheinlich ein Test. Wenn er $300 setzt, ist er sich sicher. Der Bot kopiert proportional:
+
+```
+Trader setzt wenig  ($5 von normal $100)  → Bot setzt Mini-Betrag ($1)
+Trader setzt normal ($100)                → Bot setzt normal ($15)
+Trader setzt viel   ($300 von normal $100) → Bot setzt mehr ($45)
+```
+
+**Event-Timing** — Wenn ein NBA-Spiel erst in 8 Stunden anfaengt, kauft der Bot noch nicht. Er wartet bis 2 Stunden vorher, weil sich der Preis noch aendern kann. Dann kauft er zum aktuellen Preis.
+
+**Preis-Drift** — Wenn der Trader bei 50 Cent gekauft hat, aber als unser Bot dran ist steht der Preis schon bei 60 Cent: Zu teuer, wird uebersprungen. Die Gewinnmarge ist dann zu klein.
+
+### Was passiert wenn wir gewinnen?
+
+Die Wette geht auf 100 Cent (= $1 pro Anteil). Der Bot verkauft automatisch bei 96 Cent, damit wir schnell wieder Cash haben fuer die naechste Wette. Reicht das Geld nicht zum Verkaufen, wartet der Bot bis der Markt "resolved" (offiziell ausgewertet) und loest die Gewinne ein.
+
+### Was passiert wenn wir verlieren?
+
+Die Wette geht auf 0 Cent. Der Bot markiert die Position als verloren und macht weiter. Kein Verkauf noetig — die Anteile sind einfach wertlos.
+
+### Kann ich Geld verlieren?
+
+**Ja.** Auch die besten Trader verlieren manchmal. Der Bot hat aber Sicherheits-Features:
+
+- **Cash Floor** — Unter $X wird nicht mehr gekauft (damit du nicht auf 0 gehst)
+- **Max pro Spiel** — Maximal $15 pro Spiel (damit nicht alles auf ein Ergebnis geht)
+- **Max pro Trader** — Jeder Trader darf maximal 33% deines Kapitals nutzen
+- **Stop-Loss** — Optional: Auto-Verkauf wenn eine Position zu viel verliert
+- **Take-Profit** — Optional: Auto-Verkauf wenn eine Position genug gewonnen hat
+
+### Was ist das Dashboard?
+
+Eine Website (auf deinem Server) wo du in Echtzeit siehst:
+
+- Wie viel Geld du hast
+- Welche Wetten offen sind
+- Wer wie viel Gewinn/Verlust macht
+- Eine Kurve wie sich dein Portfolio entwickelt
+- Meme-GIFs wenn du gewinnst oder verlierst (Hasbulla, John Cena, GTA Wasted...)
+
+### Brauche ich Ahnung von Trading?
+
+Nein. Du brauchst:
+1. Eine Polymarket-Wallet mit USDC drauf
+2. Einen Server (oder PC der 24/7 laeuft)
+3. Die `.env` Dateien richtig ausfuellen
+4. Trader aussuchen die du kopieren willst
+
+Den Rest macht der Bot.
+
+</details>
+
 ## Why Copy Trading?
 
 Polymarket's top traders make millions by analyzing sports, politics, and event outcomes. This bot watches their trades in real-time and mirrors them on your wallet — you profit from their research without doing it yourself.
