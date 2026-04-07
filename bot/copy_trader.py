@@ -818,6 +818,26 @@ def copy_followed_wallets():
                                 logger.info("[HEDGE-WAIT] Event exposure $%.0f >= max $%.0f, skipping: %s",
                                             _hw_evt_inv, config.MAX_PER_EVENT, td["question"][:40])
                                 continue
+                    # Event timing check: skip if event > MAX_HOURS away
+                    if config.MAX_HOURS_BEFORE_EVENT > 0:
+                        _hw_eslug = td["trade_data"].get("event_slug", "") or td["trade_data"].get("market_slug", "")
+                        if _hw_eslug:
+                            try:
+                                _hw_ev_r = requests.get("https://gamma-api.polymarket.com/events",
+                                                        params={"slug": _hw_eslug.split("/")[-1]}, timeout=5)
+                                if _hw_ev_r.ok and _hw_ev_r.json():
+                                    _hw_ev = _hw_ev_r.json()[0] if isinstance(_hw_ev_r.json(), list) else _hw_ev_r.json()
+                                    _hw_st = _hw_ev.get("startTime", "")
+                                    if _hw_st:
+                                        from datetime import datetime as _dt, timezone as _tz
+                                        _hw_start = _dt.fromisoformat(_hw_st.replace("Z", "+00:00"))
+                                        _hw_hours = (_hw_start - _dt.now(_tz.utc)).total_seconds() / 3600
+                                        if _hw_hours > config.MAX_HOURS_BEFORE_EVENT:
+                                            logger.info("[HEDGE-WAIT] Event in %.1fh > %.1fh max, skipping: %s",
+                                                        _hw_hours, config.MAX_HOURS_BEFORE_EVENT, td["question"][:40])
+                                            continue
+                            except Exception:
+                                pass
                     size = _calculate_position_size(entry_price, cash, 1.0,
                                                     portfolio_value=portfolio_value, trader_name=td["username"])
                     if size < MIN_TRADE_SIZE or cash < size:
