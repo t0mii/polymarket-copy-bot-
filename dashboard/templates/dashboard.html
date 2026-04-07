@@ -933,7 +933,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-num">${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
       <td class="c-num">$${t.size>=10?fm(t.size,1):fm(t.size)}</td>
       <td class="c-pnl"><button class="close-btn ${p>=0?'win':'loss'}" onclick="closeTrade(${t.id},this)" title="Close position #${t.id}" style="min-width:60px">${sg(p)}$${Math.abs(p)>=10?fm(Math.abs(p),1):fm(Math.abs(p))}</button></td>
-      <td class="c-evt2" style="font-size:.78rem">${_isEsport(t)?`${t.event_start?evtTime(t.event_start)+' ':''}<button class="live-btn" onclick="openStream('${(t.market_question||'').replace(/'/g,"\\'")}',this)" title="Find livestream">LIVE</button>`:evtTime(t.event_start)}</td>
+      <td class="c-evt2" style="font-size:.78rem">${_isEsport(t)?`<span class="live-time" data-q="${(t.market_question||'').replace(/"/g,'&quot;')}"></span> <button class="live-btn" onclick="openStream('${(t.market_question||'').replace(/'/g,"\\'")}',this)" title="Find livestream">LIVE</button>`:evtTime(t.event_start)}</td>
       <td class="c-time">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return'<div>'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+'</div><div style="font-size:.65rem;color:var(--text-dim)">'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+'</div>'}catch(e){return''}})():''}</td>
     </tr>`}).join('')
     :'<tr><td colspan="8" class="empty" style="border:0">Waiting for signals...</td></tr>';
@@ -1026,7 +1026,7 @@ document.querySelectorAll('.cp-btn').forEach(b=>b.addEventListener('click',()=>{
   b.classList.add('act');if(CI){CI.destroy();CI=null}chart(b.dataset.p)}))
 
 let _reportLoaded=false;
-async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot();_initStreaks();_checkPayouts();if(!_reportLoaded&&D.followed){_reportLoaded=true;loadReport()}}catch(e){console.error('fetch:',e);dot()}}
+async function load(){try{const r=await fetch('/api/live-data');D=await r.json();render();chart();dot();_initStreaks();_checkPayouts();_fetchLiveInfo();if(!_reportLoaded&&D.followed){_reportLoaded=true;loadReport()}}catch(e){console.error('fetch:',e);dot()}}
 function togWide(){
   const u=new URL(location);
   if(u.searchParams.has('wide')){u.searchParams.delete('wide')}else{u.searchParams.set('wide','1')}
@@ -1286,6 +1286,41 @@ function togLock(){
   fetch('/api/auth/check',{method:'POST',headers:{'X-Dashboard-Key':input,'Content-Type':'application/json'}})
     .then(r=>{if(r.ok){localStorage.setItem('dashSecret',input);_updateLockIcon();alert('Unlocked!')}else{alert('Falscher Key')}})
     .catch(()=>alert('Verbindungsfehler'));
+}
+
+// Auto-fetch match info for esports LIVE buttons
+let _liveInfoCache={};
+function _fetchLiveInfo(){
+  document.querySelectorAll('.live-time[data-q]').forEach(el=>{
+    const q=el.dataset.q;
+    if(!q||_liveInfoCache[q]!==undefined)return;
+    _liveInfoCache[q]=null; // mark as loading
+    fetch('/api/stream/find?q='+encodeURIComponent(q))
+      .then(r=>r.json())
+      .then(d=>{
+        _liveInfoCache[q]=d;
+        if(d.source==='pandascore'){
+          let info='';
+          // Running time
+          if(d.begin_at){
+            const started=new Date(d.begin_at);
+            const mins=Math.round((Date.now()-started.getTime())/60000);
+            if(mins>0&&mins<600) info+=mins+'m';
+          }
+          // Score (e.g. "1-0")
+          if(d.score) info+=(info?' · ':'')+d.score;
+          // BO info
+          if(d.bo) info+=(info?' ':'')+d.bo;
+          if(d.status==='running'){
+            el.innerHTML='<span style="color:var(--green);font-weight:600">● '+(info||'LIVE')+'</span>';
+          }else{
+            el.innerHTML=info?'<span style="color:#f59e0b">'+info+'</span>':'';
+          }
+        }else{
+          el.innerHTML='';
+        }
+      }).catch(()=>{_liveInfoCache[q]=false});
+  });
 }
 
 function _isEsport(t){
