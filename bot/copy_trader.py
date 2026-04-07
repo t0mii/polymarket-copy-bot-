@@ -182,6 +182,71 @@ for _ats_entry in config.AVG_TRADER_SIZE_MAP.split(","):
         _AVG_TRADER_SIZE_MAP[_ats_parts[0].strip().lower()] = float(_ats_parts[1].strip())
 
 
+# Per-trader category blacklist: {"tradername": {"tennis", "mlb"}}
+_CATEGORY_BLACKLIST: dict[str, set[str]] = {}
+for _cbl_entry in config.CATEGORY_BLACKLIST_MAP.split(","):
+    _cbl_entry = _cbl_entry.strip()
+    if ":" in _cbl_entry:
+        _cbl_parts = _cbl_entry.split(":", 1)
+        _cbl_name = _cbl_parts[0].strip().lower()
+        _cbl_cats = {c.strip().lower() for c in _cbl_parts[1].split("|") if c.strip()}
+        _CATEGORY_BLACKLIST[_cbl_name] = _cbl_cats
+
+# Category keywords for market question detection
+_CATEGORY_KEYWORDS = {
+    "nba": ["nba", "lakers", "celtics", "warriors", "bulls", "bucks", "heat", "knicks", "76ers",
+            "nets", "clippers", "mavericks", "nuggets", "suns", "grizzlies", "pelicans", "hawks",
+            "cavaliers", "wizards", "hornets", "magic", "pacers", "pistons", "raptors", "kings",
+            "spurs", "thunder", "timberwolves", "trail blazers", "jazz", "rockets"],
+    "mlb": ["mlb", "yankees", "red sox", "cubs", "dodgers", "mets", "astros", "braves", "phillies",
+            "padres", "cardinals", "orioles", "rays", "guardians", "rangers", "twins", "mariners",
+            "royals", "tigers", "white sox", "pirates", "reds", "brewers", "diamondbacks", "giants",
+            "rockies", "marlins", "athletics", "angels", "nationals"],
+    "nhl": ["nhl", "bruins", "rangers", "maple leafs", "panthers", "hurricanes", "devils",
+            "islanders", "capitals", "penguins", "flyers", "blue jackets", "red wings", "lightning",
+            "senators", "canadiens", "sabres", "jets", "stars", "avalanche", "wild", "predators",
+            "blues", "blackhawks", "flames", "oilers", "canucks", "kraken", "golden knights", "ducks", "sharks"],
+    "nfl": ["nfl", "chiefs", "eagles", "49ers", "ravens", "cowboys", "bills", "dolphins",
+            "lions", "packers", "texans", "bengals", "steelers", "broncos", "chargers", "rams",
+            "seahawks", "bears", "vikings", "saints", "falcons", "buccaneers", "commanders",
+            "cardinals", "colts", "jaguars", "titans", "raiders", "jets", "patriots", "panthers", "giants"],
+    "tennis": ["tennis", "atp", "wta", "roland garros", "wimbledon", "us open tennis",
+               "australian open", "monte carlo", "madrid open", "rome open", "indian wells",
+               "miami open", "campinas", "sarasota", "monza", "challenger"],
+    "soccer": ["soccer", "football", "premier league", "la liga", "bundesliga", "serie a",
+               "ligue 1", "champions league", "ucl", "europa league", "mls",
+               "bayern", "barcelona", "madrid", "arsenal", "liverpool", "manchester",
+               "chelsea", "tottenham", "juventus", "inter milan", "ac milan", "psg",
+               "freiburg", "dortmund", "southampton", "liga mx", "copa"],
+    "cs": ["counter-strike", "cs2", "cs:", "csgo"],
+    "lol": ["lol:", "league of legends"],
+    "valorant": ["valorant", "val:"],
+    "dota": ["dota 2", "dota:"],
+    "geopolitics": ["trump", "iran", "tariff", "sanctions", "war", "election", "hormuz",
+                    "china", "nato", "congress", "senate", "president", "minister"],
+    "cricket": ["cricket", "t20", "ipl", "test match", "odi"],
+}
+
+
+def _detect_category(question: str) -> str:
+    """Detect category from market question. Returns lowercase category name or empty string."""
+    q = question.lower()
+    for cat, keywords in _CATEGORY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in q:
+                return cat
+    return ""
+
+
+def _is_category_blocked(trader_name: str, question: str) -> bool:
+    """Check if this trade's category is blacklisted for this trader."""
+    blocked = _CATEGORY_BLACKLIST.get(trader_name.lower())
+    if not blocked:
+        return False
+    cat = _detect_category(question)
+    return cat in blocked
+
+
 def _calculate_position_size(entry_price: float, cash: float, trader_ratio: float = 1.0,
                              portfolio_value: float = 0, trader_name: str = "") -> float:
     """Bet-Sizing: X% vom Portfolio/Cash × Preis-Signal × proportionaler Trader-Multiplikator.
@@ -433,6 +498,9 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 continue
 
             # === SAME FILTERS AS ACTIVITY SCAN ===
+            # Category blacklist
+            if _is_category_blocked(username, pos["market_question"]):
+                continue
             # Price range filter (per-trader override via MIN/MAX_ENTRY_PRICE_MAP)
             _min_price = _MIN_ENTRY_PRICE_MAP.get(username.lower(), config.MIN_ENTRY_PRICE)
             _max_price = _MAX_ENTRY_PRICE_MAP.get(username.lower(), config.MAX_ENTRY_PRICE)
@@ -1068,6 +1136,12 @@ def copy_followed_wallets():
                     pass
 
             # === RN1 SMART-FILTER ===
+            # 0) Category blacklist: skip blocked categories for this trader
+            if _is_category_blocked(username, question):
+                _cat = _detect_category(question)
+                logger.info("[FILTER] Category '%s' blocked for %s: %s", _cat, username, question[:40])
+                continue
+
             # 1) Min Trader USD: per-trader override or global default
             dollar_value = t.get("usdc_size", 0)
             _min_usd = _MIN_TRADER_USD_MAP.get(username.lower(), config.MIN_TRADER_USD)
