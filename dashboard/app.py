@@ -914,7 +914,7 @@ def _find_stream(market_question: str) -> dict:
             names = []
             for opp in opponents:
                 o = opp.get("opponent", {})
-                names.extend([o.get("name", "").lower(), o.get("acronym", "").lower(), o.get("slug", "").lower()])
+                names.extend([(o.get("name") or "").lower(), (o.get("acronym") or "").lower(), (o.get("slug") or "").lower()])
 
             # Score: how many of our team name words match
             score = 0
