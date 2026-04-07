@@ -493,8 +493,17 @@ def api_settings():
         # --- Circuit Breaker ---
         {"key": "CB_THRESHOLD", "value": str(config.CB_THRESHOLD) + " failures", "desc": "API failures before pause"},
         {"key": "CB_PAUSE_SECS", "value": _sec(config.CB_PAUSE_SECS), "desc": "Pause duration after breaker trips"},
+        # --- Order Execution ---
+        {"key": "BUY_SLIPPAGE_LEVELS", "value": config.BUY_SLIPPAGE_LEVELS, "desc": "Buy retry slippage steps"},
+        {"key": "SELL_SLIPPAGE_LEVELS", "value": config.SELL_SLIPPAGE_LEVELS, "desc": "Sell retry slippage steps"},
+        {"key": "DELAYED_BUY_VERIFY_SECS", "value": _sec(config.DELAYED_BUY_VERIFY_SECS), "desc": "Verify delayed buy orders"},
+        {"key": "DELAYED_SELL_VERIFY_SECS", "value": _sec(config.DELAYED_SELL_VERIFY_SECS), "desc": "Verify delayed sell orders"},
         # --- Fill Verification ---
         {"key": "FILL_VERIFY_DELAY_SECS", "value": _sec(config.FILL_VERIFY_DELAY_SECS), "desc": "Delay before checking fill amount"},
+        {"key": "MIN_FILL_AMOUNT", "value": _dlr(config.MIN_FILL_AMOUNT), "desc": "Min USDC change for valid fill"},
+        # --- Position Tracking ---
+        {"key": "MISS_COUNT_TO_CLOSE", "value": str(config.MISS_COUNT_TO_CLOSE) if config.MISS_COUNT_TO_CLOSE > 0 else "OFF", "desc": "Close stale positions after N misses"},
+        {"key": "EVENT_WAIT_MAX_SECS", "value": str(config.EVENT_WAIT_MAX_SECS // 3600) + "h", "desc": "Max queued trade age"},
     ]
     traders = []
     for w in followed:
