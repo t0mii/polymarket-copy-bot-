@@ -112,7 +112,8 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         # Market Order: try with increasing slippage until filled
         # IMPORTANT: never retry after "delayed" — the queued order might still fill,
         # and a retry would create a SECOND order that also fills (double spend).
-        for slippage in [0.05, 0.08, 0.12]:
+        _buy_slips = [float(x) for x in config.BUY_SLIPPAGE_LEVELS.split(",")]
+        for slippage in _buy_slips:
             limit_price = round(min(price + slippage, 0.99), 2)
 
             order_args = MarketOrderArgs(
@@ -136,11 +137,11 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
                     # "delayed" = queued, may or may not fill.
                     # Wait longer and check USDC balance (more reliable than token balance).
                     # Do NOT retry — a second order would cause double spending.
-                    time.sleep(8)
+                    time.sleep(config.DELAYED_BUY_VERIFY_SECS)
                     try:
                         _usdc_after = get_wallet_balance()
                         _usdc_delta = bal_before_usdc - _usdc_after
-                        success = _usdc_delta > 0.5
+                        success = _usdc_delta > config.MIN_FILL_AMOUNT
                         logger.info("ORDER VERIFY: delayed → %s (USDC before=%.2f after=%.2f spent=%.2f)",
                                     "FILLED" if success else "NOT FILLED", bal_before_usdc, _usdc_after, _usdc_delta)
                     except Exception:
@@ -152,7 +153,8 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
                                     amount_usd, price * 100, limit_price * 100, slippage * 100, side)
                         return response
                     else:
-                        logger.warning("ORDER BUY: delayed order did not fill after 8s — giving up (no retry to prevent double spend)")
+                        logger.warning("ORDER BUY: delayed order did not fill after %ds — giving up (no retry to prevent double spend)",
+                                        config.DELAYED_BUY_VERIFY_SECS)
                         return None
             elif response:
                 success = True
@@ -163,7 +165,7 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
                 return response
             else:
                 logger.info("ORDER BUY: attempt +%.0fc slip failed, %s",
-                            slippage * 100, "retrying..." if slippage < 0.12 else "giving up")
+                            slippage * 100, "retrying..." if slippage < _buy_slips[-1] else "giving up")
 
         # All attempts failed
         logger.warning("ORDER BUY FAILED: all slippage levels tried | %s / %s / $%.2f", condition_id[:20], side, amount_usd)
@@ -211,7 +213,8 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
 
         # Market Sell with slippage retry (like buy) — try increasing slippage until filled
         # IMPORTANT: never retry after "delayed" to prevent double sell
-        for slippage in [0.01, 0.03, 0.06]:
+        _sell_slips = [float(x) for x in config.SELL_SLIPPAGE_LEVELS.split(",")]
+        for slippage in _sell_slips:
             sell_price = round(min(max(price - slippage, 0.01), 0.99), 2)
             sell_amount = round(shares * sell_price, 2)
             order_args = MarketOrderArgs(
@@ -232,14 +235,14 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
                     success = True
                 elif status == "delayed":
                     # "delayed" = queued, may or may not fill. Do NOT retry.
-                    time.sleep(6)
+                    time.sleep(config.DELAYED_SELL_VERIFY_SECS)
                     # Check if shares are gone (= sold)
                     try:
                         _params2 = BalanceAllowanceParams(asset_type="CONDITIONAL", token_id=token_id)
                         _bal2 = client.get_balance_allowance(_params2)
                         _raw2 = float(_bal2.get("balance", 0)) if isinstance(_bal2, dict) else 0
                         _shares2 = _raw2 / 1_000_000
-                        success = _shares2 < shares * 0.5  # most shares gone = filled
+                        success = _shares2 < shares * config.SELL_VERIFY_THRESHOLD
                         logger.info("SELL VERIFY: delayed → %s (shares before=%.2f after=%.2f)",
                                     "FILLED" if success else "NOT FILLED", shares, _shares2)
                     except Exception:
@@ -249,7 +252,8 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
                                     shares, price * 100, sell_price * 100, slippage * 100, side)
                         return response
                     else:
-                        logger.warning("ORDER SELL: delayed order did not fill after 6s — giving up (no retry to prevent double sell)")
+                        logger.warning("ORDER SELL: delayed order did not fill after %ds — giving up (no retry to prevent double sell)",
+                                        config.DELAYED_SELL_VERIFY_SECS)
                         return None
             elif response:
                 success = True
@@ -260,7 +264,7 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
                 return response
             else:
                 logger.info("ORDER SELL: attempt -%.0fc slip failed, %s",
-                            slippage * 100, "retrying..." if slippage < 0.06 else "giving up")
+                            slippage * 100, "retrying..." if slippage < _sell_slips[-1] else "giving up")
 
         # All attempts failed
         logger.warning("ORDER SELL FAILED: all slippage levels tried | %s / %s / %.2f shares",

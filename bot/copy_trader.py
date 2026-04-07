@@ -484,7 +484,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 if _diff_evt_slug:
                     try:
                         _diff_ev_r = requests.get("https://gamma-api.polymarket.com/events",
-                                                  params={"slug": _diff_evt_slug.split("/")[-1]}, timeout=5)
+                                                  params={"slug": _diff_evt_slug.split("/")[-1]}, timeout=config.GAMMA_API_TIMEOUT)
                         if _diff_ev_r.ok and _diff_ev_r.json():
                             _diff_ev = _diff_ev_r.json()[0] if isinstance(_diff_ev_r.json(), list) else _diff_ev_r.json()
                             _diff_st = _diff_ev.get("startTime", "")
@@ -698,7 +698,7 @@ def copy_followed_wallets():
     try:
         _pos_r = requests.get("https://data-api.polymarket.com/positions", params={
             "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
-        }, timeout=10)
+        }, timeout=config.DATA_API_TIMEOUT)
         if _pos_r.ok:
             _open_value = sum(float(p.get("currentValue", 0) or 0) for p in _pos_r.json()
                               if float(p.get("curPrice", 0) or 0) > 0.01)
@@ -802,7 +802,7 @@ def copy_followed_wallets():
             elif hours_until <= 0:
                 _ew_expired.append(_ew_cid)
             # Queued too long (>24h) → discard
-            elif _ew_now - _ew["queued_at"] > 86400:
+            elif _ew_now - _ew["queued_at"] > config.EVENT_WAIT_MAX_SECS:
                 _ew_expired.append(_ew_cid)
         for _ek in _ew_expired:
             _event_wait_queue.pop(_ek, None)
@@ -869,7 +869,7 @@ def copy_followed_wallets():
                         if _hw_eslug:
                             try:
                                 _hw_ev_r = requests.get("https://gamma-api.polymarket.com/events",
-                                                        params={"slug": _hw_eslug.split("/")[-1]}, timeout=5)
+                                                        params={"slug": _hw_eslug.split("/")[-1]}, timeout=config.GAMMA_API_TIMEOUT)
                                 if _hw_ev_r.ok and _hw_ev_r.json():
                                     _hw_ev = _hw_ev_r.json()[0] if isinstance(_hw_ev_r.json(), list) else _hw_ev_r.json()
                                     _hw_st = _hw_ev.get("startTime", "")
@@ -1227,7 +1227,7 @@ def copy_followed_wallets():
                 if _event_slug:
                     try:
                         _ev_r = requests.get("https://gamma-api.polymarket.com/events",
-                                             params={"slug": _event_slug.split("/")[-1]}, timeout=5)
+                                             params={"slug": _event_slug.split("/")[-1]}, timeout=config.GAMMA_API_TIMEOUT)
                         if _ev_r.ok and _ev_r.json():
                             _ev = _ev_r.json()[0] if isinstance(_ev_r.json(), list) else _ev_r.json()
                             _st = _ev.get("startTime", "")
@@ -1750,7 +1750,7 @@ def update_copy_positions():
                             except Exception:
                                 pass
 
-                        # Nur Preis updaten, NICHT schliessen
+                        # Trade not in open or closed positions — update price + increment miss counter
                         event_slug = trade["event_slug"] or trade["market_slug"] or ""
                         live_price = price_tracker.get_price(trade_cid, trade["side"]) if (trade_cid and price_tracker.is_connected) else None
                         if live_price is None:
@@ -1759,7 +1759,23 @@ def update_copy_positions():
                             shares = trade["size"] / trade["entry_price"] if trade["entry_price"] > 0 else 0
                             pnl = (live_price - trade["entry_price"]) * shares
                             db.update_copy_trade_price(trade["id"], live_price, round(pnl, 2))
-                        logger.debug("Trade #%d: not in positions, keeping open (price update only)", trade["id"])
+
+                        # Miss count: position vanished from trader's wallet — after N misses, auto-close
+                        miss = db.increment_miss_count(trade["id"])
+                        if MISS_COUNT_TO_CLOSE > 0 and miss >= MISS_COUNT_TO_CLOSE:
+                            _close_price = live_price if live_price is not None else (trade["current_price"] or trade["entry_price"])
+                            _shares = trade["size"] / trade["entry_price"] if trade["entry_price"] > 0 else 0
+                            _pnl = round((_close_price - trade["entry_price"]) * _shares, 2)
+                            if db.close_copy_trade(trade["id"], _pnl, close_price=_close_price):
+                                if LIVE_MODE and trade_cid:
+                                    sell_shares(trade_cid, trade["side"], _close_price)
+                                logger.info("[MISS-CLOSE] #%d closed after %d misses: PnL=$%.2f @ %.0fc | %s",
+                                            trade["id"], miss, _pnl, _close_price * 100, trade["market_question"][:40])
+                                db.log_activity("sell", "WIN" if _pnl > 0 else "LOSS",
+                                                "Position closed (stale)",
+                                                "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:35], _pnl), _pnl)
+                        else:
+                            logger.debug("Trade #%d: not in positions, miss %d/%d", trade["id"], miss, MISS_COUNT_TO_CLOSE)
 
                 except Exception as e:
                     logger.debug("Error updating trade #%d: %s", trade["id"], e)

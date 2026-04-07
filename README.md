@@ -25,7 +25,7 @@ Trade C: Trader bets $100 (1x average = normal)
   → Bot bets: $15 base × 1.0 ratio = $15
 ```
 
-Big trader bet = strong signal → we bet more. Small trader bet = noise → we bet less. This is controlled by `RATIO_MIN` (floor) and `RATIO_MAX` (ceiling).
+Big trader bet = strong signal → we bet more. Small trader bet = noise → we bet less. This is controlled by `RATIO_MIN` (floor, default 0.2x) and `RATIO_MAX` (ceiling, default 3.0x).
 
 ## Hedge Detection
 
@@ -42,7 +42,7 @@ Configurable per trader via `HEDGE_WAIT_TRADERS=tradername:60`.
 ## Features
 
 - **Copy Trading** — Copies positions from followed traders within 5 seconds
-- **Proportional Sizing** — Bet size scales with trader conviction (0.2x–2.0x)
+- **Proportional Sizing** — Bet size scales with trader conviction (0.2x–3.0x)
 - **Hedge Detection** — Detects and skips both-sides hedges (per-trader configurable)
 - **Fast-Sell** — Mirrors trader sells within 5 seconds
 - **Auto-Sell** — Sells won positions at 96¢+ to recycle capital
@@ -146,7 +146,7 @@ All settings are optional — defaults work out of the box. Only `POLYMARKET_PRI
 | `MAX_POSITION_SIZE` | 30 | Hard cap per position |
 | `MIN_TRADE_SIZE` | 1.0 | Minimum bet size |
 | `RATIO_MIN` | 0.2 | Floor multiplier (small trader bet → small copy) |
-| `RATIO_MAX` | 2.0 | Ceiling multiplier (big trader bet → bigger copy) |
+| `RATIO_MAX` | 3.0 | Ceiling multiplier (big trader bet → bigger copy) |
 | `BET_SIZE_BASIS` | cash | `cash` = size from wallet, `portfolio` = wallet + positions |
 | `BET_SIZE_MAP` | | Per-trader base bet override (e.g. `xsaghav:0.08,sovereign2013:0.03`) |
 | `DEFAULT_AVG_TRADER_SIZE` | 10.0 | Fallback avg trade size when no trader data |
@@ -172,16 +172,17 @@ Price 45c → edge 0.05 → weak signal  → bet × 0.6
 ### Trade Filters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `MIN_TRADER_USD` | 3 | Default min trade size to copy |
+| `MIN_TRADER_USD` | 5 | Default min trade size to copy |
 | `MIN_TRADER_USD_MAP` | | Per-trader: `name:amount` (e.g. `sovereign2013:750`) |
-| `MIN_ENTRY_PRICE` | 0.15 | Skip lottery tickets below 15c |
+| `MIN_ENTRY_PRICE` | 0.08 | Skip lottery tickets below 8c |
 | `MIN_ENTRY_PRICE_MAP` | | Per-trader min price (e.g. `sovereign2013:0.40` = only 40c+) |
-| `MAX_ENTRY_PRICE` | 0.92 | Skip near-certain bets above 92c |
+| `MAX_ENTRY_PRICE` | 0.85 | Skip near-certain bets above 85c |
 | `MAX_ENTRY_PRICE_MAP` | | Per-trader max price (e.g. `sovereign2013:0.75` = max 75c) |
 | `MAX_COPIES_PER_MARKET` | 1 | One copy per market (prevents doubling up) |
 | `ENTRY_TRADE_SEC` | 300 | Ignore trades older than 5 minutes |
-| `MAX_HOURS_BEFORE_EVENT` | 0 | Queue trades if event > X hours away (0=disabled) |
+| `MAX_HOURS_BEFORE_EVENT` | 2 | Queue trades if event > X hours away (0=disabled) |
 | `EVENT_WAIT_MIN_CASH` | 0 | Only queue distant events when cash < $X (0=always queue) |
+| `EVENT_WAIT_MAX_SECS` | 14400 | Max time to keep queued trades (4 hours, prevents stale execution) |
 | `MAX_PER_EVENT` | 15 | Max $ per event/game (0=disabled) |
 | `MAX_PER_MATCH` | 15 | Max $ across related markets (Map 1 + Map 2 + BO3 = 1 match) |
 | `NO_REBUY_MINUTES` | 0 | Block re-entry after close (0=disabled) |
@@ -263,25 +264,38 @@ Queue trades below a price threshold and wait for confirmation before executing.
 | `CB_THRESHOLD` | 8 | Consecutive API failures to trip breaker |
 | `CB_PAUSE_SECS` | 60 | Seconds to pause when breaker trips |
 
-### API Tuning
+### Order Execution
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `API_TIMEOUT` | 10 | GET request timeout (seconds) |
-| `API_MAX_RETRIES` | 3 | Retry attempts per failed request |
-| `LIVE_PRICE_MIN` | 0.05 | Min live price to accept (below = use trader price) |
-| `LIVE_PRICE_MAX_DEVIATION` | 0.50 | Max % deviation from trader price to accept live price |
+| `BUY_SLIPPAGE_LEVELS` | 0.05,0.08,0.12 | Buy retry slippage levels (+5c, +8c, +12c) |
+| `SELL_SLIPPAGE_LEVELS` | 0.01,0.03,0.06 | Sell retry slippage levels (-1c, -3c, -6c) |
+| `DELAYED_BUY_VERIFY_SECS` | 8 | Wait time to verify delayed buy orders filled |
+| `DELAYED_SELL_VERIFY_SECS` | 6 | Wait time to verify delayed sell orders filled |
+| `SELL_VERIFY_THRESHOLD` | 0.5 | Fraction of shares gone to confirm sell (0.5=50%) |
 
 ### Fill Verification
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `FILL_VERIFY_DELAY_SECS` | 2 | Seconds to wait after buy before checking fill amount |
-| `MIN_FILL_AMOUNT` | 0.10 | Min fill amount ($) to count as valid |
+| `MIN_FILL_AMOUNT` | 0.10 | Min USDC change ($) to count as valid fill |
+
+### API Tuning
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `API_TIMEOUT` | 10 | General GET request timeout (seconds) |
+| `API_MAX_RETRIES` | 3 | Retry attempts per failed request |
+| `GAMMA_API_TIMEOUT` | 5 | Gamma API timeout for event lookups (seconds) |
+| `DATA_API_TIMEOUT` | 15 | Data API timeout for positions/trades (seconds) |
+| `WS_RECONNECT_SECS` | 10 | WebSocket reconnect delay after disconnect (seconds) |
+| `LIVE_PRICE_MIN` | 0.05 | Min live price to accept (below = use trader price) |
+| `LIVE_PRICE_MAX_DEVIATION` | 0.50 | Max % deviation from trader price to accept live price |
 
 ### Position Tracking
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `MIN_POSITION_SIZE_FILTER` | 0.50 | Min position size to include in scans |
-| `MISS_COUNT_TO_CLOSE` | 180 | Consecutive scan misses before closing stale position |
+| `MISS_COUNT_TO_CLOSE` | 180 | Close stale positions after N consecutive misses (0=disabled) |
+| `RECENTLY_CLOSED_SECS` | 600 | Cache recently closed trades for X seconds |
 
 ## Dashboard
 

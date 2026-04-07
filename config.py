@@ -97,10 +97,20 @@ CB_PAUSE_SECS = int(os.getenv("CB_PAUSE_SECS", "60"))
 # --- API Tuning ---
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
+GAMMA_API_TIMEOUT = int(os.getenv("GAMMA_API_TIMEOUT", "5"))
+DATA_API_TIMEOUT = int(os.getenv("DATA_API_TIMEOUT", "15"))
 
 # --- Live Price Validation ---
 LIVE_PRICE_MIN = float(os.getenv("LIVE_PRICE_MIN", "0.05"))
 LIVE_PRICE_MAX_DEVIATION = float(os.getenv("LIVE_PRICE_MAX_DEVIATION", "0.50"))
+
+# --- Order Execution ---
+# Slippage levels for buy/sell retry (comma-separated, e.g. "0.05,0.08,0.12")
+BUY_SLIPPAGE_LEVELS = os.getenv("BUY_SLIPPAGE_LEVELS", "0.05,0.08,0.12")
+SELL_SLIPPAGE_LEVELS = os.getenv("SELL_SLIPPAGE_LEVELS", "0.01,0.03,0.06")
+DELAYED_BUY_VERIFY_SECS = int(os.getenv("DELAYED_BUY_VERIFY_SECS", "8"))
+DELAYED_SELL_VERIFY_SECS = int(os.getenv("DELAYED_SELL_VERIFY_SECS", "6"))
+SELL_VERIFY_THRESHOLD = float(os.getenv("SELL_VERIFY_THRESHOLD", "0.5"))
 
 # --- Fill Verification ---
 FILL_VERIFY_DELAY_SECS = int(os.getenv("FILL_VERIFY_DELAY_SECS", "2"))
@@ -109,6 +119,11 @@ MIN_FILL_AMOUNT = float(os.getenv("MIN_FILL_AMOUNT", "0.10"))
 # --- Position Tracking ---
 MIN_POSITION_SIZE_FILTER = float(os.getenv("MIN_POSITION_SIZE_FILTER", "0.50"))
 MISS_COUNT_TO_CLOSE = int(os.getenv("MISS_COUNT_TO_CLOSE", "180"))
+EVENT_WAIT_MAX_SECS = int(os.getenv("EVENT_WAIT_MAX_SECS", "14400"))
+RECENTLY_CLOSED_SECS = int(os.getenv("RECENTLY_CLOSED_SECS", "600"))
+
+# --- WebSocket ---
+WS_RECONNECT_SECS = int(os.getenv("WS_RECONNECT_SECS", "10"))
 
 # --- Idle Trader Replacement ---
 IDLE_REPLACE_ENABLED = os.getenv("IDLE_REPLACE_ENABLED", "false").lower() in ("true", "1", "yes")

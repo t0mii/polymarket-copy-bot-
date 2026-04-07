@@ -90,7 +90,7 @@ def update_prices():
             while True:
                 _r = _rq.get("https://data-api.polymarket.com/positions", params={
                     "user": config.POLYMARKET_FUNDER, "limit": 500, "offset": _offset, "sizeThreshold": 0
-                }, timeout=15)
+                }, timeout=config.DATA_API_TIMEOUT)
                 if not _r.ok:
                     break
                 _page = _r.json()
@@ -230,7 +230,7 @@ def update_prices():
         _update_counter += 1
         # Snapshot alle 10 Updates (= 5 Min bei 30s Intervall)
         if _update_counter >= 10:
-            _stale = [k for k, v in _recently_closed.items() if _t.time() - v > 600]
+            _stale = [k for k, v in _recently_closed.items() if _t.time() - v > config.RECENTLY_CLOSED_SECS]
             for _sk in _stale:
                 del _recently_closed[_sk]
             _update_counter = 0
@@ -241,7 +241,7 @@ def update_prices():
                 bal = get_wallet_balance()
                 r = requests.get("https://data-api.polymarket.com/positions", params={
                     "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
-                }, timeout=15)
+                }, timeout=config.DATA_API_TIMEOUT)
                 pos_val = sum(float(p.get("currentValue", 0) or 0) for p in (r.json() if r.ok else []))
                 total = bal + pos_val
                 pnl = total - config.STARTING_BALANCE
@@ -412,7 +412,7 @@ def main():
         from database.db import get_connection
         _r_startup = _req_startup.get("https://data-api.polymarket.com/positions", params={
             "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
-        }, timeout=15)
+        }, timeout=config.DATA_API_TIMEOUT)
         if _r_startup.ok:
             _api_prices = {p.get("conditionId", ""): float(p.get("curPrice", 0) or 0) for p in _r_startup.json()}
             with get_connection() as _conn:

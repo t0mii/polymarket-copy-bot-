@@ -285,8 +285,9 @@ class PriceTracker:
                 logger.warning("WS: Unexpected error in run_forever: %s", e)
 
             if self._keep_running:
-                logger.info("WS: Reconnecting in 10s...")
-                time.sleep(10)
+                from config import WS_RECONNECT_SECS
+                logger.info("WS: Reconnecting in %ds...", WS_RECONNECT_SECS)
+                time.sleep(WS_RECONNECT_SECS)
 
 
 # Global singleton — imported by copy_trader and main
