@@ -647,13 +647,18 @@ function _initStreaks(){
   const trades=[...D.closed_trades].sort((a,b)=>new Date(b.closed_at||0)-new Date(a.closed_at||0));
   _winStreak=0;_lossStreak=0;
   for(const t of trades){
-    const w=(t.pnl_realized||0)>=0;
-    if(w){if(_lossStreak>0)break;_winStreak++}
+    const p=t.pnl_realized||0;
+    if(p===0){break}  // break-even = streak breaker
+    if(p>0){if(_lossStreak>0)break;_winStreak++}
     else{if(_winStreak>0)break;_lossStreak++}
   }
 }
-function _checkStreaks(isWin){
-  if(isWin){_winStreak++;_lossStreak=0}else{_lossStreak++;_winStreak=0}
+function _checkStreaks(pnl){
+  // pnl>0 = win, pnl<0 = loss, pnl==0 = break-even (resets both streaks, no streak counted)
+  if(pnl>0){_winStreak++;_lossStreak=0}
+  else if(pnl<0){_lossStreak++;_winStreak=0}
+  else{_winStreak=0;_lossStreak=0;return}  // break-even resets streaks
+  const isWin=pnl>0;
   const cfg=isWin?_streakWinCfg:_streakLossCfg;
   const streak=isWin?_winStreak:_lossStreak;
   let match=null;
@@ -730,7 +735,7 @@ function initSSE(){try{const es=new EventSource('/api/stream');
     if(sfxTrade){_showMeme({gif:_rnd(_tradeGifs),lbl:_rnd(_tradeLabels),snd:_sndBell,vol:0.2,dur:4000,color:'var(--gold)'})}
     hist.unshift(d);if(hist.length>20)hist.pop();ticker();setTimeout(load,1500)}catch(x){}});
   es.addEventListener('trade_closed',e=>{try{const d=JSON.parse(e.data);alertClose(d);beepClose();
-    _checkStreaks(d.pnl>=0);
+    _checkStreaks(d.pnl||0);
     setTimeout(load,1500)}catch(x){}})}catch(e){console.log('SSE not available')}}
 function dot(){
   $('st-ws-dot').className='st-dot '+(sseOk?'on':'off');
