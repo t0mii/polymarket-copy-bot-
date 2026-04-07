@@ -61,7 +61,7 @@ def sse_stream():
             _sse_clients.append(q)
         try:
             yield "event: connected\ndata: {}\n\n"
-            deadline = time.time() + 25  # max 25s then close (client reconnects)
+            deadline = time.time() + 120  # max 120s then close (client reconnects in 1s)
             while time.time() < deadline:
                 if q:
                     msg = q.pop(0)

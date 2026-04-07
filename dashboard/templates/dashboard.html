@@ -738,7 +738,7 @@ function alertClose(t){
 
 function initSSE(){try{const es=new EventSource('/api/stream');
   es.onopen=()=>{sseOk=true;dot()};
-  es.onerror=()=>{sseOk=false;dot();try{es.close()}catch(e){}setTimeout(initSSE,10000)};
+  es.onerror=()=>{sseOk=false;dot();try{es.close()}catch(e){}setTimeout(initSSE,1000)};
   es.addEventListener('new_trade',e=>{try{const d=JSON.parse(e.data);alert_(d);beep();
     if(sfxTrade){_showMeme({gif:_rnd(_tradeGifs),lbl:_rnd(_tradeLabels),snd:_sndBell,vol:0.2,dur:4000,color:'var(--gold)'})}
     hist.unshift(d);if(hist.length>20)hist.pop();ticker();setTimeout(load,1500)}catch(x){}});
