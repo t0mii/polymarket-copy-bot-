@@ -951,20 +951,11 @@ def _find_stream(market_question: str) -> dict:
                 stream_url = streams[0].get("raw_url", "")
 
             teams_found = " vs ".join(o["opponent"]["name"] for o in best_match.get("opponents", []))
-            # Match score (e.g. "1-0" in BO3)
-            results = best_match.get("results", [])
-            score = "-".join(str(r.get("score", 0)) for r in results) if results else ""
-            # Number of games info
-            n_games = best_match.get("number_of_games", 0)
-            bo = f"BO{n_games}" if n_games > 1 else ""
             result = {
                 "url": stream_url,
                 "source": "pandascore",
                 "match": teams_found,
                 "status": best_match.get("status", ""),
-                "league": best_match.get("league", {}).get("name", ""),
-                "score": score,
-                "bo": bo,
                 "begin_at": best_match.get("begin_at", ""),
             }
             if not stream_url:
