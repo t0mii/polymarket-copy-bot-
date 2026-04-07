@@ -402,8 +402,8 @@ tr:hover{background:rgba(201,168,76,0.03)}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:.8rem;color:var(--text)">Volume</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <input type="range" id="sfxVolSlider" min="0" max="100" value="18" oninput="_setVol(this.value)" style="width:100px;accent-color:var(--gold);height:4px;cursor:pointer">
-          <span id="sfxVolPct" style="font-size:.7rem;color:var(--text-dim);min-width:30px;text-align:right">18%</span>
+          <input type="range" id="sfxVolSlider" min="0" max="100" value="30" oninput="_setVol(this.value)" style="width:100px;accent-color:var(--gold);height:4px;cursor:pointer">
+          <span id="sfxVolPct" style="font-size:.7rem;color:var(--text-dim);min-width:30px;text-align:right">30%</span>
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
@@ -571,7 +571,7 @@ function _sortList(list,table){
     return s.dir==='asc'?cmp:-cmp});
 }
 const AC=new(window.AudioContext||window.webkitAudioContext)();
-const _masterGain=AC.createGain();_masterGain.connect(AC.destination);_masterGain.gain.value=parseFloat(localStorage.getItem('sfxVol')||'0.18');
+const _masterGain=AC.createGain();_masterGain.connect(AC.destination);_masterGain.gain.value=parseFloat(localStorage.getItem('sfxVol')||'0.30');
 let _moneyBuffer=null;
 fetch('/static/money-button.mp3').then(r=>r.arrayBuffer()).then(b=>AC.decodeAudioData(b)).then(buf=>{_moneyBuffer=buf}).catch(()=>{});
 function playMoney(){if(!_moneyBuffer)return;try{AC.resume();const s=AC.createBufferSource(),g=AC.createGain();s.buffer=_moneyBuffer;g.gain.value=1.0;s.connect(g);g.connect(_masterGain);s.start()}catch(e){}}
@@ -626,7 +626,7 @@ function _updSfxUI(){
   $('sfxTogPop').textContent=sfxPop?'ON':'OFF';$('sfxTogPop').style.color=sfxPop?'var(--green)':'var(--text-dim)';$('sfxTogPop').style.borderColor=sfxPop?'var(--green)':'var(--border)';
   _sfxKeys.forEach(k=>{const el=$(('sfxTog'+k));if(!el)return;const on=window[k];
     el.textContent=on?'ON':'OFF';el.style.color=on?'var(--green)':'var(--text-dim)';el.style.borderColor=on?'var(--green)':'var(--border)'});
-  const _v=parseFloat(localStorage.getItem('sfxVol')||'0.18'),_sl=$('sfxVolSlider');if(_sl){_sl.value=Math.round(_v*100);$('sfxVolPct').textContent=Math.round(_v*100)+'%'}
+  const _v=parseFloat(localStorage.getItem('sfxVol')||'0.30'),_sl=$('sfxVolSlider');if(_sl){_sl.value=Math.round(_v*100);$('sfxVolPct').textContent=Math.round(_v*100)+'%'}
 }
 function _setVol(v){const p=parseInt(v);_masterGain.gain.value=p/100;localStorage.setItem('sfxVol',(p/100).toString());$('sfxVolPct').textContent=p+'%'}
 function _togMeme(key){window[key]=!window[key];localStorage.setItem(key,window[key]?'on':'off');if(window[key])AC.resume();_updSfxUI()}
