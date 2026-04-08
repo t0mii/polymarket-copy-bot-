@@ -607,6 +607,14 @@ def _position_diff_scan(address: str, username: str, balance: float,
                     if _evt_inv >= config.MAX_PER_EVENT:
                         continue
 
+            # Max per match (DB query includes recently closed)
+            if config.MAX_PER_MATCH > 0:
+                _diff_evt = pos.get("event_slug", "") or ""
+                if _diff_evt:
+                    _diff_match_inv = db.get_invested_for_event(_diff_evt)
+                    if _diff_match_inv >= config.MAX_PER_MATCH:
+                        continue
+
             # Max exposure per trader (DB query includes recently closed)
             _max_exp = (balance + sum(t["size"] for t in _diff_open)) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
             _t_exp = db.get_trader_exposure(address)
@@ -909,6 +917,21 @@ def copy_followed_wallets():
                     except Exception:
                         pass
 
+                # Category blacklist
+                if _is_category_blocked(td["wallet_username"], td["market_question"]):
+                    _ew_expired.append(_ew_cid)
+                    continue
+
+                # MAX_COPIES check
+                if _ew_cid and db.count_copies_for_market(td["wallet_address"], _ew_cid) >= config.MAX_COPIES_PER_MARKET:
+                    _ew_expired.append(_ew_cid)
+                    continue
+
+                # Cross-trader duplicate check
+                if _ew_cid and db.is_market_already_open(_ew_cid, from_wallet=td["wallet_address"]):
+                    _ew_expired.append(_ew_cid)
+                    continue
+
                 # MAX_PER_MATCH check (DB query includes recently closed)
                 if config.MAX_PER_MATCH > 0:
                     _ew_evt_slug = td.get("event_slug", "") or ""
@@ -1017,10 +1040,23 @@ def copy_followed_wallets():
                                     continue
                         except Exception:
                             pass
+                    # Category blacklist
+                    if _is_category_blocked(td["username"], td["question"]):
+                        continue
                     # MAX_COPIES check: activity scan may have already copied this market
                     if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= config.MAX_COPIES_PER_MARKET:
                         logger.info("[HEDGE-WAIT] Already copied (activity scan was faster), skipping: %s", td["question"][:40])
                         continue
+                    # Cross-trader duplicate check
+                    if td["cid"] and db.is_market_already_open(td["cid"], from_wallet=td["address"]):
+                        continue
+                    # MAX_PER_MATCH check
+                    if config.MAX_PER_MATCH > 0:
+                        _hw_evt_slug = td["trade_data"].get("event_slug", "") or ""
+                        if _hw_evt_slug:
+                            _hw_match_inv = db.get_invested_for_event(_hw_evt_slug)
+                            if _hw_match_inv >= config.MAX_PER_MATCH:
+                                continue
                     # Check trader exposure limit (DB query includes recently closed)
                     _max_t = portfolio_value * _EXPOSURE_MAP.get(td["username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
                     _t_inv = db.get_trader_exposure(td["address"])
