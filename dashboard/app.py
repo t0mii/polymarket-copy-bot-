@@ -675,7 +675,7 @@ def api_trader_stats():
     except ValueError:
         hours = 24
 
-    all_trades = db.get_all_copy_trades(limit=5000)
+    all_trades = [dict(t) for t in db.get_all_copy_trades(limit=5000)]
     trader_map = {}
     for t in all_trades:
         addr = t["wallet_address"]
