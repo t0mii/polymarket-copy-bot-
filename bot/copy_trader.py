@@ -894,6 +894,21 @@ def copy_followed_wallets():
                 _entry_price = _live_price if _live_price != _orig_price else _orig_price
                 td["entry_price"] = _entry_price
 
+                # No-rebuy check
+                if _ew_cid and config.NO_REBUY_MINUTES > 0:
+                    try:
+                        from database.db import get_connection as _gc_ew
+                        with _gc_ew() as _rc_ew:
+                            _was_closed_ew = _rc_ew.execute(
+                                "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
+                                "AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')", (_ew_cid, str(config.NO_REBUY_MINUTES))
+                            ).fetchone()
+                            if _was_closed_ew:
+                                _ew_expired.append(_ew_cid)
+                                continue
+                    except Exception:
+                        pass
+
                 # MAX_PER_MATCH check: don't exceed match budget
                 if config.MAX_PER_MATCH > 0:
                     _ew_mkey = _match_key(td["market_question"])
@@ -991,6 +1006,19 @@ def copy_followed_wallets():
                                         _hw_drift * 100, _hw_max_drift * 100,
                                         _orig_hw_price * 100, entry_price * 100, td["question"][:40])
                             continue
+                    # No-rebuy check
+                    if td["cid"] and config.NO_REBUY_MINUTES > 0:
+                        try:
+                            from database.db import get_connection as _gc_hw
+                            with _gc_hw() as _rc_hw:
+                                _was_closed_hw = _rc_hw.execute(
+                                    "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
+                                    "AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')", (td["cid"], str(config.NO_REBUY_MINUTES))
+                                ).fetchone()
+                                if _was_closed_hw:
+                                    continue
+                        except Exception:
+                            pass
                     # MAX_COPIES check: activity scan may have already copied this market
                     if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= config.MAX_COPIES_PER_MARKET:
                         logger.info("[HEDGE-WAIT] Already copied (activity scan was faster), skipping: %s", td["question"][:40])

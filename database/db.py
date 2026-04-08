@@ -355,18 +355,20 @@ def is_market_already_open(condition_id: str, from_wallet: str = "") -> bool:
 
     Same trader double-down → erlaubt (from_wallet ist ausgenommen)
     Anderer Trader kauft dasselbe → geblockt (Duplikat)
+    Also counts trades closed in the last 30 minutes (prevents rapid re-entry).
     """
     if not condition_id:
         return False
+    _status_filter = "(status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))"
     with get_connection() as conn:
         if from_wallet:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND status='open' AND wallet_address!=?",
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND %s AND wallet_address!=?" % _status_filter,
                 (condition_id, from_wallet)
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND status='open'",
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND %s" % _status_filter,
                 (condition_id,)
             ).fetchone()
         return row["cnt"] > 0 if row else False
