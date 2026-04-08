@@ -76,6 +76,18 @@ def get_token_id(condition_id: str, side: str) -> str | None:
         return None
 
 
+def get_fee_rate(condition_id: str, side: str) -> int:
+    """Get fee rate in bps for a market. Returns 0 if lookup fails."""
+    try:
+        client = _get_client()
+        token_id = get_token_id(condition_id, side)
+        if not token_id:
+            return 0
+        return int(client.get_fee_rate_bps(token_id))
+    except Exception:
+        return 0
+
+
 def _get_token_balance(client, token_id: str) -> float:
     """Query conditional token balance (number of shares held)."""
     try:
@@ -94,21 +106,35 @@ def _build_fill_result(bal_before_usdc: float, shares_before: float,
     client = _get_client()
     usdc_spent = amount_usd  # fallback
     shares_bought = 0.0
-    effective_price = price  # fallback
+    effective_price = price  # fallback = limit_price (with slippage)
 
     try:
         time.sleep(config.FILL_VERIFY_DELAY_SECS)
         bal_after_usdc = get_wallet_balance()
-        shares_after = _get_token_balance(client, token_id)
 
         _usdc_delta = bal_before_usdc - bal_after_usdc
-        _shares_delta = shares_after - shares_before
-
         if _usdc_delta > config.MIN_FILL_AMOUNT:
             usdc_spent = round(_usdc_delta, 4)
+
+        # Token balance: retry once after extra delay (takes longer to settle)
+        _shares_delta = 0
+        for _attempt in range(2):
+            shares_after = _get_token_balance(client, token_id)
+            _shares_delta = shares_after - shares_before
+            if _shares_delta > 0:
+                break
+            if _attempt == 0:
+                time.sleep(2)  # extra wait for token balance to settle
+
         if _shares_delta > 0:
             shares_bought = round(_shares_delta, 6)
             effective_price = round(usdc_spent / shares_bought, 6)
+        else:
+            # Fallback: estimate shares from USDC spent and limit price
+            # limit_price (= price param) already includes slippage, so this is reasonable
+            shares_bought = round(usdc_spent / price, 6) if price > 0 else 0
+            effective_price = price
+            logger.debug("Token balance unchanged, using limit_price %.4f as eff_price", price)
 
         logger.info("FILL DETAILS: spent=$%.2f shares=%.4f eff_price=%.4f fee=%dbps",
                     usdc_spent, shares_bought, effective_price, fee_rate)
