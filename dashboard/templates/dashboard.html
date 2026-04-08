@@ -165,7 +165,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 /* ═══ TABLES ═══ */
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
 .tw table{width:100%;table-layout:fixed}
-.tw th,.tw td{padding:8px 8px;overflow:hidden;text-overflow:ellipsis}
+.tw th,.tw td{padding:6px 8px;overflow:hidden;text-overflow:ellipsis}
 .c-mkt2{width:34%}.c-side2{width:7%;text-align:left}.c-num{width:4%;text-align:right;white-space:nowrap}.c-pnl{width:6%;text-align:right;white-space:nowrap}.c-evt2{width:10%;white-space:nowrap;text-align:center}.c-time{width:4%;white-space:nowrap;color:var(--text-dim);font-size:.65rem;text-align:center}
 .c-close{width:9%;text-align:center;white-space:nowrap}
 .close-btn{display:inline-block;padding:4px 10px;border-radius:4px;font-size:.75rem;font-weight:700;cursor:pointer;border:none;min-width:70px;transition:opacity .2s}
@@ -188,12 +188,12 @@ th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--gold)}th.sort.
 table{width:100%;border-collapse:collapse}
 thead{position:sticky;top:0;z-index:2}
 th{background:var(--bg3);color:var(--text-dim);font-weight:500;text-transform:uppercase;
-  letter-spacing:0.14em;font-size:.68rem;padding:12px 10px;text-align:left;border-bottom:1px solid var(--border)}
-td{padding:10px;border-bottom:1px solid rgba(30,30,48,0.6);font-weight:300;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  letter-spacing:0.14em;font-size:.68rem;padding:8px 8px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:6px 8px;border-bottom:1px solid rgba(30,30,48,0.6);font-weight:300;font-size:.84rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr{transition:background .2s}
 tr:hover{background:rgba(201,168,76,0.03)}
 .p-up{color:var(--green)}.p-dn{color:var(--red)}
-.side{font-weight:600;font-size:.72rem;padding:4px 12px;display:inline-block;letter-spacing:0.06em}
+.side{font-weight:600;font-size:.72rem;padding:3px 9px;display:inline-block;letter-spacing:0.06em}
 .side.yes{background:rgba(52,211,153,0.08);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
 .side.no{background:rgba(248,113,113,0.08);color:var(--red);border:1px solid rgba(248,113,113,0.2)}
 .side.oth{background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.25)}
@@ -947,7 +947,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
     const mktLink=t.event_slug||t.market_slug?`<a href="https://polymarket.com/event/${t.event_slug||t.market_slug}" target="_blank" title="${mktFull}">${mktFull}</a>`:mktFull;
     const trName=t.wallet_username||'';
     return`<tr class="${p>=0?'glow-win':'glow-loss'} ${_pulse}">
-      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500;font-size:1.05rem"><span style="font-size:.78rem;margin-right:4px;color:var(--text)">${spH}</span>${mktLink}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${trName!=='\u2014'?trName:''} #${t.id}</div></td>
+      <td class="c-mkt2" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--gold)"><span style="font-weight:500;font-size:.92rem"><span style="font-size:.75rem;margin-right:4px;color:var(--text)">${spH}</span>${mktLink}</span><span style="font-size:.68rem;color:var(--text-dim);margin-left:6px">${trName!=='\u2014'?trName:''} #${t.id}</span></td>
       <td class="c-side2">${sH(t.side,t.outcome_label)}</td>
       <td class="c-num">${Math.round((t.entry_price||0)*100)}\u00A2</td>
       <td class="c-num">${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
@@ -964,7 +964,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('tClosed').innerHTML=sortedClosed.length?sortedClosed.map(t=>{const p=t.pnl_realized||0;
     const{e:ce,l:cl2}=dSp(t);const spH2='<span style="font-size:.75rem;margin-right:4px">'+(ce?ce+' '+cl2:'\uD83D\uDCCA')+'</span>';
     return`<tr>
-      <td class="c-mkt2" style="white-space:normal;line-height:1.4;color:var(--gold)"><div style="font-weight:500;font-size:1.05rem">${spH2}${mL(t)}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${t.wallet_username||''} #${t.id}</div></td>
+      <td class="c-mkt2" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--gold)"><span style="font-weight:500;font-size:.92rem">${spH2}${mL(t)}</span><span style="font-size:.68rem;color:var(--text-dim);margin-left:6px">${t.wallet_username||''} #${t.id}</span></td>
       <td class="c-side2">${sH(t.side,t.outcome_label)}</td>
       <td class="c-num">${Math.round((t.entry_price||0)*100)}\u00A2</td>
       <td class="c-num">${Math.round((t.current_price||0)*100)}\u00A2</td>

@@ -116,15 +116,14 @@ def _build_fill_result(bal_before_usdc: float, shares_before: float,
         if _usdc_delta > config.MIN_FILL_AMOUNT:
             usdc_spent = round(_usdc_delta, 4)
 
-        # Token balance: retry once after extra delay (takes longer to settle)
+        # Token balance: retry with backoff (settlement takes 3-5 seconds)
         _shares_delta = 0
-        for _attempt in range(2):
+        for _attempt in range(5):
             shares_after = _get_token_balance(client, token_id)
             _shares_delta = shares_after - shares_before
             if _shares_delta > 0:
                 break
-            if _attempt == 0:
-                time.sleep(2)  # extra wait for token balance to settle
+            time.sleep(1 + _attempt)  # 1s, 2s, 3s, 4s, 5s backoff
 
         if _shares_delta > 0:
             shares_bought = round(_shares_delta, 6)
@@ -214,18 +213,24 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
                     success = True
                 elif status == "delayed":
                     # "delayed" = queued, may or may not fill.
-                    # Wait longer and check USDC balance (more reliable than token balance).
+                    # Check USDC balance multiple times (fill may arrive late).
                     # Do NOT retry — a second order would cause double spending.
-                    time.sleep(config.DELAYED_BUY_VERIFY_SECS)
-                    try:
-                        _usdc_after = get_wallet_balance()
-                        _usdc_delta = bal_before_usdc - _usdc_after
-                        success = _usdc_delta > config.MIN_FILL_AMOUNT
-                        logger.info("ORDER VERIFY: delayed → %s (USDC before=%.2f after=%.2f spent=%.2f)",
-                                    "FILLED" if success else "NOT FILLED", bal_before_usdc, _usdc_after, _usdc_delta)
-                    except Exception:
-                        success = False
-                        logger.warning("ORDER VERIFY: could not check USDC balance, treating as failed")
+                    success = False
+                    for _dv_attempt in range(3):
+                        _dv_wait = config.DELAYED_BUY_VERIFY_SECS if _dv_attempt == 0 else 4
+                        time.sleep(_dv_wait)
+                        try:
+                            _usdc_after = get_wallet_balance()
+                            _usdc_delta = bal_before_usdc - _usdc_after
+                            if _usdc_delta > config.MIN_FILL_AMOUNT:
+                                success = True
+                                logger.info("ORDER VERIFY: delayed → FILLED (attempt %d, USDC before=%.2f after=%.2f spent=%.2f)",
+                                            _dv_attempt + 1, bal_before_usdc, _usdc_after, _usdc_delta)
+                                break
+                        except Exception:
+                            logger.warning("ORDER VERIFY: could not check USDC balance (attempt %d)", _dv_attempt + 1)
+                    if not success:
+                        logger.info("ORDER VERIFY: delayed → NOT FILLED after %d checks", 3)
                     # Whether filled or not, do NOT retry after delayed — return result
                     if success:
                         logger.info("ORDER BUY: $%.2f @ %.0fc (limit %.0fc +%.0fc slip) | %s | FILLED (delayed)",

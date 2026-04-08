@@ -39,21 +39,24 @@ PENDING_BUY_MIN_SECS = config.PENDING_BUY_MIN_SECS
 PENDING_BUY_MAX_SECS = config.PENDING_BUY_MAX_SECS
 MAX_TRADES_PER_SCAN = config.MAX_TRADES_PER_SCAN
 
+def _parse_float_map(raw: str, name: str) -> dict[str, float]:
+    """Parse 'key:value,key:value' config strings safely."""
+    result: dict[str, float] = {}
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            parts = entry.split(":", 1)
+            try:
+                result[parts[0].strip().lower()] = float(parts[1].strip())
+            except ValueError:
+                logger.warning("Config parse error in %s: '%s' — skipping", name, entry)
+    return result
+
 # Per-trader exposure map (parsed once at module load)
-_EXPOSURE_MAP: dict[str, float] = {}
-for _entry in config.TRADER_EXPOSURE_MAP.split(","):
-    _entry = _entry.strip()
-    if ":" in _entry:
-        _parts = _entry.split(":", 1)
-        _EXPOSURE_MAP[_parts[0].strip().lower()] = float(_parts[1].strip())
+_EXPOSURE_MAP = _parse_float_map(config.TRADER_EXPOSURE_MAP, "TRADER_EXPOSURE_MAP")
 
 # Per-trader minimum trade size (parsed once at module load)
-_MIN_TRADER_USD_MAP: dict[str, float] = {}
-for _mtu_entry in config.MIN_TRADER_USD_MAP.split(","):
-    _mtu_entry = _mtu_entry.strip()
-    if ":" in _mtu_entry:
-        _mtu_parts = _mtu_entry.split(":", 1)
-        _MIN_TRADER_USD_MAP[_mtu_parts[0].strip().lower()] = float(_mtu_parts[1].strip())
+_MIN_TRADER_USD_MAP = _parse_float_map(config.MIN_TRADER_USD_MAP, "MIN_TRADER_USD_MAP")
 
 # Pending Buy Queue (in-memory: condition_id → {trade_data, queued_at})
 _pending_buys: dict = {}
@@ -75,6 +78,9 @@ _CB_PAUSE_SECS = config.CB_PAUSE_SECS
 _cb_failures = 0
 _cb_open_until = 0.0
 _cb_lock = __import__("threading").Lock()
+
+# Buy Lock: prevents race conditions between concurrent buy attempts
+_buy_lock = __import__("threading").Lock()
 
 
 # --- P&L helpers: use actual fill data when available, fallback to planned ---
@@ -185,44 +191,12 @@ def _get_current_balance() -> float:
     return STARTING_BALANCE + stats["total_pnl"]
 
 
-# Per-trader bet size map (parsed once at module load)
-_BET_SIZE_MAP: dict[str, float] = {}
-for _bsm_entry in config.BET_SIZE_MAP.split(","):
-    _bsm_entry = _bsm_entry.strip()
-    if ":" in _bsm_entry:
-        _bsm_parts = _bsm_entry.split(":", 1)
-        _BET_SIZE_MAP[_bsm_parts[0].strip().lower()] = float(_bsm_parts[1].strip())
-
-# Per-trader take-profit map (0=disabled for that trader)
-_TAKE_PROFIT_MAP: dict[str, float] = {}
-for _tpm_entry in config.TAKE_PROFIT_MAP.split(","):
-    _tpm_entry = _tpm_entry.strip()
-    if ":" in _tpm_entry:
-        _tpm_parts = _tpm_entry.split(":", 1)
-        _TAKE_PROFIT_MAP[_tpm_parts[0].strip().lower()] = float(_tpm_parts[1].strip())
-
-# Per-trader entry price maps (override global MIN/MAX_ENTRY_PRICE)
-_MIN_ENTRY_PRICE_MAP: dict[str, float] = {}
-for _mep_entry in config.MIN_ENTRY_PRICE_MAP.split(","):
-    _mep_entry = _mep_entry.strip()
-    if ":" in _mep_entry:
-        _mep_parts = _mep_entry.split(":", 1)
-        _MIN_ENTRY_PRICE_MAP[_mep_parts[0].strip().lower()] = float(_mep_parts[1].strip())
-
-_MAX_ENTRY_PRICE_MAP: dict[str, float] = {}
-for _xep_entry in config.MAX_ENTRY_PRICE_MAP.split(","):
-    _xep_entry = _xep_entry.strip()
-    if ":" in _xep_entry:
-        _xep_parts = _xep_entry.split(":", 1)
-        _MAX_ENTRY_PRICE_MAP[_xep_parts[0].strip().lower()] = float(_xep_parts[1].strip())
-
-# Per-trader average trade size (for conviction ratio calculation)
-_AVG_TRADER_SIZE_MAP: dict[str, float] = {}
-for _ats_entry in config.AVG_TRADER_SIZE_MAP.split(","):
-    _ats_entry = _ats_entry.strip()
-    if ":" in _ats_entry:
-        _ats_parts = _ats_entry.split(":", 1)
-        _AVG_TRADER_SIZE_MAP[_ats_parts[0].strip().lower()] = float(_ats_parts[1].strip())
+# Per-trader maps (parsed once at module load via safe parser)
+_BET_SIZE_MAP = _parse_float_map(config.BET_SIZE_MAP, "BET_SIZE_MAP")
+_TAKE_PROFIT_MAP = _parse_float_map(config.TAKE_PROFIT_MAP, "TAKE_PROFIT_MAP")
+_MIN_ENTRY_PRICE_MAP = _parse_float_map(config.MIN_ENTRY_PRICE_MAP, "MIN_ENTRY_PRICE_MAP")
+_MAX_ENTRY_PRICE_MAP = _parse_float_map(config.MAX_ENTRY_PRICE_MAP, "MAX_ENTRY_PRICE_MAP")
+_AVG_TRADER_SIZE_MAP = _parse_float_map(config.AVG_TRADER_SIZE_MAP, "AVG_TRADER_SIZE_MAP")
 
 
 # Per-trader category blacklist: {"tradername": {"tennis", "mlb"}}
@@ -235,13 +209,7 @@ for _cbl_entry in config.CATEGORY_BLACKLIST_MAP.split(","):
         _cbl_cats = {c.strip().lower() for c in _cbl_parts[1].split("|") if c.strip()}
         _CATEGORY_BLACKLIST[_cbl_name] = _cbl_cats
 
-# Per-trader minimum conviction ratio
-_MIN_CONVICTION_MAP: dict[str, float] = {}
-for _mcr_entry in config.MIN_CONVICTION_RATIO_MAP.split(","):
-    _mcr_entry = _mcr_entry.strip()
-    if ":" in _mcr_entry:
-        _mcr_parts = _mcr_entry.split(":", 1)
-        _MIN_CONVICTION_MAP[_mcr_parts[0].strip().lower()] = float(_mcr_parts[1].strip())
+_MIN_CONVICTION_MAP = _parse_float_map(config.MIN_CONVICTION_RATIO_MAP, "MIN_CONVICTION_RATIO_MAP")
 
 # Category keywords for market question detection
 _CATEGORY_KEYWORDS = {
@@ -569,8 +537,9 @@ def _position_diff_scan(address: str, username: str, balance: float,
                         ).fetchone()
                         if _was_closed_diff:
                             continue
-                except Exception:
-                    pass
+                except Exception as _nre_diff:
+                    logger.warning("[NO_REBUY] DB check failed, skipping conservatively: %s", _nre_diff)
+                    continue
 
             # Category blacklist
             if _is_category_blocked(username, pos["market_question"]):
@@ -669,18 +638,22 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 "condition_id": cid,
             }
             # LIVE MODE: Echte Order platzieren
-            if LIVE_MODE and cid:
-                order_resp = buy_shares(cid, pos["side"], size, entry_price)
-                if not order_resp:
-                    logger.warning("[DIFF] Order fehlgeschlagen — ueberspringe: %s", pos["market_question"][:40])
+            with _buy_lock:
+                if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
                     continue
-                _apply_fill_details(trade, order_resp, size, entry_price)
-                size = trade["size"]
+                if LIVE_MODE and cid:
+                    order_resp = buy_shares(cid, pos["side"], size, entry_price)
+                    if not order_resp:
+                        logger.warning("[DIFF] Order fehlgeschlagen — ueberspringe: %s", pos["market_question"][:40])
+                        continue
+                    _apply_fill_details(trade, order_resp, size, entry_price)
+                    size = trade["size"]
 
-            trade_id = db.create_copy_trade(trade)
+                trade_id = db.create_copy_trade(trade)
             if trade_id:
                 new_trades += 1
                 total_invested += size
+                balance -= size
                 price_tracker.subscribe_condition(cid)
                 logger.info("[DIFF] Neuer Trade #%d (via Position-Diff): %s @ %.0fc (%s)",
                             trade_id, pos["market_question"][:40], entry_price * 100, pos["side"])
@@ -688,7 +661,7 @@ def _position_diff_scan(address: str, username: str, balance: float,
                                 "#%d %s @ %dc — $%.2f" % (trade_id, pos["market_question"][:40], entry_price * 100, size))
         return new_trades
     except Exception as e:
-        logger.debug("Position-diff error for %s: %s", address[:10], e)
+        logger.info("Position-diff error for %s: %s", address[:10], e)
         return 0
 
 
@@ -833,6 +806,10 @@ def copy_followed_wallets():
             logger.info("[SKIP] Max daily trades reached (%d/%d)", _today_ct, config.MAX_DAILY_TRADES)
             return 0
 
+    # WebSocket health check
+    if not price_tracker.is_connected:
+        logger.warning("[WS] Price tracker disconnected — live prices unavailable, using fallbacks")
+
     logger.info("[SCAN] Checking %d wallets for new positions...", len(followed))
 
     new_trades = 0
@@ -914,8 +891,10 @@ def copy_followed_wallets():
                             if _was_closed_ew:
                                 _ew_expired.append(_ew_cid)
                                 continue
-                    except Exception:
-                        pass
+                    except Exception as _nre_ew:
+                        logger.warning("[NO_REBUY] DB check failed, skipping conservatively: %s", _nre_ew)
+                        _ew_expired.append(_ew_cid)
+                        continue
 
                 # Category blacklist
                 if _is_category_blocked(td["wallet_username"], td["market_question"]):
@@ -958,17 +937,21 @@ def copy_followed_wallets():
                                                     trader_ratio=_ew.get("trader_ratio", 1.0),
                                                     portfolio_value=portfolio_value, trader_name=td["wallet_username"])
                 if _ew_size >= MIN_TRADE_SIZE and balance > _ew_size:
-                    if LIVE_MODE and _ew_cid:
-                        from bot.order_executor import get_wallet_balance as _gwb_ew
-                        if _gwb_ew() < _ew_size:
+                    with _buy_lock:
+                        if _ew_cid and db.count_copies_for_market(td["wallet_address"], _ew_cid) >= config.MAX_COPIES_PER_MARKET:
+                            _ew_expired.append(_ew_cid)
                             continue
-                        order_resp = buy_shares(_ew_cid, td["side"], _ew_size, _entry_price)
-                        if not order_resp:
-                            continue
-                        _apply_fill_details(td, order_resp, _ew_size, _entry_price)
-                        _ew_size = td["size"]
-                    td["size"] = _ew_size
-                    trade_id = db.create_copy_trade(td)
+                        if LIVE_MODE and _ew_cid:
+                            from bot.order_executor import get_wallet_balance as _gwb_ew
+                            if _gwb_ew() < _ew_size:
+                                continue
+                            order_resp = buy_shares(_ew_cid, td["side"], _ew_size, _entry_price)
+                            if not order_resp:
+                                continue
+                            _apply_fill_details(td, order_resp, _ew_size, _entry_price)
+                            _ew_size = td["size"]
+                        td["size"] = _ew_size
+                        trade_id = db.create_copy_trade(td)
                     if trade_id:
                         new_trades += 1
                         balance -= _ew_size
@@ -1038,8 +1021,9 @@ def copy_followed_wallets():
                                 ).fetchone()
                                 if _was_closed_hw:
                                     continue
-                        except Exception:
-                            pass
+                        except Exception as _nre_hw:
+                            logger.warning("[NO_REBUY] DB check failed, skipping conservatively: %s", _nre_hw)
+                            continue
                     # Category blacklist
                     if _is_category_blocked(td["username"], td["question"]):
                         continue
@@ -1109,17 +1093,20 @@ def copy_followed_wallets():
                         "outcome_label": td["trade_data"].get("outcome_label", ""),
                         "condition_id": td["cid"],
                     }
-                    if LIVE_MODE and td["cid"]:
-                        from bot.order_executor import get_wallet_balance as _gwb2
-                        real_bal = _gwb2()
-                        if real_bal < size:
+                    with _buy_lock:
+                        if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= config.MAX_COPIES_PER_MARKET:
                             continue
-                        order_resp = buy_shares(td["cid"], side, size, entry_price)
-                        if not order_resp:
-                            continue
-                        _apply_fill_details(trade, order_resp, size, entry_price)
-                        size = trade["size"]
-                    trade_id = db.create_copy_trade(trade)
+                        if LIVE_MODE and td["cid"]:
+                            from bot.order_executor import get_wallet_balance as _gwb2
+                            real_bal = _gwb2()
+                            if real_bal < size:
+                                continue
+                            order_resp = buy_shares(td["cid"], side, size, entry_price)
+                            if not order_resp:
+                                continue
+                            _apply_fill_details(trade, order_resp, size, entry_price)
+                            size = trade["size"]
+                        trade_id = db.create_copy_trade(trade)
                     if trade_id:
                         new_trades += 1
                         cash -= size
@@ -1132,7 +1119,13 @@ def copy_followed_wallets():
         for k in expired_keys:
             _hedge_queue.pop(k, None)
 
-    # Clean hedge queue: remove entries for markets already copied by activity scan
+    # Clean hedge queue: remove stale entries (>10min) and markets already copied
+    _hq_now = _time.time()
+    for _hk in list(_hedge_queue.keys()):
+        if _hq_now - _hedge_queue[_hk]["queued_at"] > 600:
+            logger.info("[HEDGE-WAIT] Removed stale entry (>10min): %s", _hk[:20])
+            del _hedge_queue[_hk]
+            continue
     for _hk in list(_hedge_queue.keys()):
         _hq_entry = _hedge_queue[_hk]
         _hq_first = list(_hq_entry["sides"].values())[0]
@@ -1200,28 +1193,32 @@ def copy_followed_wallets():
                     if not sell_price:
                         sell_price = our_trade["current_price"] or _get_entry_price(our_trade)
                     pnl, shares = _calc_pnl(our_trade, sell_price)
-                    # Atomic close first — only sell if WE are the one closing (prevents double sell)
-                    if not db.close_copy_trade(our_trade["id"], pnl, close_price=sell_price):
-                        logger.info("[FAST-SELL] Trade #%d already closed by another path, skipping sell", our_trade["id"])
-                        _already_sold_cids.add(sell_cid)
-                        continue
-                    # LIVE: echte Sell Order (once per condition_id, only after successful DB close)
+                    # Sell FIRST, then close DB (prevents orphaned positions)
+                    sell_resp = None
                     if LIVE_MODE and sell_cid:
                         sell_resp = sell_shares(sell_cid, our_trade["side"], sell_price)
-                        if sell_resp:
-                            _correct_sell_pnl(our_trade, sell_resp, our_trade["id"])
-                        else:
-                            logger.warning("[FAST-SELL] Order fehlgeschlagen: %s", our_trade["market_question"][:40])
+                        if not sell_resp:
+                            logger.warning("[FAST-SELL] Sell failed, keeping position open: %s", our_trade["market_question"][:40])
+                            _already_sold_cids.add(sell_cid)
+                            continue
+                    # Atomic DB close — only if WE are the one closing (prevents double close)
+                    if not db.close_copy_trade(our_trade["id"], pnl, close_price=sell_price):
+                        logger.info("[FAST-SELL] Trade #%d already closed by another path", our_trade["id"])
+                        _already_sold_cids.add(sell_cid)
+                        continue
+                    if sell_resp:
+                        _correct_sell_pnl(our_trade, sell_resp, our_trade["id"])
                     logger.info("[FAST-SELL] #%d CLOSED (trader sold): PnL=$%.2f @ %.0fc | %s",
                                 our_trade["id"], pnl, sell_price * 100, our_trade["market_question"][:40])
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
                                     "Position closed — sold",
                                     "#%d %s — P&L $%+.2f" % (our_trade["id"], our_trade["market_question"][:40], pnl), pnl)
                     _already_sold_cids.add(sell_cid)
-                    # Close ALL other open trades on same condition_id (prevents sell spam from duplicates)
+                    # Close ALL other open trades on same condition_id — sell each one too
                     _other_on_cid = [t for t in _cached_open_trades if t.get("condition_id") == sell_cid and t.get("id") != our_trade["id"]]
                     for _ot in _other_on_cid:
                         _ot_pnl, _ = _calc_pnl(_ot, sell_price)
+                        # sell_shares already sold all shares for this token, just close DB
                         db.close_copy_trade(_ot["id"], _ot_pnl, close_price=sell_price)
                         logger.info("[FAST-SELL] #%d also closed (same market): PnL=$%.2f", _ot["id"], _ot_pnl)
                     try:
@@ -1264,8 +1261,9 @@ def copy_followed_wallets():
                             logger.info("[SKIP] Recently closed (no-rebuy %dmin): %s",
                                         config.NO_REBUY_MINUTES, question[:40])
                             continue
-                except Exception:
-                    pass
+                except Exception as _nre:
+                    logger.warning("[NO_REBUY] DB check failed, skipping trade conservatively: %s | %s", _nre, question[:40])
+                    continue
 
             # === RN1 SMART-FILTER ===
             # 0) Category blacklist: skip blocked categories for this trader
@@ -1386,7 +1384,7 @@ def copy_followed_wallets():
                 live_price = _fetch_live_price(event_slug_t, question, t["side"], cid)
             # Live-Preis nur nehmen wenn: >= LIVE_PRICE_MIN UND max X% Abweichung vom Trader-Preis
             if live_price is not None and live_price >= config.LIVE_PRICE_MIN and 0 < live_price < 1:
-                diff_pct = abs(live_price - trader_price) / trader_price
+                diff_pct = abs(live_price - trader_price) / trader_price if trader_price > 0 else 0
                 if diff_pct <= config.LIVE_PRICE_MAX_DEVIATION:
                     entry_price_raw = live_price
                     if abs(live_price - trader_price) > 0.005:
@@ -1594,29 +1592,37 @@ def copy_followed_wallets():
                                 username, trader_domain, trade_domain, question[:40])
 
             # LIVE MODE: Echte Order auf Polymarket platzieren
-            if LIVE_MODE and cid:
-                # Echte USDC-Balance prüfen bevor wir ordern
-                from bot.order_executor import get_wallet_balance
-                real_balance = get_wallet_balance()
-                if real_balance < size:
-                    logger.warning("[LIVE] Nicht genug USDC ($%.2f < $%.2f): %s",
-                                   real_balance, size, question[:40])
+            # Lock prevents race conditions between concurrent buy attempts
+            with _buy_lock:
+                # Re-check limits under lock (another thread may have bought in the meantime)
+                if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
+                    logger.info("[LOCK] Max copies reached (concurrent): %s", question[:40])
                     continue
-                order_resp = buy_shares(cid, t["side"], size, entry_price)
-                if not order_resp:
-                    logger.warning("[LIVE] Order fehlgeschlagen — ueberspringe: %s", question[:40])
-                    continue
-                # Apply verified fill details (actual price, size, shares)
-                _apply_fill_details(trade, order_resp, size, entry_price)
-                size = trade["size"]
-                logger.info("[LIVE] BUY FILLED: $%.2f (eff. %.0fc) | planned $%.2f @ %.0fc | %s",
-                            trade["actual_size"], (trade.get("actual_entry_price") or entry_price) * 100,
-                            size, entry_price * 100, question[:40])
 
-            trade_id = db.create_copy_trade(trade)
+                if LIVE_MODE and cid:
+                    # Echte USDC-Balance prüfen bevor wir ordern
+                    from bot.order_executor import get_wallet_balance
+                    real_balance = get_wallet_balance()
+                    if real_balance < size:
+                        logger.warning("[LIVE] Nicht genug USDC ($%.2f < $%.2f): %s",
+                                       real_balance, size, question[:40])
+                        continue
+                    order_resp = buy_shares(cid, t["side"], size, entry_price)
+                    if not order_resp:
+                        logger.warning("[LIVE] Order fehlgeschlagen — ueberspringe: %s", question[:40])
+                        continue
+                    # Apply verified fill details (actual price, size, shares)
+                    _apply_fill_details(trade, order_resp, size, entry_price)
+                    size = trade["size"]
+                    logger.info("[LIVE] BUY FILLED: $%.2f (eff. %.0fc) | planned $%.2f @ %.0fc | %s",
+                                trade["actual_size"], (trade.get("actual_entry_price") or entry_price) * 100,
+                                size, entry_price * 100, question[:40])
+
+                trade_id = db.create_copy_trade(trade)
             if trade_id:
                 new_trades += 1
                 total_invested += size
+                balance -= size  # Update balance to prevent over-investment
                 _cached_open_trades.append(trade)
 
                 if cid:
@@ -1829,10 +1835,16 @@ def update_copy_positions():
                             if config.STOP_LOSS_PCT > 0 and _ep > 0:
                                 loss_pct = (_ep - effective_price) / _ep
                                 if loss_pct >= config.STOP_LOSS_PCT:
-                                    if not db.close_copy_trade(trade["id"], pnl):
-                                        continue  # already closed by another path
+                                    # Sell FIRST, then close DB (prevents orphaned positions)
+                                    _sl_resp = None
                                     if LIVE_MODE and trade_cid:
                                         _sl_resp = sell_shares(trade_cid, trade["side"], effective_price)
+                                        if not _sl_resp:
+                                            logger.warning("[STOP-LOSS] Sell failed, keeping position open: %s", trade["market_question"][:40])
+                                            continue
+                                    if not db.close_copy_trade(trade["id"], pnl):
+                                        continue  # already closed by another path
+                                    if _sl_resp:
                                         _correct_sell_pnl(trade, _sl_resp, trade["id"])
                                     logger.info("[STOP-LOSS] #%d closed at %.0f%% loss: $%.2f | %s",
                                                 trade["id"], loss_pct * 100, pnl, trade["market_question"][:40])
@@ -1848,10 +1860,16 @@ def update_copy_positions():
                             if _tp_pct > 0 and _ep > 0:
                                 gain_pct = (effective_price - _ep) / _ep
                                 if gain_pct >= _tp_pct:
-                                    if not db.close_copy_trade(trade["id"], pnl):
-                                        continue  # already closed by another path
+                                    # Sell FIRST, then close DB (prevents orphaned positions)
+                                    _tp_resp = None
                                     if LIVE_MODE and trade_cid:
                                         _tp_resp = sell_shares(trade_cid, trade["side"], effective_price)
+                                        if not _tp_resp:
+                                            logger.warning("[TAKE-PROFIT] Sell failed, keeping position open: %s", trade["market_question"][:40])
+                                            continue
+                                    if not db.close_copy_trade(trade["id"], pnl):
+                                        continue  # already closed by another path
+                                    if _tp_resp:
                                         _correct_sell_pnl(trade, _tp_resp, trade["id"])
                                     logger.info("[TAKE-PROFIT] #%d closed at %.0f%% gain: $%.2f | %s",
                                                 trade["id"], gain_pct * 100, pnl, trade["market_question"][:40])
@@ -1887,17 +1905,18 @@ def update_copy_positions():
                                 else:
                                     close_price = raw_close
                                 pnl, shares = _calc_pnl(trade, close_price)
-                                # Atomic close: only sell if WE are the one closing it (prevents double sell)
+                                # Sell FIRST, then close DB (prevents orphaned positions)
+                                sell_resp = None
+                                if LIVE_MODE and trade_cid:
+                                    sell_resp = sell_shares(trade_cid, trade["side"], close_price)
+                                    if not sell_resp:
+                                        logger.warning("[LIVE] SELL failed, keeping open: %s", trade["market_question"][:40])
+                                        continue
                                 if not db.close_copy_trade(trade["id"], pnl):
                                     logger.info("[SKIP] Trade #%d already closed by another path", trade["id"])
                                     continue
-                                # LIVE MODE: Sell Order platzieren (only after successful DB close)
-                                if LIVE_MODE and trade_cid:
-                                    sell_resp = sell_shares(trade_cid, trade["side"], close_price)
-                                    if sell_resp:
-                                        _correct_sell_pnl(trade, sell_resp, trade["id"])
-                                    else:
-                                        logger.warning("[LIVE] SELL fehlgeschlagen: %s", trade["market_question"][:40])
+                                if sell_resp:
+                                    _correct_sell_pnl(trade, sell_resp, trade["id"])
                                 status = "[+]" if pnl > 0 else "[-]"
                                 logger.info("%s Copy trade #%d CLOSED (trader closed): P&L=$%.2f @ %.0fc (%s) | %s",
                                            status, trade["id"], pnl, close_price * 100, trade["side"],
@@ -1970,9 +1989,12 @@ def update_copy_positions():
                         if MISS_COUNT_TO_CLOSE > 0 and miss >= MISS_COUNT_TO_CLOSE:
                             _close_price = live_price if live_price is not None else (trade["current_price"] or _get_entry_price(trade))
                             _pnl, _ = _calc_pnl(trade, _close_price)
+                            # Sell first, then close DB
+                            _miss_resp = None
+                            if LIVE_MODE and trade_cid:
+                                _miss_resp = sell_shares(trade_cid, trade["side"], _close_price)
                             if db.close_copy_trade(trade["id"], _pnl, close_price=_close_price):
-                                if LIVE_MODE and trade_cid:
-                                    _miss_resp = sell_shares(trade_cid, trade["side"], _close_price)
+                                if _miss_resp:
                                     _correct_sell_pnl(trade, _miss_resp, trade["id"])
                                 logger.info("[MISS-CLOSE] #%d closed after %d misses: PnL=$%.2f @ %.0fc | %s",
                                             trade["id"], miss, _pnl, _close_price * 100, trade["market_question"][:40])

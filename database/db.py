@@ -26,7 +26,17 @@ def init_db():
             try:
                 conn.execute(migration)
             except sqlite3.OperationalError:
-                pass
+                pass  # column already exists
+
+        # Verify critical columns exist (migration may have silently failed)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(copy_trades)").fetchall()}
+        _critical = ["actual_entry_price", "actual_size", "shares_held", "usdc_received"]
+        _missing = [c for c in _critical if c not in cols]
+        if _missing:
+            import logging as _log
+            _log.getLogger(__name__).warning("DB MIGRATION: adding missing columns: %s", _missing)
+            for col in _missing:
+                conn.execute("ALTER TABLE copy_trades ADD COLUMN %s REAL" % col)
 
 
 @contextmanager
@@ -377,13 +387,14 @@ def is_trade_duplicate(wallet_address: str, market_question: str, condition_id: 
 
 def count_copies_for_market(wallet_address: str, condition_id: str) -> int:
     """Wie viele aktive Kopien haben wir von diesem Markt/Trader?
-    Counts OPEN trades + trades closed in the last 30 minutes (prevents rapid re-entry loops).
+    Counts OPEN trades + trades closed within NO_REBUY_MINUTES (min 30min) to prevent rapid re-entry.
     """
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COUNT(*) as cnt FROM copy_trades WHERE wallet_address=? AND condition_id=? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (wallet_address, condition_id)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (wallet_address, condition_id, str(_window))
         ).fetchone()
         return row["cnt"] if row else 0
 
@@ -397,7 +408,8 @@ def is_market_already_open(condition_id: str, from_wallet: str = "") -> bool:
     """
     if not condition_id:
         return False
-    _status_filter = "(status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))"
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
+    _status_filter = "(status='open' OR (status='closed' AND closed_at > datetime('now', '-%d minutes', 'localtime')))" % _window
     with get_connection() as conn:
         if from_wallet:
             row = conn.execute(

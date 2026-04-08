@@ -495,7 +495,7 @@ Alle Einstellungen kommen in `settings.env`. Nur `POLYMARKET_PRIVATE_KEY`, `POLY
 | `MIN_ENTRY_PRICE_MAP` | | Pro Trader (z.B. `sovereign2013:0.40` = nur ab 40c) |
 | `MAX_ENTRY_PRICE` | 0.85 | Ueber 85 Cent nicht kaufen (zu wenig Gewinnmarge) |
 | `MAX_ENTRY_PRICE_MAP` | | Pro Trader (z.B. `sovereign2013:0.75` = max 75c) |
-| `MAX_COPIES_PER_MARKET` | 1 | 1 Kopie pro Markt (kein Doppelkauf). Zaehlt auch kuerzlich geschlossene Trades (<30min) |
+| `MAX_COPIES_PER_MARKET` | 1 | 1 Kopie pro Markt (kein Doppelkauf). Zaehlt auch kuerzlich geschlossene Trades (Fenster = max(NO_REBUY_MINUTES, 30min)) |
 | `ENTRY_TRADE_SEC` | 300 | Trades aelter als 5 Minuten ignorieren |
 | `MAX_SPREAD` | 0.05 | Max 5% Spread (Differenz zwischen Kauf- und Verkaufspreis) |
 | `NO_REBUY_MINUTES` | 120 | Nach Close/Sell X Minuten Sperre fuer selben Markt (120=2h, 0=aus). Verhindert Kauf-Loops bei Esports |
@@ -590,7 +590,7 @@ Alles standardmaessig aus (0 = deaktiviert).
 | `SELL_SLIPPAGE_LEVELS` | 0.01,0.03,0.05 | Verkauf-Retry Slippage-Stufen |
 | `DELAYED_BUY_VERIFY_SECS` | 8 | Sekunden warten um verzoegerte Kauforder zu verifizieren |
 | `DELAYED_SELL_VERIFY_SECS` | 6 | Sekunden warten um verzoegerte Verkauforder zu verifizieren |
-| `SELL_VERIFY_THRESHOLD` | 0.5 | Anteil der Shares der verschwunden sein muss (0.5 = 50%) |
+| `SELL_VERIFY_THRESHOLD` | 0.05 | Max Anteil verbleibender Shares (0.05 = 95% muessen verkauft sein) |
 
 ### Fill-Verifizierung & P&L-Tracking
 

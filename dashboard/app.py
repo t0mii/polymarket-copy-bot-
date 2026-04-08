@@ -17,8 +17,12 @@ app = Flask(__name__)
 
 
 def _check_auth() -> bool:
-    """Check dashboard secret from X-Dashboard-Key header, ?key= param, or JSON body."""
-    expected = os.getenv("DASHBOARD_SECRET", "changeme")
+    """Check dashboard secret from X-Dashboard-Key header, ?key= param, or JSON body.
+    Query param accepted for backwards compat but header/body preferred (no log leaks).
+    """
+    expected = config.DASHBOARD_SECRET
+    if expected == "changeme":
+        logger.warning("DASHBOARD_SECRET is still 'changeme' — change it in settings.env!")
     key = (request.headers.get("X-Dashboard-Key", "")
            or request.args.get("key", "")
            or ((request.json or {}).get("key", "") if request.is_json else ""))
@@ -484,7 +488,8 @@ def api_settings():
         {"key": "MAX_PER_MATCH", "value": _dlr(config.MAX_PER_MATCH), "desc": "Max $ per match (Map1+Map2+BO3 grouped)"},
         {"key": "MAX_SPREAD", "value": _pct(config.MAX_SPREAD), "desc": "Max bid/ask spread"},
         {"key": "ENTRY_TRADE_SEC", "value": _sec(config.ENTRY_TRADE_SEC), "desc": "Max trade age to copy"},
-        {"key": "NO_REBUY_MINUTES", "value": str(config.NO_REBUY_MINUTES) + " min", "desc": "Block re-entry after close (0=off)"},
+        {"key": "NO_REBUY_MINUTES", "value": str(config.NO_REBUY_MINUTES) + " min", "desc": "Block re-entry after close (0=off). Also sets MAX_COPIES lookback window"},
+        {"key": "CATEGORY_BLACKLIST_MAP", "value": config.CATEGORY_BLACKLIST_MAP or "none", "desc": "Per-trader blocked categories (e.g. sovereign2013:tennis|mlb)"},
         {"key": "MAX_HOURS_BEFORE_EVENT", "value": str(config.MAX_HOURS_BEFORE_EVENT) + "h", "desc": "Queue if event > Xh away (0=off)"},
         {"key": "EVENT_WAIT_MIN_CASH", "value": _dlr(config.EVENT_WAIT_MIN_CASH) if config.EVENT_WAIT_MIN_CASH > 0 else "always queue", "desc": "Only queue when cash < $X (0=always)"},
         {"key": "QUEUE_DRIFT", "value": "<20c:%d%% 20-40c:%d%% 40-60c:%d%% 60c+:%d%%" % (config.QUEUE_DRIFT_LOTTERY*100, config.QUEUE_DRIFT_UNDERDOG*100, config.QUEUE_DRIFT_COINFLIP*100, config.QUEUE_DRIFT_FAVORITE*100), "desc": "Max price drift for queued trades (per range)"},
@@ -525,6 +530,7 @@ def api_settings():
         {"key": "SELL_SLIPPAGE_LEVELS", "value": config.SELL_SLIPPAGE_LEVELS, "desc": "Sell retry slippage steps"},
         {"key": "DELAYED_BUY_VERIFY_SECS", "value": _sec(config.DELAYED_BUY_VERIFY_SECS), "desc": "Verify delayed buy orders"},
         {"key": "DELAYED_SELL_VERIFY_SECS", "value": _sec(config.DELAYED_SELL_VERIFY_SECS), "desc": "Verify delayed sell orders"},
+        {"key": "SELL_VERIFY_THRESHOLD", "value": str(config.SELL_VERIFY_THRESHOLD), "desc": "Max remaining shares fraction (0.05 = 95%+ must be sold)"},
         # --- Fill Verification ---
         {"key": "FILL_VERIFY_DELAY_SECS", "value": _sec(config.FILL_VERIFY_DELAY_SECS), "desc": "Delay before checking fill amount"},
         {"key": "MIN_FILL_AMOUNT", "value": _dlr(config.MIN_FILL_AMOUNT), "desc": "Min USDC change for valid fill"},
