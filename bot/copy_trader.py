@@ -569,11 +569,13 @@ def _position_diff_scan(address: str, username: str, balance: float,
                         continue
 
             # Max per event (DB query includes recently closed)
+            _diff_evt_remaining = None
             if config.MAX_PER_EVENT > 0:
                 _evt = pos.get("event_slug", "") or ""
                 if _evt:
                     _evt_inv = db.get_invested_for_event(_evt)
-                    if _evt_inv >= config.MAX_PER_EVENT:
+                    _diff_evt_remaining = config.MAX_PER_EVENT - _evt_inv
+                    if _diff_evt_remaining < config.MIN_TRADE_SIZE:
                         continue
 
             # Max per match (DB query includes recently closed)
@@ -587,11 +589,17 @@ def _position_diff_scan(address: str, username: str, balance: float,
                         logger.info("[DIFF] Match full $%.0f/$%.0f, skipping: %s",
                                     _diff_match_inv, config.MAX_PER_MATCH, pos["market_question"][:40])
                         continue
+                    # Merge event + match remaining (take the stricter one)
+                    if _diff_evt_remaining is not None:
+                        _diff_remaining = min(_diff_remaining, _diff_evt_remaining)
+                elif _diff_evt_remaining is not None:
+                    _diff_remaining = _diff_evt_remaining
 
             # Max exposure per trader (DB query includes recently closed)
             _max_exp = (balance + sum(t["size"] for t in _diff_open)) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
             _t_exp = db.get_trader_exposure(address)
-            if _t_exp >= _max_exp:
+            _diff_exp_remaining = _max_exp - _t_exp
+            if _diff_exp_remaining < config.MIN_TRADE_SIZE:
                 logger.info("[DIFF] Trader exposure $%.0f >= max $%.0f, skipping: %s",
                             _t_exp, _max_exp, pos["market_question"][:40])
                 continue
@@ -624,11 +632,24 @@ def _position_diff_scan(address: str, username: str, balance: float,
 
             entry_price = round(min(entry_price_raw + ENTRY_SLIPPAGE, config.MAX_ENTRY_PRICE_CAP), 4)
             size = _calculate_position_size(entry_price, balance, trader_name=username)
-            # Cap to match/event remaining budget (like activity scan does)
+            # Cap to match/event remaining budget
             if _diff_remaining is not None and size > _diff_remaining:
                 size = round(_diff_remaining, 2)
-                logger.info("[DIFF] Size capped to match budget: $%.2f (remaining $%.2f of $%.0f) | %s",
-                            size, _diff_remaining, config.MAX_PER_MATCH, pos["market_question"][:35])
+                logger.info("[DIFF] Capped to event/match budget: $%.2f | %s", size, pos["market_question"][:35])
+            # Cap to trader exposure remaining
+            if _diff_exp_remaining > 0 and size > _diff_exp_remaining:
+                size = round(_diff_exp_remaining, 2)
+                logger.info("[DIFF] Capped to trader exposure: $%.2f | %s", size, pos["market_question"][:35])
+            # Cap to MAX_POSITION_SIZE
+            if cid:
+                _diff_existing = sum(ot["size"] for ot in _diff_open if ot.get("condition_id") == cid)
+                _diff_pos_remaining = MAX_POSITION_SIZE - _diff_existing
+                if _diff_pos_remaining < config.MIN_TRADE_SIZE:
+                    continue
+                if size > _diff_pos_remaining:
+                    size = round(_diff_pos_remaining, 2)
+            if size < MIN_TRADE_SIZE:
+                continue
             cash_left = balance - total_invested - size
             if cash_left < _load_dynamic_floor():
                 break
@@ -921,11 +942,13 @@ def copy_followed_wallets():
                     continue
 
                 # MAX_PER_MATCH check (DB query includes recently closed)
+                _ew_budget = None
                 if config.MAX_PER_MATCH > 0:
                     _ew_evt_slug = td.get("event_slug", "") or ""
                     if _ew_evt_slug:
                         _ew_match_inv = db.get_invested_for_event(_ew_evt_slug)
-                        if _ew_match_inv >= config.MAX_PER_MATCH:
+                        _ew_budget = config.MAX_PER_MATCH - _ew_match_inv
+                        if _ew_budget < MIN_TRADE_SIZE:
                             logger.info("[EVENT-WAIT] Match full $%.0f/$%.0f, skipping: %s",
                                         _ew_match_inv, config.MAX_PER_MATCH, td["market_question"][:40])
                             _ew_expired.append(_ew_cid)
@@ -936,15 +959,38 @@ def copy_followed_wallets():
                     _ew_evt = td.get("event_slug", "") or ""
                     if _ew_evt:
                         _ew_evt_inv = db.get_invested_for_event(_ew_evt)
-                        if _ew_evt_inv >= config.MAX_PER_EVENT:
+                        _ew_evt_rem = config.MAX_PER_EVENT - _ew_evt_inv
+                        if _ew_evt_rem < MIN_TRADE_SIZE:
                             logger.info("[EVENT-WAIT] Event full $%.0f/$%.0f, skipping: %s",
                                         _ew_evt_inv, config.MAX_PER_EVENT, td["market_question"][:40])
                             _ew_expired.append(_ew_cid)
                             continue
+                        _ew_budget = min(_ew_budget, _ew_evt_rem) if _ew_budget is not None else _ew_evt_rem
+
+                # Exposure check
+                _ew_tpct = _EXPOSURE_MAP.get(td["wallet_username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
+                _ew_max_exp = portfolio_value * _ew_tpct
+                _ew_t_inv = db.get_trader_exposure(td["wallet_address"])
+                _ew_exp_rem = _ew_max_exp - _ew_t_inv
+                if _ew_exp_rem < MIN_TRADE_SIZE:
+                    logger.info("[EVENT-WAIT] Trader exposure $%.0f >= max $%.0f, skipping: %s",
+                                _ew_t_inv, _ew_max_exp, td["market_question"][:40])
+                    _ew_expired.append(_ew_cid)
+                    continue
 
                 _ew_size = _calculate_position_size(_entry_price, balance,
                                                     trader_ratio=_ew.get("trader_ratio", 1.0),
                                                     portfolio_value=portfolio_value, trader_name=td["wallet_username"])
+                # Apply all size caps
+                if _ew_budget is not None and _ew_size > _ew_budget:
+                    _ew_size = round(_ew_budget, 2)
+                if _ew_size > _ew_exp_rem:
+                    _ew_size = round(_ew_exp_rem, 2)
+                if _ew_cid:
+                    _ew_existing = sum(ot["size"] for ot in _cached_open_trades if ot.get("condition_id") == _ew_cid)
+                    _ew_pos_rem = MAX_POSITION_SIZE - _ew_existing
+                    if _ew_size > _ew_pos_rem:
+                        _ew_size = round(_ew_pos_rem, 2)
                 if _ew_size >= MIN_TRADE_SIZE and balance > _ew_size:
                     with _buy_lock:
                         if _ew_cid and db.count_copies_for_market(td["wallet_address"], _ew_cid) >= config.MAX_COPIES_PER_MARKET:
@@ -1043,28 +1089,33 @@ def copy_followed_wallets():
                     # Cross-trader duplicate check
                     if td["cid"] and db.is_market_already_open(td["cid"], from_wallet=td["address"]):
                         continue
-                    # MAX_PER_MATCH check
+                    # MAX_PER_MATCH check (with size cap)
+                    _hw_budget = None
                     if config.MAX_PER_MATCH > 0:
                         _hw_evt_slug = td["trade_data"].get("event_slug", "") or ""
                         if _hw_evt_slug:
                             _hw_match_inv = db.get_invested_for_event(_hw_evt_slug)
-                            if _hw_match_inv >= config.MAX_PER_MATCH:
+                            _hw_budget = config.MAX_PER_MATCH - _hw_match_inv
+                            if _hw_budget < MIN_TRADE_SIZE:
                                 continue
-                    # Check trader exposure limit (DB query includes recently closed)
+                    # Check trader exposure limit (with size cap)
                     _max_t = portfolio_value * _EXPOSURE_MAP.get(td["username"].lower(), config.MAX_EXPOSURE_PER_TRADER)
                     _t_inv = db.get_trader_exposure(td["address"])
-                    if _t_inv >= _max_t:
+                    _hw_exp_rem = _max_t - _t_inv
+                    if _hw_exp_rem < MIN_TRADE_SIZE:
                         logger.info("[HEDGE-WAIT] Trader exposure $%.0f >= max $%.0f, skipping: %s", _t_inv, _max_t, td["question"][:40])
                         continue
-                    # Max per event check (DB query includes recently closed)
+                    # Max per event check (with size cap)
                     if config.MAX_PER_EVENT > 0:
                         _hw_evt = td["trade_data"].get("event_slug", "") or ""
                         if _hw_evt:
                             _hw_evt_inv = db.get_invested_for_event(_hw_evt)
-                            if _hw_evt_inv >= config.MAX_PER_EVENT:
+                            _hw_evt_rem = config.MAX_PER_EVENT - _hw_evt_inv
+                            if _hw_evt_rem < MIN_TRADE_SIZE:
                                 logger.info("[HEDGE-WAIT] Event exposure $%.0f >= max $%.0f, skipping: %s",
                                             _hw_evt_inv, config.MAX_PER_EVENT, td["question"][:40])
                                 continue
+                            _hw_budget = min(_hw_budget, _hw_evt_rem) if _hw_budget is not None else _hw_evt_rem
                     # Event timing check: skip if event > MAX_HOURS away
                     if config.MAX_HOURS_BEFORE_EVENT > 0:
                         _hw_eslug = td["trade_data"].get("event_slug", "") or td["trade_data"].get("market_slug", "")
@@ -1087,6 +1138,16 @@ def copy_followed_wallets():
                                 pass
                     size = _calculate_position_size(entry_price, cash, td.get("trader_ratio", 1.0),
                                                     portfolio_value=portfolio_value, trader_name=td["username"])
+                    # Apply all size caps
+                    if _hw_budget is not None and size > _hw_budget:
+                        size = round(_hw_budget, 2)
+                    if size > _hw_exp_rem:
+                        size = round(_hw_exp_rem, 2)
+                    if td["cid"]:
+                        _hw_existing = sum(ot["size"] for ot in _cached_open_trades if ot.get("condition_id") == td["cid"])
+                        _hw_pos_rem = MAX_POSITION_SIZE - _hw_existing
+                        if size > _hw_pos_rem:
+                            size = round(_hw_pos_rem, 2)
                     if size < MIN_TRADE_SIZE or cash < size:
                         continue
                     trade = {
@@ -1567,7 +1628,13 @@ def copy_followed_wallets():
                 size = round(_evt_remaining, 2)
                 logger.info("[SIZE] Capped to event budget: $%.2f (remaining $%.2f of $%.0f) | %s",
                             size, _evt_remaining, config.MAX_PER_EVENT, question[:35])
-            else:
+            # Cap to trader exposure remaining budget
+            _trader_remaining = max_per_trader - trader_invested
+            if _trader_remaining > 0 and size > _trader_remaining:
+                size = round(_trader_remaining, 2)
+                logger.info("[SIZE] Capped to trader exposure: $%.2f (remaining $%.2f of $%.0f) | %s",
+                            size, _trader_remaining, max_per_trader, question[:35])
+            if size >= MIN_TRADE_SIZE:
                 logger.info("[SIZE] %s: trader=$%.0f avg=$%.0f ratio=%.2f → our=$%.2f | %s",
                             username, dollar_value, avg_trader_size, trader_ratio, size, question[:35])
 
