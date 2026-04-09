@@ -250,6 +250,40 @@ tr:hover{background:rgba(201,168,76,0.03)}
 .al-det{font-size:.88rem;color:var(--text-mid);font-weight:300}
 .al-det .hl{color:var(--gold);font-weight:600}
 
+/* ═══ BIG WIN JACKPOT ═══ */
+#bigWinCanvas{position:fixed;inset:0;z-index:10001;pointer-events:none}
+.bw-ov{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0);pointer-events:none;transition:background .6s ease}
+.bw-ov.active{background:rgba(0,0,0,0.8);pointer-events:auto}
+.bw-ov.fade-out{background:rgba(0,0,0,0);transition:background .8s ease}
+.bw-card{text-align:center;transform:scale(0);opacity:0;transition:transform .5s cubic-bezier(.17,.67,.35,1.5),opacity .4s ease;
+  position:relative;z-index:2}
+.bw-ov.active .bw-card{transform:scale(1);opacity:1}
+.bw-ov.fade-out .bw-card{transform:scale(0.8);opacity:0;transition:transform .6s ease,opacity .6s ease}
+.bw-rays{position:absolute;width:600px;height:600px;left:50%;top:50%;margin:-300px 0 0 -300px;
+  background:conic-gradient(from 0deg,transparent,rgba(201,168,76,0.1) 10%,transparent 20%);
+  border-radius:50%;animation:bwSpin 8s linear infinite;z-index:1}
+@keyframes bwSpin{to{transform:rotate(360deg)}}
+.bw-title{font-size:3.2rem;font-weight:900;letter-spacing:0.15em;text-transform:uppercase;
+  color:var(--gold);text-shadow:0 0 40px rgba(201,168,76,0.6),0 0 80px rgba(201,168,76,0.3),
+  0 4px 20px rgba(0,0,0,0.8);animation:bwPulse 1.2s ease-in-out infinite alternate;
+  font-family:var(--font)}
+@keyframes bwPulse{from{text-shadow:0 0 40px rgba(201,168,76,0.6),0 0 80px rgba(201,168,76,0.3),0 4px 20px rgba(0,0,0,0.8);transform:scale(1)}
+  to{text-shadow:0 0 60px rgba(201,168,76,0.9),0 0 120px rgba(201,168,76,0.5),0 4px 20px rgba(0,0,0,0.8);transform:scale(1.05)}}
+.bw-gif{width:420px;max-width:85vw;border-radius:12px;margin:16px auto;display:block;
+  box-shadow:0 0 60px rgba(201,168,76,0.3)}
+.bw-pnl{font-size:4rem;font-weight:700;font-family:var(--mono);color:var(--green);
+  text-shadow:0 0 30px rgba(52,211,153,0.5);margin:8px 0}
+.bw-market{font-size:1.1rem;font-weight:500;color:var(--text);max-width:500px;margin:0 auto}
+.bw-detail{font-size:.9rem;color:var(--text-mid);font-weight:300;margin-top:6px;letter-spacing:0.05em}
+.bw-detail .hl{color:var(--gold);font-weight:600}
+@media(max-width:600px){
+  .bw-title{font-size:2rem;letter-spacing:0.1em}
+  .bw-pnl{font-size:2.5rem}
+  .bw-rays{width:300px;height:300px;margin:-150px 0 0 -150px}
+  .bw-gif{width:280px}
+}
+
 /* ═══ MEME GIF OVERLAY (bottom-right) ═══ */
 .meme-ov{position:fixed;inset:0;z-index:9997;pointer-events:none;display:flex;
   align-items:flex-end;justify-content:flex-end;padding:0 32px 32px 0}
@@ -514,6 +548,17 @@ tr:hover{background:rgba(201,168,76,0.03)}
 </div>
 <div class="al-ov" id="alOv" style="display:none"></div>
 <div class="meme-ov" id="memeOv" style="display:none"></div>
+<canvas id="bigWinCanvas" style="display:none" aria-hidden="true"></canvas>
+<div class="bw-ov" id="bigWinOv" style="display:none">
+  <div class="bw-rays"></div>
+  <div class="bw-card">
+    <div class="bw-title">BIG WIN!!!</div>
+    <img class="bw-gif" id="bwGif" src="" alt="BIG WIN">
+    <div class="bw-pnl" id="bwPnl">+$0.00</div>
+    <div class="bw-market" id="bwMarket"></div>
+    <div class="bw-detail" id="bwDetail"></div>
+  </div>
+</div>
 
 <script>
 let D=null,CI=null,sfx=localStorage.getItem('sfx')!=='off',sfxPop=localStorage.getItem('sfxPop')!=='off',pollOk=false;
@@ -566,7 +611,7 @@ function _getSortVal(t,col,table){
   if(col==='sell')return t.current_price||0;
   if(col==='size')return t.size||0;
   if(col==='pnl')return table==='open'?(t.entry_price>0?(t.size/t.entry_price)*(t.current_price-t.entry_price):0):(t.pnl_realized||0);
-  if(col==='event')return t.event_start||'';
+  if(col==='event')return t.event_end||t.event_start||'';
   if(col==='time')return t.created_at||'';
   if(col==='closed_at')return t.closed_at||'';
   return 0;
@@ -583,7 +628,7 @@ let _moneyBuffer=null;
 fetch('/static/money-button.mp3').then(r=>r.arrayBuffer()).then(b=>AC.decodeAudioData(b)).then(buf=>{_moneyBuffer=buf}).catch(()=>{});
 function playMoney(){if(!_moneyBuffer)return;try{AC.resume();const s=AC.createBufferSource(),g=AC.createGain();s.buffer=_moneyBuffer;g.gain.value=1.0;s.connect(g);g.connect(_masterGain);s.start()}catch(e){}}
 /* ═══ MEME SOUND BUFFERS ═══ */
-let _sndWasted=null,_sndBell=null,_sndJackpot=null,_sndPolice=null,_sndCurb=null,_sndPayout=null;
+let _sndWasted=null,_sndBell=null,_sndJackpot=null,_sndPolice=null,_sndCurb=null,_sndPayout=null,_sndShootingStars=null;
 function _loadSnd(url){return fetch(url).then(r=>{if(!r.ok){console.warn('[SFX] failed to load:',url,r.status);return null}return r.arrayBuffer()}).then(b=>b?AC.decodeAudioData(b):null).catch(e=>{console.warn('[SFX] decode error:',url,e);return null})}
 _loadSnd('/static/loss-wasted.mp3').then(b=>{_sndWasted=b});
 _loadSnd('/static/trade-bell.mp3').then(b=>{_sndBell=b});
@@ -591,6 +636,7 @@ _loadSnd('/static/streak-jackpot.mp3?v=3').then(b=>{_sndJackpot=b});
 _loadSnd('/static/bigwin-police.mp3').then(b=>{_sndPolice=b});
 _loadSnd('/static/streak-curb.mp3').then(b=>{_sndCurb=b});
 _loadSnd('/static/payout-cashregister.mp3').then(b=>{_sndPayout=b});
+_loadSnd('/static/bigwin-shootingstars.mp3?v=4').then(b=>{_sndShootingStars=b});
 function _playBuf(buf,vol){if(!buf){console.warn('[SFX] buffer is null — sound file failed to load');return}try{AC.resume();const s=AC.createBufferSource(),g=AC.createGain();s.buffer=buf;g.gain.value=typeof vol==='number'?vol:1.0;s.connect(g);g.connect(_masterGain);s.start()}catch(e){console.warn('[SFX] playback error:',e)}}
 const _rnd=a=>a[Math.floor(Math.random()*a.length)];
 /* ═══ MEME GIF ARRAYS ═══ */
@@ -610,9 +656,14 @@ const _streakLossCfg=[
 ];
 const _payoutGifs=['https://media.giphy.com/media/h0MTqLyvgG0Ss/giphy.gif'];
 const _payoutLabels=["PAYOUT RECEIVED","MONEY PRINTER GO BRRR","USDC SECURED"];
+const _bigWinGifs=[
+  'https://media.giphy.com/media/gTURHJs4e2Ies/giphy.gif',
+  'https://media.giphy.com/media/ax2d9JRLksVN1LUPIy/giphy.gif',
+  'https://media.giphy.com/media/8zuHuiw0RwMVy/giphy.gif'
+];
 /* Preload all GIFs */
-[_lossGif,'https://gifdb.com/images/high/internet-star-hasbulla-counting-money-money-money-zr98gdcan97a4hn8.gif','https://media.giphy.com/media/x0GeFXErpcRk4/giphy.gif','https://media.giphy.com/media/LLWP1seiT4fC/giphy.gif',..._tradeGifs,..._streakWinCfg.map(s=>s.gif),..._streakLossCfg.map(s=>s.gif),..._payoutGifs].forEach(u=>{const i=new Image();i.src=u});
-document.addEventListener('click',()=>{if(AC.state==='suspended')AC.resume()});
+[_lossGif,'https://gifdb.com/images/high/internet-star-hasbulla-counting-money-money-money-zr98gdcan97a4hn8.gif','https://media.giphy.com/media/x0GeFXErpcRk4/giphy.gif','https://media.giphy.com/media/LLWP1seiT4fC/giphy.gif',..._tradeGifs,..._streakWinCfg.map(s=>s.gif),..._streakLossCfg.map(s=>s.gif),..._payoutGifs,..._bigWinGifs].forEach(u=>{const i=new Image();i.src=u});
+document.addEventListener('click',()=>{if(AC.state==='suspended')AC.resume();if(!window._keepAlive){const s=AC.createOscillator(),g=AC.createGain();g.gain.value=0;s.connect(g);g.connect(AC.destination);s.start();window._keepAlive=true}});
 const hist=[];
 const $=id=>document.getElementById(id);
 const pc=v=>v>=0?'up':'dn';
@@ -665,6 +716,84 @@ function _showMeme(cfg){
   setTimeout(()=>{const c=o.querySelector('.meme-card');if(c)c.classList.add('out')},dur-400);
   _memeTimer=setTimeout(()=>{o.style.display='none';_memeTimer=null},dur);
 }
+/* ═══ BIG WIN CONFETTI + JACKPOT ═══ */
+let _confettiRAF=null,_confettiParticles=[],_bigWinTimer=null;
+function _startConfetti(dur){
+  const cv=$('bigWinCanvas');cv.style.display='block';
+  cv.width=window.innerWidth;cv.height=window.innerHeight;
+  const ctx=cv.getContext('2d');
+  const colors=['#c9a84c','#e4c868','#34d399','#ffffff','#f0e68c','#ffd700','#4ade80'];
+  _confettiParticles=[];
+  const count=Math.min(150,Math.floor(window.innerWidth/8));
+  for(let i=0;i<count;i++){
+    _confettiParticles.push({
+      x:Math.random()*cv.width,y:Math.random()*cv.height*-1,
+      w:Math.random()*10+5,h:Math.random()*6+3,
+      color:colors[Math.floor(Math.random()*colors.length)],
+      vx:(Math.random()-0.5)*2,vy:Math.random()*3+2,
+      rot:Math.random()*360,rotV:(Math.random()-0.5)*8
+    });
+  }
+  const startT=performance.now(),fadeStart=dur-1500;
+  function frame(now){
+    const elapsed=now-startT;
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const fadeProg=elapsed>fadeStart?Math.max(0,1-(elapsed-fadeStart)/1500):1;
+    for(const p of _confettiParticles){
+      p.x+=p.vx;p.y+=p.vy;p.rot+=p.rotV;
+      if(p.y>cv.height+20){p.y=-20;p.x=Math.random()*cv.width}
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);
+      ctx.globalAlpha=fadeProg;ctx.fillStyle=p.color;
+      ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();
+    }
+    if(elapsed<dur){_confettiRAF=requestAnimationFrame(frame)}else{_stopConfetti()}
+  }
+  _confettiRAF=requestAnimationFrame(frame);
+  cv._resH=()=>{cv.width=window.innerWidth;cv.height=window.innerHeight};
+  window.addEventListener('resize',cv._resH);
+}
+function _stopConfetti(){
+  if(_confettiRAF){cancelAnimationFrame(_confettiRAF);_confettiRAF=null}
+  _confettiParticles=[];
+  const cv=$('bigWinCanvas');cv.style.display='none';
+  if(cv._resH){window.removeEventListener('resize',cv._resH);cv._resH=null}
+  const ctx=cv.getContext('2d');if(ctx)ctx.clearRect(0,0,cv.width,cv.height);
+  cv.width=0;cv.height=0;
+}
+function _animatePnl(el,target,durMs){
+  const start=performance.now();const prefix=target>=0?'+$':'-$';const absT=Math.abs(target);
+  function tick(now){
+    const prog=Math.min(1,(now-start)/durMs);
+    const eased=1-Math.pow(1-prog,3);
+    el.textContent=prefix+(absT*eased).toFixed(2);
+    if(prog<1)requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+function _showBigWinJackpot(t){
+  _stopConfetti();
+  const dur=16000;
+  const ov=$('bigWinOv');
+  $('bwGif').src=_rnd(_bigWinGifs);
+  $('bwMarket').textContent=(t.market||'?').substring(0,60);
+  $('bwDetail').innerHTML='@ '+(t.price||0)+'\u00A2 \u00B7 via <span class="hl">'+(t.trader||'?')+'</span>';
+  $('bwPnl').textContent='+$0.00';
+  ov.style.display='flex';ov.classList.remove('fade-out');
+  void ov.offsetWidth;ov.classList.add('active');
+  _startConfetti(dur);
+  setTimeout(()=>_animatePnl($('bwPnl'),t.pnl||0,2000),500);
+  if(sfxBigWin||t._test){AC.resume();_playBuf(_sndShootingStars,1.0)}
+  if(_bigWinTimer)clearTimeout(_bigWinTimer);
+  _bigWinTimer=setTimeout(()=>{
+    ov.classList.add('fade-out');ov.classList.remove('active');
+    setTimeout(()=>{ov.style.display='none';ov.classList.remove('fade-out');_bigWinTimer=null},800);
+  },dur-800);
+}
+function _hideBigWinJackpot(){
+  if(_bigWinTimer){clearTimeout(_bigWinTimer);_bigWinTimer=null}
+  _stopConfetti();
+  const ov=$('bigWinOv');ov.style.display='none';ov.classList.remove('active','fade-out');
+}
 /* ═══ STREAK SYSTEM ═══ */
 function _initStreaks(){
   if(_streakInit||!D||!D.closed_trades)return;_streakInit=true;
@@ -714,26 +843,31 @@ function _checkPayouts(){
 let _alertTimer=null,_alertIsWin=false,_alertIsBigWin=false,_alertQueue=[];
 function _showCloseAlert(t){
   if(!sfx&&!t._test)return;
-  const o=$('alOv');o.style.display='flex';
   const w=t.pnl>=0;
   const bigWin=t._bigWin||(w&&t.pnl>0&&t.size>0&&(t.pnl/t.size)>=0.5);
-  const winGif=bigWin?'https://media.giphy.com/media/x0GeFXErpcRk4/giphy.gif':'https://gifdb.com/images/high/internet-star-hasbulla-counting-money-money-money-zr98gdcan97a4hn8.gif';
+  if(bigWin){
+    _showBigWinJackpot(t);
+    _alertIsWin=true;_alertIsBigWin=true;
+    if(_alertTimer)clearTimeout(_alertTimer);
+    _alertTimer=setTimeout(()=>{_hideBigWinJackpot();_alertTimer=null;_alertIsWin=false;_alertIsBigWin=false;_processAlertQueue()},16000);
+    return;
+  }
+  const o=$('alOv');o.style.display='flex';
+  const winGif='https://gifdb.com/images/high/internet-star-hasbulla-counting-money-money-money-zr98gdcan97a4hn8.gif';
   const gifUrl=w?winGif:_lossGif;
   const gifHtml='<img src="'+gifUrl+'" style="width:150px;max-height:120px;object-fit:contain;border-radius:8px;margin-left:14px;flex-shrink:0" alt="GIF">';
   const lossLbl=_rnd(_lossLabels);
-  o.innerHTML=`<div class="al-ban${bigWin?' big-win':(!w?' big-loss':'')}" style="border-color:${w?'var(--green)':'var(--red)'}; display:flex;align-items:center;text-align:left">
+  o.innerHTML=`<div class="al-ban${(!w?' big-loss':'')}" style="border-color:${w?'var(--green)':'var(--red)'}; display:flex;align-items:center;text-align:left">
     <div style="flex:1">
-    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED \u2014 WIN':'\u274C '+lossLbl}${bigWin?' \uD83D\uDCB0':''}</div>
+    <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED \u2014 WIN':'\u274C '+lossLbl}</div>
     <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
     <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
     </div>${gifHtml}</div>`;
-  if(w&&bigWin&&sfxBigWin){_playBuf(_sndPolice,1.0)}
-  if(w&&!bigWin&&sfxWin){playMoney()}
+  if(w&&sfxWin){playMoney()}
   if(!w&&sfxLoss){_playBuf(_sndWasted,1.0)}
-  _alertIsWin=w;_alertIsBigWin=bigWin;
+  _alertIsWin=w;_alertIsBigWin=false;
   if(_alertTimer)clearTimeout(_alertTimer);
-  const dur=bigWin?16500:6000;
-  _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_alertIsBigWin=false;_processAlertQueue()},dur);
+  _alertTimer=setTimeout(()=>{o.style.display='none';_alertTimer=null;_alertIsWin=false;_alertIsBigWin=false;_processAlertQueue()},6000);
 }
 function _processAlertQueue(){
   if(!_alertQueue.length)return;
@@ -919,13 +1053,13 @@ function evtTime(iso){
     if(diff>3600000)return'<span style="color:#f59e0b;font-weight:500">in '+tf+'</span>';
     if(diff>0)return'<span style="color:#f59e0b;font-weight:600">\u23F3 '+tf+'</span>';
     if(mins<=180)return'__LIVE__'+tf;
-    if(mins<=360)return'<span style="color:var(--text-mid)">~ended</span>';
-    return'<span style="color:var(--text-dim)">ended</span>';
+    if(mins<2880)return'<span style="color:var(--text-mid)">resolving</span>';
+    const days=Math.floor(mins/1440);return'<span style="color:var(--text-dim)">'+days+'d ago</span>';
   }catch(e){return'<span style="color:var(--text-dim)">—</span>'}}
 function ticker(){const el=$('ticker');
   if(!hist.length&&D&&D.open_trades&&D.open_trades.length){
     const it=D.open_trades.slice(0,12).map(t=>{const p=t.pnl_unrealized||0;const{e:te,l:tl}=dSp(t);
-      const ev=evtTime(t.event_start);
+      const ev=evtTime(t.event_end||t.event_start);
       return`<span class="tk-i"><span style="color:var(--text);font-weight:600">#${t.id}</span><span style="color:var(--text);font-weight:600">${te} ${tl}</span><span style="color:var(--gold)">${(t.market_question||'').substring(0,35)}</span><span style="background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.25);padding:1px 8px;border-radius:3px;font-weight:600;font-size:.78em">${t.side} @ ${Math.round((t.entry_price||0)*100)}\u00A2</span><span class="${p>=0?'up':'dn'}">${sg(p)}$${fm(p)}</span>${ev}</span>`});
     el.innerHTML=it.join('')+it.join('');return}
   if(hist.length){const it=hist.slice(0,12).map(t=>{
@@ -992,7 +1126,7 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
       <td class="c-num">${Math.round(((t.current_price||t.entry_price)||0)*100)}\u00A2</td>
       <td class="c-num">$${t.size>=10?fm(t.size,1):fm(t.size)}</td>
       <td class="c-pnl"><button class="close-btn ${p>=0?'win':'loss'}" onclick="closeTrade(${t.id},this)" title="Close position #${t.id}" style="min-width:60px">${sg(p)}$${Math.abs(p)>=10?fm(Math.abs(p),1):fm(Math.abs(p))}</button></td>
-      <td class="c-evt2" style="font-size:.78rem">${(()=>{const ev=evtTime(t.event_start);const isLive=ev.includes('__LIVE__');const isE=_isEsport(t);const q=(t.market_question||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');if(isE){const tm=isLive?ev.replace('__LIVE__',''):'';return'<button class="live-btn" onclick="openStream(\''+q+'\',this)">LIVE</button> <span class="live-time" data-q="'+q+'" style="color:var(--green);font-weight:600;font-size:.72rem">'+(tm||'')+'</span>'}if(isLive){return'<span style="color:var(--green);font-weight:600">\u25CF LIVE '+ev.replace('__LIVE__','')+'</span>'}return ev})()}</td>
+      <td class="c-evt2" style="font-size:.78rem">${(()=>{const ev=evtTime(t.event_end||t.event_start);const isLive=ev.includes('__LIVE__');const isE=_isEsport(t);const q=(t.market_question||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');if(isE){const tm=isLive?ev.replace('__LIVE__',''):'';return'<button class="live-btn" onclick="openStream(\''+q+'\',this)">LIVE</button> <span class="live-time" data-q="'+q+'" style="color:var(--green);font-weight:600;font-size:.72rem">'+(tm||'')+'</span>'}if(isLive){return'<span style="color:var(--green);font-weight:600">\u25CF LIVE '+ev.replace('__LIVE__','')+'</span>'}return ev})()}</td>
       <td class="c-time">${t.created_at?(()=>{try{const d=new Date(t.created_at+'Z');return'<div>'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+'</div><div style="font-size:.65rem;color:var(--text-dim)">'+d.toLocaleString('de-AT',{timeZone:'Europe/Vienna',day:'2-digit',month:'2-digit'})+'</div>'}catch(e){return''}})():''}</td>
     </tr>`}).join('')
     :'<tr><td colspan="8" class="empty" style="border:0">Waiting for signals...</td></tr>';
@@ -1138,7 +1272,7 @@ if(new URLSearchParams(location.search).has('wide')){
   content.appendChild(right);
   app.appendChild(content);
 }
-load();setInterval(load,10000);
+load();const _pollWorker=new Worker(URL.createObjectURL(new Blob(["setInterval(()=>postMessage(1),10000)"],{type:"application/javascript"})));_pollWorker.onmessage=()=>load();
 setTimeout(_updSfxUI,100);
 // Auto-refresh report every 60s
 setInterval(loadReport,60000);
