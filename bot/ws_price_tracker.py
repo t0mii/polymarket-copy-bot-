@@ -20,9 +20,12 @@ PING_INTERVAL_SEC = 15  # Server drops connection without periodic ping
 class PriceTracker:
     """WebSocket-based real-time price tracker for open positions."""
 
+    _MAX_PRICE_AGE = 120  # seconds before a cached price is considered stale
+
     def __init__(self):
         self._prices = {}         # {token_id: float}  best bid
         self._asks = {}           # {token_id: float}  best ask
+        self._prices_ts = {}      # {token_id: float}  timestamp of last price update
         self._condition_map = {}  # {condition_id: {"YES": token_id, "NO": token_id, ...}}
         self._lock = threading.Lock()
         self._ws = None
@@ -58,12 +61,17 @@ class PriceTracker:
         return self._running
 
     def get_price(self, condition_id: str, side: str) -> float | None:
-        """Return cached WebSocket price for a condition+side, or None if unknown."""
+        """Return cached WebSocket price for a condition+side, or None if unknown/stale."""
         with self._lock:
             tokens = self._condition_map.get(condition_id, {})
             token_id = tokens.get(side.upper()) or tokens.get("YES")
             if token_id:
-                return self._prices.get(token_id)
+                price = self._prices.get(token_id)
+                if price is not None:
+                    age = time.time() - self._prices_ts.get(token_id, 0)
+                    if age < self._MAX_PRICE_AGE:
+                        return price
+                    # Price too old, treat as unknown
         return None
 
     def get_spread(self, condition_id: str, side: str) -> float | None:
@@ -204,6 +212,8 @@ class PriceTracker:
         if not asset_id:
             return
 
+        _now = time.time()
+
         # book event — may or may not have event_type field
         if etype in ("book", "") and "bids" in ev:
             bids = ev.get("bids", [])
@@ -212,6 +222,7 @@ class PriceTracker:
                 if bids:
                     try:
                         self._prices[asset_id] = max(float(b["price"]) for b in bids)
+                        self._prices_ts[asset_id] = _now
                     except Exception:
                         pass
                 if asks:
@@ -226,6 +237,7 @@ class PriceTracker:
             if price is not None:
                 with self._lock:
                     self._prices[asset_id] = float(price)
+                    self._prices_ts[asset_id] = _now
             ask = ev.get("best_ask") or ev.get("ask")
             if ask is not None:
                 with self._lock:
@@ -236,12 +248,14 @@ class PriceTracker:
             if price is not None:
                 with self._lock:
                     self._prices[asset_id] = float(price)
+                    self._prices_ts[asset_id] = _now
 
         elif etype == "best_bid_ask":
             bid = ev.get("best_bid") or ev.get("bid")
             if bid is not None:
                 with self._lock:
                     self._prices[asset_id] = float(bid)
+                    self._prices_ts[asset_id] = _now
             ask = ev.get("best_ask") or ev.get("ask")
             if ask is not None:
                 with self._lock:

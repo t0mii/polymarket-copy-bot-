@@ -217,19 +217,20 @@ def update_prices():
                                 broadcast_event("trade_closed", {"market": (_p.get("title") or "")[:50], "pnl": _pnl, "price": round(_cp * 100), "trader": "auto", "size": _our_size})
                             except Exception:
                                 pass
-                            # Close matching copy_trade in DB
+                            # Close matching copy_trade in DB + save usdc_received
                             try:
                                 from database.db import get_connection
                                 _now2 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                _usdc_recv = _resp.get("usdc_received", 0)
                                 with get_connection() as _conn:
                                     _conn.execute(
-                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=?, closed_at=? "
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=?, closed_at=?, usdc_received=? "
                                         "WHERE condition_id=? AND status='open'",
-                                        (_pnl, _cp, _now2, _cid))
-                            except Exception:
-                                pass
-        except Exception:
-            pass
+                                        (_pnl, _cp, _now2, _usdc_recv, _cid))
+                            except Exception as _e:
+                                logger.warning("[AUTO-SELL] DB update failed: %s", _e)
+        except Exception as _e:
+            logger.warning("[AUTO-SELL] Error in auto-sell loop: %s", _e)
         _update_counter += 1
         # Snapshot alle 10 Updates (= 5 Min bei 30s Intervall)
         if _update_counter >= 10:

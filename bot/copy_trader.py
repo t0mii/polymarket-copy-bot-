@@ -1377,6 +1377,19 @@ def copy_followed_wallets():
                                 _conv, _min_conv, username, question[:40])
                     continue
 
+            # 2b) Fee check: log fee info, skip if MAX_FEE_BPS is set and exceeded
+            if cid:
+                try:
+                    from bot.order_executor import get_fee_rate
+                    _fee = get_fee_rate(cid, t["side"])
+                    if _fee > 0:
+                        logger.info("[FEE] %dbps (%.1f%%) on: %s", _fee, _fee/100, question[:40])
+                    if config.MAX_FEE_BPS > 0 and _fee > config.MAX_FEE_BPS:
+                        logger.info("[FILTER] Fee %dbps > max %dbps, skipping: %s", _fee, config.MAX_FEE_BPS, question[:40])
+                        continue
+                except Exception:
+                    pass  # fee lookup failed, don't block trade
+
             # 3) Preis-Range-Filter: per-trader override via MIN/MAX_ENTRY_PRICE_MAP
             trader_price = t["price"]
             _min_price = _MIN_ENTRY_PRICE_MAP.get(username.lower(), config.MIN_ENTRY_PRICE)
