@@ -512,7 +512,7 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
 
 
 def _position_diff_scan(address: str, username: str, balance: float,
-                        total_invested: float) -> int:
+                        total_invested: float, portfolio_value: float = 0) -> int:
     """Position-Diff: findet neue Positionen die der Activity-Feed verpasst hat.
 
     Holt aktuelle Positionen des Traders und vergleicht mit unseren copy_trades.
@@ -613,8 +613,9 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 elif _diff_evt_remaining is not None:
                     _diff_remaining = _diff_evt_remaining
 
-            # Max exposure per trader (DB query includes recently closed)
-            _max_exp = (balance + sum(t["size"] for t in _diff_open)) * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
+            # Max exposure per trader (use portfolio value like activity scan)
+            _diff_portfolio = portfolio_value if portfolio_value > 0 else (balance + sum(t["size"] for t in _diff_open))
+            _max_exp = _diff_portfolio * _EXPOSURE_MAP.get(username.lower(), config.MAX_EXPOSURE_PER_TRADER)
             _t_exp = db.get_trader_exposure(address)
             _diff_exp_remaining = _max_exp - _t_exp
             if _diff_exp_remaining < config.MIN_TRADE_SIZE:
@@ -1322,7 +1323,7 @@ def copy_followed_wallets():
 
         # Position-Diff: Fallback für Trades die der Activity-Feed verpasst hat
         if config.POSITION_DIFF_ENABLED:
-            new_trades += _position_diff_scan(address, username, balance, total_invested)
+            new_trades += _position_diff_scan(address, username, balance, total_invested, portfolio_value=portfolio_value)
 
         for t in new_buy_trades:
             _last_processed_ts = max(_last_processed_ts, t["timestamp"])
