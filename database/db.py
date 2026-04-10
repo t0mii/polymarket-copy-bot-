@@ -22,6 +22,7 @@ def init_db():
             "ALTER TABLE copy_trades ADD COLUMN actual_size REAL",
             "ALTER TABLE copy_trades ADD COLUMN shares_held REAL",
             "ALTER TABLE copy_trades ADD COLUMN usdc_received REAL",
+            "ALTER TABLE copy_trades ADD COLUMN peak_price REAL",
         ]:
             try:
                 conn.execute(migration)
@@ -30,7 +31,7 @@ def init_db():
 
         # Verify critical columns exist (migration may have silently failed)
         cols = {row[1] for row in conn.execute("PRAGMA table_info(copy_trades)").fetchall()}
-        _critical = ["actual_entry_price", "actual_size", "shares_held", "usdc_received"]
+        _critical = ["actual_entry_price", "actual_size", "shares_held", "usdc_received", "peak_price"]
         _missing = [c for c in _critical if c not in cols]
         if _missing:
             import logging as _log

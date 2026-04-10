@@ -1907,8 +1907,6 @@ def update_copy_positions():
                         # Close if market resolved
                         if is_resolved:
                             # redeemable=True = Markt resolved.
-                            # DB-Preis (trade["current_price"]) ist zuverlaessiger als API-Preis
-                            # weil er bereits korrekt fuer unsere Seite berechnet wurde.
                             resolve_price = trade["current_price"] if trade["current_price"] else current_price
                             if resolve_price >= 0.50:
                                 close_price = 1.0
@@ -1917,6 +1915,11 @@ def update_copy_positions():
                             pnl, shares = _calc_pnl(trade, close_price)
                             if not db.close_copy_trade(trade["id"], pnl):
                                 continue  # already closed by another path
+                            # Store usdc_received for resolved trades (no exit fee on redemption)
+                            _resolve_received = round(shares * close_price, 4)
+                            _resolve_cost = _get_size(trade)
+                            _resolve_real_pnl = round(_resolve_received - _resolve_cost, 2)
+                            db.update_closed_trade_pnl(trade["id"], _resolve_real_pnl, _resolve_received)
                             status = "[+]" if pnl > 0 else "[-]"
                             logger.info("%s Copy trade #%d CLOSED (resolved @ %.0fc): P&L=$%.2f | %s (%s)",
                                        status, trade["id"], close_price * 100, pnl,
@@ -2092,6 +2095,10 @@ def update_copy_positions():
                                             pnl, shares = _calc_pnl(trade, final)
                                             if not db.close_copy_trade(trade["id"], pnl):
                                                 continue  # already closed
+                                            # Store usdc_received for resolved trades
+                                            _gamma_received = round(shares * final, 4)
+                                            _gamma_cost = _get_size(trade)
+                                            db.update_closed_trade_pnl(trade["id"], round(_gamma_received - _gamma_cost, 2), _gamma_received)
                                             st = "[+]" if pnl > 0 else "[-]"
                                             logger.info("%s Trade #%d AUTO-CLOSED (Gamma resolved): PnL=$%.2f | %s",
                                                         st, trade["id"], pnl, trade["market_question"][:40])
