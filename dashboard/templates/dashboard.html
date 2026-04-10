@@ -912,7 +912,7 @@ function _processNewActivities(){
         alert_(d);beep();
         if(sfxTrade){_showMeme({gif:_rnd(_tradeGifs),lbl:_rnd(_tradeLabels),snd:_sndBell,vol:1.0,dur:4000,color:'var(--gold)'})}
         hist.unshift(d);if(hist.length>20)hist.pop();ticker();
-      }else if(a.event_type==='sell'){
+      }else if(a.event_type==='sell'||a.event_type==='resolved'){
         const ct=tradeId&&D.closed_trades?D.closed_trades.find(t=>t.id===tradeId):null;
         const m=(a.detail||'').match(/#(\d+)\s+(.+?)\s+—/);
         const pnl=a.pnl||0;
