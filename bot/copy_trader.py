@@ -1841,7 +1841,7 @@ def update_copy_positions():
     """
     from collections import defaultdict
 
-    open_trades = db.get_open_copy_trades()
+    open_trades = [dict(t) for t in db.get_open_copy_trades()]
     if not open_trades:
         return
 
@@ -1890,6 +1890,7 @@ def update_copy_positions():
                         open_pos = next((p for p in open_positions if p["market_question"] == trade["market_question"]), None)
 
                     if open_pos is not None:
+                        logger.debug("Trade #%d matched in trader wallet: price=%.4f", trade["id"], open_pos.get("current_price", 0))
                         # Polymarket API gibt immer den YES-Token-Preis zurueck.
                         # Fuer NO-Trades muss der Preis invertiert werden (1 - yes_price = no_price).
                         raw_price = open_pos["current_price"]
@@ -2149,10 +2150,10 @@ def update_copy_positions():
                             logger.debug("Trade #%d: not in positions, miss %d/%d", trade["id"], miss, MISS_COUNT_TO_CLOSE)
 
                 except Exception as e:
-                    logger.debug("Error updating trade #%d: %s", trade["id"], e)
+                    logger.warning("Error updating trade #%d: %s", trade["id"], e)
 
         except Exception as e:
-            logger.debug("Error processing wallet %s: %s", wallet_address[:10], e)
+            logger.warning("Error processing wallet %s: %s", wallet_address[:10], e)
 
 
 def get_copy_portfolio_summary():
