@@ -544,7 +544,6 @@ tr:hover{background:rgba(201,168,76,0.03)}
   </div>
 
 
-
 </div>
 <div class="al-ov" id="alOv" style="display:none"></div>
 <div class="meme-ov" id="memeOv" style="display:none"></div>
@@ -1088,8 +1087,11 @@ function render(){if(!D)return;const s=D.summary,sb=D.starting_balance||200;
   $('v-roi').textContent=(roi>=0?'+':'')+fm(roi,1)+'%';$('v-roi').className='card-val '+pc(roi);
   $('v-roi-detail').textContent='all time';
   $('v-cash').textContent='$'+fm(w);
-  $('v-active').textContent='$'+fm(av);$('v-active').className='card-val gld';
-  $('v-open-detail').innerHTML='$'+fm(av+pv)+' total';
+  const _ot=D.open_trades||[];
+  const botValue=_ot.reduce((s,t)=>{const ep=t.entry_price||0;const shares=ep>0?(t.size||0)/ep:0;return s+shares*(t.current_price||ep)},0);
+  const totalCost=_ot.reduce((s,t)=>s+(t.size||0),0);
+  $('v-active').textContent='$'+fm(botValue);$('v-active').className='card-val gld';
+  $('v-open-detail').innerHTML='<span style="font-size:.85rem;color:var(--text-mid)">$'+fm(totalCost)+' invested</span>';
   $('v-pending').textContent=pv>0.5?'$'+fm(pv):'$0.00';
   $('v-pending').className='card-val '+(pv>0.5?'up':'neu');
   const _rv=s.resolved_value||0,_av=s.awaiting_value||0;

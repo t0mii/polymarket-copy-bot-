@@ -338,6 +338,43 @@ def api_live_data():
         key=lambda p: p.get("created_at", "") or "", reverse=True)
     display_closed = closed_positions  # already from DB, no "—" entries
 
+    # Orphan active positions: in wallet but not tracked by bot — merge into open display
+    _bot_cids = set(_open_by_cid.keys())
+    for rp in all_raw:
+        cv = float(rp.get("currentValue", 0) or 0)
+        cp = float(rp.get("curPrice", 0) or 0)
+        ap = float(rp.get("avgPrice", 0) or 0)
+        iv = float(rp.get("initialValue", 0) or 0)
+        _cid = rp.get("conditionId", "")
+        if cv < 0.10 or _cid in _bot_cids:
+            continue
+        if cp >= 0.98 or cp <= 0.01:
+            continue  # skip resolved/dead — those show in redeemable summary
+        outcome = rp.get("outcome", "")
+        if outcome.lower() in ("yes", "y"): _side = "YES"
+        elif outcome.lower() in ("no", "n"): _side = "NO"
+        else: _side = outcome or "YES"
+        _shares = iv / ap if ap > 0 else 0
+        _pnl = round(_shares * (cp - ap), 2) if _shares > 0 else round(cv - iv, 2)
+        display_open.append({
+            "id": 0,
+            "wallet_username": "orphan",
+            "wallet_address": funder,
+            "market_question": rp.get("title") or rp.get("question", ""),
+            "market_slug": rp.get("slug", ""),
+            "sport": _detect_sport(rp.get("slug", ""), rp.get("title", "")),
+            "event_slug": rp.get("eventSlug", ""),
+            "side": _side,
+            "outcome_label": outcome if _side not in ("YES", "NO") else "",
+            "entry_price": ap,
+            "current_price": cp,
+            "size": round(iv, 2),
+            "pnl_unrealized": _pnl,
+            "condition_id": _cid,
+            "created_at": "",
+            "is_orphan": True,
+        })
+
     # Counts from bot-copies only
     bot_wins = wins
     bot_losses = losses
@@ -826,6 +863,30 @@ def api_close_trade(trade_id):
         "sell_price": current_price,
         "market": trade["market_question"],
     })
+
+
+@app.route("/api/orphan/sell", methods=["POST"])
+def api_sell_orphan():
+    """Sell an orphan position (not tracked by bot)."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
+
+    data = request.get_json() or {}
+    cid = data.get("condition_id", "")
+    side = data.get("side", "")
+    price = float(data.get("price", 0))
+
+    if not cid or not side or price <= 0:
+        return jsonify({"error": "Missing condition_id, side, or price"}), 400
+
+    from bot.order_executor import sell_shares
+    result = sell_shares(cid, side, price)
+    if result:
+        logger.info("[ORPHAN-SELL] %s / %s @ %.0fc | received $%.2f",
+                     cid[:20], side, price * 100, result.get("usdc_received", 0))
+        return jsonify({"status": "sold", "usdc_received": result.get("usdc_received", 0)})
+    else:
+        return jsonify({"error": "Sell failed — no liquidity or orderbook missing"}), 500
 
 
 @app.route("/api/copy/scan", methods=["POST"])
