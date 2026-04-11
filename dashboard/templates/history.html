@@ -87,6 +87,7 @@
     </div>
 
     <script>
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
     let chart = null;
     let allTrades = [];
     let chartData = { labels: [], values: [] };
@@ -153,7 +154,7 @@
                     ? `https://polymarket.com/event/${eventSlug}/${slug}`
                     : `https://polymarket.com/event/${eventSlug || slug}`;
                 const marketCell = (eventSlug || slug)
-                    ? `<a href="${href}" target="_blank" style="color:var(--gold);text-decoration:none;">${question}</a>`
+                    ? `<a href="${href}" target="_blank" style="color:var(--gold);text-decoration:none;">${esc(question)}</a>`
                     : question;
                 tbody.innerHTML += `<tr>
                     <td>${t.id}</td>

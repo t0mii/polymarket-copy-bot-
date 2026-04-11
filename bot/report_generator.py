@@ -1,4 +1,4 @@
-import html
+import html as _html
 import logging
 import os
 from datetime import datetime
@@ -94,13 +94,13 @@ def generate_report(analyzed_wallets: list[dict], source: str = "leaderboard", t
         rec_class = f"rec-{w['recommendation'].lower()}"
         pnl_class = "positive" if w["pnl"] >= 0 else "negative"
         pnl_sign = "+" if w["pnl"] >= 0 else ""
-        display_name = html.escape(w["username"]) if w["username"] else w["address"][:12] + "..."
+        display_name = _html.escape(w["username"]) if w["username"] else w["address"][:12] + "..."
 
         positions_html = ""
         if w.get("positions"):
             positions_html = '<div class="positions"><h4>Offene Positionen</h4>'
             for p in w["positions"]:
-                positions_html += f'<div class="pos">{html.escape(p["side"])} - {html.escape(p["market_question"][:70])} | ${p["size"]:.2f}</div>'
+                positions_html += f'<div class="pos">{_html.escape(p["side"])} - {_html.escape(p["market_question"][:70])} | ${p["size"]:.2f}</div>'
             positions_html += "</div>"
 
         html += f"""
@@ -125,11 +125,11 @@ def generate_report(analyzed_wallets: list[dict], source: str = "leaderboard", t
             <div class="ws"><div class="ws-value">{w['total_trades']}</div><div class="ws-label">Trades</div></div>
             <div class="ws"><div class="ws-value">{w['markets_traded']}</div><div class="ws-label">Märkte</div></div>
         </div>
-        <div style="margin:8px 0"><span class="tag">{html.escape(str(w['strategy_type']))}</span><span class="tag">Rang #{w['rank']}</span><span class="tag">{html.escape(str(w['source']))}</span></div>
+        <div style="margin:8px 0"><span class="tag">{_html.escape(str(w['strategy_type']))}</span><span class="tag">Rang #{w['rank']}</span><span class="tag">{_html.escape(str(w['source']))}</span></div>
         <div class="detail">
-            <strong>Stärken:</strong> {html.escape(str(w['strengths']))}<br>
-            <strong>Schwächen:</strong> {html.escape(str(w['weaknesses']))}<br>
-            <strong>Analyse:</strong> {html.escape(str(w['reasoning']))}
+            <strong>Stärken:</strong> {_html.escape(str(w['strengths']))}<br>
+            <strong>Schwächen:</strong> {_html.escape(str(w['weaknesses']))}<br>
+            <strong>Analyse:</strong> {_html.escape(str(w['reasoning']))}
         </div>
         {positions_html}
     </div>

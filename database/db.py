@@ -3,6 +3,10 @@ import os
 from contextlib import contextmanager
 
 from database.models import SCHEMA
+try:
+    from database.models import SCHEMA_UPGRADE
+except ImportError:
+    SCHEMA_UPGRADE = ""
 import config
 
 
@@ -10,6 +14,8 @@ def init_db():
     os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
     with get_connection() as conn:
         conn.executescript(SCHEMA)
+        if SCHEMA_UPGRADE:
+            conn.executescript(SCHEMA_UPGRADE)
         # Migrations
         for migration in [
             "ALTER TABLE wallets ADD COLUMN roi REAL DEFAULT 0",
@@ -45,6 +51,8 @@ def get_connection():
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
         conn.commit()
@@ -96,6 +104,21 @@ def get_followed_wallets():
             WHERE w.followed=1
             ORDER BY w.score DESC
         """).fetchall()
+
+
+def add_followed_wallet(address, username):
+    """Add a new wallet to follow (for auto-promoted traders)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO wallets (address, username, followed, baseline_scanned) "
+            "VALUES (?, ?, 1, 0)",
+            (address, username)
+        )
+        # Also mark as followed if already exists
+        conn.execute(
+            "UPDATE wallets SET followed = 1, username = ? WHERE address = ?",
+            (username, address)
+        )
 
 
 def toggle_follow(address: str, followed: int):
@@ -194,9 +217,9 @@ def create_copy_trade(trade: dict):
 
 def get_open_copy_trades():
     with get_connection() as conn:
-        return conn.execute(
+        return [dict(r) for r in conn.execute(
             "SELECT * FROM copy_trades WHERE status='open' ORDER BY created_at DESC"
-        ).fetchall()
+        ).fetchall()]
 
 
 def get_all_copy_trades_for_wallet(wallet_address: str):
@@ -411,17 +434,20 @@ def is_market_already_open(condition_id: str, from_wallet: str = "") -> bool:
     if not condition_id:
         return False
     _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
-    _status_filter = "(status='open' OR (status='closed' AND closed_at > datetime('now', '-%d minutes', 'localtime')))" % _window
+    _window_mod = "-%d minutes" % int(_window)
     with get_connection() as conn:
         if from_wallet:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND %s AND wallet_address!=?" % _status_filter,
-                (condition_id, from_wallet)
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? "
+                "AND (status='open' OR (status='closed' AND closed_at > datetime('now', ?, 'localtime'))) "
+                "AND wallet_address!=?",
+                (condition_id, _window_mod, from_wallet)
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? AND %s" % _status_filter,
-                (condition_id,)
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE condition_id=? "
+                "AND (status='open' OR (status='closed' AND closed_at > datetime('now', ?, 'localtime')))",
+                (condition_id, _window_mod)
             ).fetchone()
         return row["cnt"] > 0 if row else False
 
@@ -807,10 +833,11 @@ def log_blocked_trade(trader: str, market_question: str, condition_id: str,
 
 def get_blocked_trades_since(hours: int = 24, limit: int = 2000) -> list:
     """Get blocked trades from the last N hours."""
+    _hours_mod = "-%d hours" % int(hours)
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM blocked_trades WHERE created_at > datetime('now', '-%d hours', 'localtime') "
-            "ORDER BY created_at DESC LIMIT ?" % hours, (limit,)
+            "SELECT * FROM blocked_trades WHERE created_at > datetime('now', ?, 'localtime') "
+            "ORDER BY created_at DESC LIMIT ?", (_hours_mod, limit)
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -838,31 +865,32 @@ def update_blocked_trade_outcome(trade_id: int, outcome_price: float, would_have
 
 def get_blocked_trade_stats(hours: int = 24) -> dict:
     """Get aggregated stats on blocked trades."""
+    _hours_mod = "-%d hours" % int(hours)
     with get_connection() as conn:
         total = conn.execute(
             "SELECT COUNT(*) as cnt FROM blocked_trades "
-            "WHERE created_at > datetime('now', '-%d hours', 'localtime')" % hours
+            "WHERE created_at > datetime('now', ?, 'localtime')", (_hours_mod,)
         ).fetchone()["cnt"]
         by_reason = conn.execute(
             "SELECT block_reason, COUNT(*) as cnt FROM blocked_trades "
-            "WHERE created_at > datetime('now', '-%d hours', 'localtime') "
-            "GROUP BY block_reason ORDER BY cnt DESC" % hours
+            "WHERE created_at > datetime('now', ?, 'localtime') "
+            "GROUP BY block_reason ORDER BY cnt DESC", (_hours_mod,)
         ).fetchall()
         checked = conn.execute(
             "SELECT COUNT(*) as cnt, "
             "SUM(CASE WHEN would_have_won=1 THEN 1 ELSE 0 END) as winners "
             "FROM blocked_trades "
-            "WHERE created_at > datetime('now', '-%d hours', 'localtime') "
-            "AND would_have_won IS NOT NULL" % hours
+            "WHERE created_at > datetime('now', ?, 'localtime') "
+            "AND would_have_won IS NOT NULL", (_hours_mod,)
         ).fetchone()
         by_trader = conn.execute(
             "SELECT trader, COUNT(*) as cnt, "
             "SUM(CASE WHEN would_have_won=1 THEN 1 ELSE 0 END) as winners, "
             "SUM(CASE WHEN would_have_won=0 THEN 1 ELSE 0 END) as losers "
             "FROM blocked_trades "
-            "WHERE created_at > datetime('now', '-%d hours', 'localtime') "
+            "WHERE created_at > datetime('now', ?, 'localtime') "
             "AND would_have_won IS NOT NULL "
-            "GROUP BY trader" % hours
+            "GROUP BY trader", (_hours_mod,)
         ).fetchall()
         return {
             "total": total,
@@ -920,3 +948,143 @@ def update_recommendation_status(rec_id: int, status: str):
                 "UPDATE ai_recommendations SET status='dismissed', dismissed_at=datetime('now','localtime') WHERE id=?",
                 (rec_id,)
             )
+
+
+# =====================================================================
+# UPGRADE: Performance, ML, Discovery, Autonomous — Helper Functions
+# =====================================================================
+from datetime import datetime, timedelta
+
+
+def get_trader_rolling_pnl(trader_name: str, days: int = 7) -> dict:
+    """Rolling P&L fuer einen Trader ueber die letzten X Tage."""
+    with get_connection() as conn:
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt, "
+            "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
+            "SUM(CASE WHEN pnl_realized < 0 THEN 1 ELSE 0 END) as losses, "
+            "COALESCE(SUM(pnl_realized), 0) as total_pnl "
+            "FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
+            "AND closed_at >= ?",
+            (trader_name, cutoff)
+        ).fetchone()
+        return dict(row) if row else {"cnt": 0, "wins": 0, "losses": 0, "total_pnl": 0}
+
+
+def upsert_trader_performance(trader: str, period: str, stats: dict):
+    """Trader-Performance upserten."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO trader_performance (trader_name, period, trades_count, wins, losses, total_pnl, winrate, avg_pnl) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(trader_name, period) DO UPDATE SET "
+            "trades_count=excluded.trades_count, wins=excluded.wins, losses=excluded.losses, "
+            "total_pnl=excluded.total_pnl, winrate=excluded.winrate, avg_pnl=excluded.avg_pnl, "
+            "calculated_at=datetime('now','localtime')",
+            (trader, period, stats["cnt"], stats["wins"], stats["losses"],
+             stats["total_pnl"], stats["winrate"], stats["avg_pnl"])
+        )
+
+
+def upsert_category_performance(category: str, period: str, stats: dict):
+    """Kategorie-Performance upserten."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO category_performance (category, period, trades_count, wins, losses, total_pnl, winrate) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(category, period) DO UPDATE SET "
+            "trades_count=excluded.trades_count, wins=excluded.wins, losses=excluded.losses, "
+            "total_pnl=excluded.total_pnl, winrate=excluded.winrate, "
+            "calculated_at=datetime('now','localtime')",
+            (category, period, stats["cnt"], stats["wins"], stats["losses"],
+             stats["total_pnl"], stats["winrate"])
+        )
+
+
+def get_category_rolling_pnl(category: str, days: int = 30) -> dict:
+    """Rolling P&L fuer eine Kategorie aus category_performance."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM category_performance WHERE category = ? AND period = ?",
+            (category, f"{days}d")
+        ).fetchone()
+        return dict(row) if row else {"trades_count": 0, "total_pnl": 0, "winrate": 0}
+
+
+def get_trader_status(trader_name: str) -> dict:
+    """Aktueller Status eines Traders (active/throttled/paused)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM trader_status WHERE trader_name = ?", (trader_name,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        return {"status": "active", "bet_multiplier": 1.0, "reason": ""}
+
+
+def set_trader_status(trader_name: str, status: str, multiplier: float, reason: str):
+    """Trader-Status setzen."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO trader_status (trader_name, status, bet_multiplier, reason) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(trader_name) DO UPDATE SET "
+            "status=excluded.status, bet_multiplier=excluded.bet_multiplier, "
+            "reason=excluded.reason, updated_at=datetime('now','localtime')",
+            (trader_name, status, multiplier, reason)
+        )
+
+
+def get_all_candidates(status=None):
+    """Alle Trader-Kandidaten."""
+    with get_connection() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM trader_candidates WHERE status = ? ORDER BY paper_pnl DESC",
+                (status,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM trader_candidates ORDER BY paper_pnl DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def upsert_candidate(address: str, username: str, profit: float, volume: float,
+                     winrate: float, markets: int):
+    """Kandidat einfuegen oder aktualisieren."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO trader_candidates (address, username, profit_total, volume_total, "
+            "winrate, markets_traded) VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(address) DO UPDATE SET "
+            "username=excluded.username, profit_total=excluded.profit_total, "
+            "volume_total=excluded.volume_total, winrate=excluded.winrate, "
+            "markets_traded=excluded.markets_traded, last_checked_at=datetime('now','localtime')",
+            (address, username, profit, volume, winrate, markets)
+        )
+
+
+def add_paper_trade(address: str, cid: str, question: str, side: str, price: float):
+    """Paper-Trade hinzufuegen."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO paper_trades (candidate_address, condition_id, "
+            "market_question, side, entry_price) VALUES (?, ?, ?, ?, ?)",
+            (address, cid, question, side, price)
+        )
+
+
+def get_candidate_stats(address: str) -> dict:
+    """Paper-Trade-Stats fuer einen Kandidaten."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins, "
+            "SUM(CASE WHEN pnl < 0 THEN 1 ELSE 0 END) as losses, "
+            "COALESCE(SUM(pnl), 0) as total_pnl "
+            "FROM paper_trades WHERE candidate_address = ? AND status = 'closed'",
+            (address,)
+        ).fetchone()
+        return dict(row) if row else {"total": 0, "wins": 0, "losses": 0, "total_pnl": 0}

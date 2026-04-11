@@ -204,4 +204,116 @@ CREATE INDEX IF NOT EXISTS idx_closed_pos_wallet ON trader_closed_positions(wall
 CREATE INDEX IF NOT EXISTS idx_blocked_trades_time ON blocked_trades(created_at);
 CREATE INDEX IF NOT EXISTS idx_blocked_trades_condition ON blocked_trades(condition_id);
 CREATE INDEX IF NOT EXISTS idx_blocked_trades_reason ON blocked_trades(block_reason);
+CREATE INDEX IF NOT EXISTS idx_copy_trades_event ON copy_trades(event_slug);
+CREATE INDEX IF NOT EXISTS idx_copy_trades_wallet_status ON copy_trades(wallet_address, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_copy_trades_open_dedup ON copy_trades(condition_id, wallet_address) WHERE status='open';
+"""
+
+# --- Appended by upgrade: Performance + ML + Discovery + Autonomous ---
+SCHEMA_UPGRADE = """
+CREATE TABLE IF NOT EXISTS trader_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trader_name TEXT NOT NULL,
+    period TEXT NOT NULL,
+    trades_count INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    total_pnl REAL DEFAULT 0,
+    winrate REAL DEFAULT 0,
+    avg_pnl REAL DEFAULT 0,
+    calculated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(trader_name, period)
+);
+
+CREATE TABLE IF NOT EXISTS category_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    period TEXT NOT NULL,
+    trades_count INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    total_pnl REAL DEFAULT 0,
+    winrate REAL DEFAULT 0,
+    calculated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(category, period)
+);
+
+CREATE TABLE IF NOT EXISTS trader_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trader_name TEXT NOT NULL UNIQUE,
+    status TEXT DEFAULT 'active',
+    bet_multiplier REAL DEFAULT 1.0,
+    reason TEXT DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS ml_training_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trained_at TEXT DEFAULT (datetime('now','localtime')),
+    samples_count INTEGER,
+    accuracy REAL,
+    feature_importance TEXT,
+    model_path TEXT
+);
+
+CREATE TABLE IF NOT EXISTS trader_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    address TEXT NOT NULL UNIQUE,
+    username TEXT,
+    source TEXT DEFAULT 'leaderboard',
+    profit_total REAL DEFAULT 0,
+    volume_total REAL DEFAULT 0,
+    winrate REAL DEFAULT 0,
+    markets_traded INTEGER DEFAULT 0,
+    paper_trades INTEGER DEFAULT 0,
+    paper_wins INTEGER DEFAULT 0,
+    paper_pnl REAL DEFAULT 0,
+    status TEXT DEFAULT 'observing',
+    promoted_at TEXT,
+    demoted_at TEXT,
+    discovered_at TEXT DEFAULT (datetime('now','localtime')),
+    last_checked_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_address TEXT NOT NULL,
+    condition_id TEXT NOT NULL,
+    market_question TEXT,
+    side TEXT,
+    entry_price REAL,
+    current_price REAL,
+    status TEXT DEFAULT 'open',
+    pnl REAL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    closed_at TEXT,
+    FOREIGN KEY (candidate_address) REFERENCES trader_candidates(address)
+);
+
+CREATE TABLE IF NOT EXISTS autonomous_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_type TEXT NOT NULL,
+    condition_id TEXT NOT NULL,
+    market_question TEXT,
+    side TEXT,
+    entry_price REAL,
+    current_price REAL,
+    size REAL,
+    pnl_realized REAL,
+    status TEXT DEFAULT 'open',
+    score INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    closed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS signal_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_type TEXT NOT NULL UNIQUE,
+    trades_count INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    total_pnl REAL DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
 """

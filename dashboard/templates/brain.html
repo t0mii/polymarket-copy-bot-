@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CopyBot Brain — Intelligence Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#06060a;--bg2:#0c0c12;--bg3:#12121c;--bg4:#1a1a28;
+  --border:#1e1e30;--border-h:#2e2e48;
+  --gold:#c9a84c;--gold-bright:#e4c868;--gold-dim:rgba(201,168,76,0.2);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.15);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.15);
+  --blue:#60a5fa;--purple:#a78bfa;
+  --text:#e8e4dc;--text-dim:#7a7890;--text-mid:#a09eb0;
+  --font:'Manrope',system-ui,sans-serif;--mono:'Fira Code',monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-weight:300;
+  line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(201,168,76,0.03) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(201,168,76,0.03) 1px,transparent 1px);
+  background-size:80px 80px}
+.app{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:20px 24px}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
+  border-bottom:1px solid var(--border);margin-bottom:20px}
+.logo{font-size:1.3rem;font-weight:800;color:var(--gold);letter-spacing:.04em}
+.logo span{color:var(--text-dim);font-weight:300;font-size:.8rem;margin-left:8px}
+.nav a{color:var(--text-mid);text-decoration:none;padding:6px 14px;font-size:.78rem;
+  border:1px solid transparent;border-radius:6px;transition:.2s}
+.nav a:hover,.nav a.act{color:var(--gold);border-color:rgba(201,168,76,0.35)}
+.grid{display:grid;gap:16px}.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:1fr 1fr 1fr}.grid-4{grid-template-columns:1fr 1fr 1fr 1fr}
+.grid-5{grid-template-columns:1fr 1fr 1fr 1fr 1fr}
+@media(max-width:900px){.grid-2,.grid-3,.grid-4,.grid-5{grid-template-columns:1fr 1fr}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;transition:.3s}
+.card:hover{border-color:var(--border-h);transform:translateY(-1px)}
+.card-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;font-weight:600}
+.card-val{font-size:1.8rem;font-weight:700;font-family:var(--mono)}
+.card-sub{font-size:.7rem;color:var(--text-mid);margin-top:4px}
+.sec{margin-bottom:20px}
+.sec-hd{font-size:.85rem;font-weight:700;color:var(--gold);padding:10px 0;
+  border-bottom:1px solid var(--border);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.badge{font-size:.55rem;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.05em}
+.badge-live{background:rgba(52,211,153,0.2);color:var(--green)}
+.badge-fire{background:rgba(255,100,0,0.2);color:#ff6400;animation:pulse 1s infinite}
+.badge-paused{background:rgba(248,113,113,0.2);color:var(--red)}
+table{width:100%;border-collapse:collapse;font-size:.75rem}
+th{text-align:left;color:var(--text-dim);font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.06em;padding:7px 8px;border-bottom:1px solid var(--border);font-weight:600}
+td{padding:7px 8px;border-bottom:1px solid rgba(30,30,48,0.4);font-family:var(--mono);font-size:.72rem}
+tr:hover td{background:rgba(201,168,76,0.03)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.heatmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.heat-cell{background:var(--bg3);border:1px solid var(--border);border-radius:8px;
+  padding:10px;text-align:center;transition:.2s}
+.heat-name{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.heat-val{font-size:1rem;font-weight:700;font-family:var(--mono)}
+.heat-sub{font-size:.55rem;color:var(--text-dim);margin-top:2px}
+.heat-bar{height:3px;border-radius:2px;margin-top:4px;background:var(--bg)}
+.heat-bar-fill{height:100%;border-radius:2px;transition:width .5s}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-active{background:var(--green);box-shadow:0 0 6px var(--green)}
+.status-throttled{background:#fbbf24;box-shadow:0 0 6px #fbbf24}
+.status-paused{background:var(--red);box-shadow:0 0 6px var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 2s ease-in-out infinite}
+.score-bar{display:inline-block;width:60px;height:5px;background:var(--bg);border-radius:3px;vertical-align:middle;margin-left:6px}
+.score-fill{height:100%;border-radius:3px}
+
+/* === POWER LEVELS === */
+.power-level{font-family:var(--mono);font-weight:800;font-size:.9rem;text-shadow:0 0 10px currentColor}
+.power-legendary{color:#ff6400;text-shadow:0 0 15px #ff6400,0 0 30px rgba(255,100,0,0.3)}
+.power-epic{color:#a78bfa;text-shadow:0 0 12px #a78bfa}
+.power-rare{color:#60a5fa;text-shadow:0 0 10px #60a5fa}
+.power-common{color:var(--text-mid)}
+
+/* === STREAK FIRE === */
+@keyframes fireGlow{0%{text-shadow:0 0 5px #ff4500,0 0 10px #ff6400}50%{text-shadow:0 0 15px #ff4500,0 0 30px #ff6400,0 0 45px rgba(255,100,0,0.3)}100%{text-shadow:0 0 5px #ff4500,0 0 10px #ff6400}}
+.on-fire{animation:fireGlow 1.5s ease-in-out infinite}
+.fire-text{color:#ff6400;font-weight:800}
+
+/* === WHALE ALERT === */
+@keyframes whaleSlide{0%{transform:translateX(100%);opacity:0}10%{transform:translateX(0);opacity:1}90%{transform:translateX(0);opacity:1}100%{transform:translateX(-100%);opacity:0}}
+.whale-alert{position:fixed;top:60px;right:20px;z-index:9999;background:linear-gradient(135deg,#1a1a40,#0c0c20);
+  border:2px solid var(--gold);border-radius:12px;padding:14px 20px;min-width:300px;
+  box-shadow:0 0 40px rgba(201,168,76,0.3),0 0 80px rgba(201,168,76,0.1);
+  animation:whaleSlide 6s ease-in-out forwards;pointer-events:none}
+.whale-alert .whale-icon{font-size:2rem;float:left;margin-right:12px}
+.whale-alert .whale-text{font-size:.8rem;color:var(--gold-bright);font-weight:600}
+.whale-alert .whale-detail{font-size:.7rem;color:var(--text-mid);margin-top:4px}
+
+/* === ACHIEVEMENTS === */
+.achievements{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.achievement{background:var(--bg3);border:1px solid var(--border);border-radius:20px;
+  padding:4px 12px;font-size:.65rem;display:flex;align-items:center;gap:4px;transition:.3s}
+.achievement:hover{border-color:var(--gold);transform:scale(1.05)}
+.achievement.unlocked{border-color:var(--gold-dim);background:rgba(201,168,76,0.05)}
+.achievement.locked{opacity:0.3;filter:grayscale(1)}
+.ach-icon{font-size:.9rem}
+
+/* === HEARTBEAT === */
+@keyframes heartbeat{0%{transform:scale(1)}14%{transform:scale(1.15)}28%{transform:scale(1)}42%{transform:scale(1.1)}70%{transform:scale(1)}}
+.heartbeat{display:inline-block;animation:heartbeat 1.5s ease-in-out infinite;color:var(--red)}
+.heartbeat-fast{animation-duration:.8s}
+.heartbeat-slow{animation-duration:2.5s}
+
+/* === PARTICLE EXPLOSION === */
+@keyframes particle{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+.particle{position:fixed;width:6px;height:6px;border-radius:50%;pointer-events:none;z-index:9998;
+  animation:particle .8s ease-out forwards}
+
+.refresh{font-size:.6rem;color:var(--text-dim);font-family:var(--mono);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Left Panel: Recent Activity -->
+  <div class="left-panel">
+    <div class="lp-header"><span class="live-dot"></span> RECENT ACTIVITY</div>
+    <div id="activityLog" style="font-size:.65rem;font-family:'Fira Code',monospace"></div>
+  </div>
+  <div class="hd">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img src="/static/logo.png" alt="SSC" style="height:36px">
+      <div><div class="logo">BRAIN</div><div style="font-size:.7rem;color:var(--text-dim);letter-spacing:.12em;font-weight:300">by Super Sauna Club</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="heartbeat" id="heartIcon" style="font-size:1.2rem">&#x2764;</span>
+      <span style="font-size:.65rem;color:var(--text-dim);font-family:var(--mono)" id="brainClock"></span>
+    </div>
+    <nav class="nav">
+      <a href="/copy">Terminal</a>
+      <a href="/brain" class="act">Brain</a>
+      <a href="/wallets">Settings</a>
+    </nav>
+  </div>
+  <script>
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}setInterval(()=>{const d=new Date();document.getElementById('brainClock').textContent=d.toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},1000)</script>
+
+  <!-- Top Cards -->
+  <div class="grid grid-5 sec">
+    <div class="card">
+      <div class="card-title">ML Accuracy</div>
+      <div class="card-val" id="mlAccuracy">--</div>
+      <div class="card-sub" id="mlSamples">-- samples</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Active Traders</div>
+      <div class="card-val" id="activeTraders">--</div>
+      <div class="card-sub" id="traderDetail">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Scouting</div>
+      <div class="card-val" id="candidateCount">--</div>
+      <div class="card-sub" id="candidateDetail">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Auto Trades</div>
+      <div class="card-val" id="autoCount">--</div>
+      <div class="card-sub" id="autoDetail">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Bot Mood</div>
+      <div class="card-val" id="botMood">--</div>
+      <div class="card-sub" id="moodDetail">--</div>
+    </div>
+  </div>
+
+  <!-- Achievements -->
+  <div class="sec">
+    <div class="sec-hd">Achievements</div>
+    <div class="achievements" id="achievements"></div>
+  </div>
+
+  <!-- Trader Power Levels -->
+  <div class="sec">
+    <div class="sec-hd">Trader Power Levels <span class="badge badge-live">LIVE</span></div>
+    <table>
+      <thead><tr>
+        <th></th><th>Trader</th><th>Power</th><th>Streak</th><th>7d WR</th>
+        <th>7d P&L</th><th>Kelly</th><th>Status</th>
+      </tr></thead>
+      <tbody id="tTraders"></tbody>
+    </table>
+  </div>
+
+  <!-- Category Heatmap -->
+  <div class="sec">
+    <div class="sec-hd">Category Heatmap <span class="badge badge-live">LIVE</span></div>
+    <div class="heatmap" id="heatmap"></div>
+  </div>
+
+  <!-- Two columns -->
+  <div class="grid grid-2">
+    <div class="sec">
+      <div class="sec-hd">ML Brain</div>
+      <div class="card" id="mlDetails" style="font-size:.75rem;line-height:1.8">Loading...</div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Top Candidates <span class="badge badge-live">SCOUTING</span></div>
+      <table>
+        <thead><tr><th>Name</th><th>Profit</th><th>Volume</th><th>Paper</th><th>Status</th></tr></thead>
+        <tbody id="tCandidates"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Autonomous -->
+  <div class="sec">
+    <div class="sec-hd">Autonomous Trades <span class="badge badge-live">LIVE</span></div>
+    <table>
+      <thead><tr><th>Signal</th><th>Market</th><th>Side</th><th>Entry</th><th>Now</th><th>$</th><th>P&L</th><th>Status</th></tr></thead>
+      <tbody id="tAuto"></tbody>
+    </table>
+  </div>
+
+  <div class="refresh">Auto-refresh: <span id="timer">20</span>s | <span id="soundToggle" onclick="toggleSound()" style="cursor:pointer;color:var(--gold)">&#128264; Sound ON</span></div>
+</div>
+
+<!-- Sounds (base64 tiny beeps) -->
+<script>
+let soundEnabled = true;
+function toggleSound(){soundEnabled=!soundEnabled;document.getElementById('soundToggle').innerHTML=soundEnabled?'&#128264; Sound ON':'&#128263; Sound OFF'}
+
+// Generate sounds with Web Audio API
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+function playTone(freq, dur, type='sine', vol=0.15){
+  if(!soundEnabled) return;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type=type;o.frequency.value=freq;g.gain.value=vol;
+  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+  o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
+}
+function playWin(){playTone(523,.1);setTimeout(()=>playTone(659,.1),100);setTimeout(()=>playTone(784,.15),200)}
+function playLoss(){playTone(200,.3,'sawtooth',0.08)}
+function playWhale(){playTone(100,.1,'square',0.1);setTimeout(()=>playTone(150,.1,'square',0.1),100);setTimeout(()=>playTone(200,.2,'square',0.1),200)}
+function playAchievement(){playTone(523,.08);setTimeout(()=>playTone(659,.08),80);setTimeout(()=>playTone(784,.08),160);setTimeout(()=>playTone(1047,.2),240)}
+
+// Particle explosion
+function explode(x,y,color='#c9a84c'){
+  for(let i=0;i<12;i++){
+    const p=document.createElement('div');p.className='particle';
+    p.style.left=x+'px';p.style.top=y+'px';p.style.background=color;
+    p.style.setProperty('--tx',(Math.random()*120-60)+'px');
+    p.style.setProperty('--ty',(Math.random()*120-60)+'px');
+    document.body.appendChild(p);setTimeout(()=>p.remove(),800);
+  }
+}
+
+// Whale alert
+function showWhale(text, detail){
+  const w=document.createElement('div');w.className='whale-alert';
+  w.innerHTML=`<span class="whale-icon">&#x1F433;</span><div class="whale-text">${text}</div><div class="whale-detail">${esc(detail)}</div>`;
+  document.body.appendChild(w);playWhale();
+  setTimeout(()=>w.remove(),6500);
+}
+
+const API='';
+let countdown=20, lastTradeCount=0, lastAchievements=new Set();
+
+async function fetchJSON(url){try{return await(await fetch(API+url)).json()}catch(e){return null}}
+function pnlClass(v){return v>0?'pos':v<0?'neg':''}
+function fmt(v,d=2){return v!=null?Number(v).toFixed(d):'--'}
+
+// Power level calculation
+function getPowerLevel(wr, pnl, trades){
+  let power = (wr * 2) + (pnl * 5) + (trades * 0.5);
+  power = Math.max(0, Math.round(power));
+  let tier, cls;
+  if(power >= 500){tier='LEGENDARY';cls='power-legendary'}
+  else if(power >= 200){tier='EPIC';cls='power-epic'}
+  else if(power >= 50){tier='RARE';cls='power-rare'}
+  else{tier='COMMON';cls='power-common'}
+  return {power, tier, cls};
+}
+
+// Achievements
+const ACHIEVEMENTS = [
+  {id:'first_blood',icon:'&#x1F3AF;',name:'First Blood',desc:'First profitable trade',check:d=>d.totalWins>=1},
+  {id:'ten_streak',icon:'&#x1F525;',name:'On Fire',desc:'3+ win streak',check:d=>d.maxStreak>=3},
+  {id:'century',icon:'&#x1F4AF;',name:'Century',desc:'100 trades completed',check:d=>d.totalTrades>=100},
+  {id:'five_hundo',icon:'&#x1F3C6;',name:'500 Club',desc:'500 trades completed',check:d=>d.totalTrades>=500},
+  {id:'ml_brain',icon:'&#x1F9E0;',name:'Big Brain',desc:'ML model trained',check:d=>d.mlTrained},
+  {id:'scout',icon:'&#x1F50D;',name:'Scout',desc:'50 candidates found',check:d=>d.candidates>=50},
+  {id:'profit_10',icon:'&#x1F4B0;',name:'First Bag',desc:'$10+ total profit on any trader',check:d=>d.bestTraderPnl>=10},
+  {id:'profit_50',icon:'&#x1F48E;',name:'Diamond Hands',desc:'$50+ total profit on any trader',check:d=>d.bestTraderPnl>=50},
+  {id:'categories',icon:'&#x1F30D;',name:'Diversified',desc:'Profitable in 3+ categories',check:d=>d.profitableCategories>=3},
+  {id:'auto_trade',icon:'&#x1F916;',name:'Skynet',desc:'First autonomous trade',check:d=>d.autoTrades>=1},
+  {id:'whale_watch',icon:'&#x1F433;',name:'Whale Watcher',desc:'Scouting 50 traders',check:d=>d.candidates>=50},
+  {id:'night_owl',icon:'&#x1F989;',name:'Night Owl',desc:'Trade placed after midnight',check:d=>d.nightTrades>=1},
+];
+
+function renderAchievements(data){
+  const el=document.getElementById('achievements');
+  el.innerHTML=ACHIEVEMENTS.map(a=>{
+    const unlocked=a.check(data);
+    if(unlocked && !lastAchievements.has(a.id)){lastAchievements.add(a.id);playAchievement();
+      setTimeout(()=>showWhale('Achievement Unlocked!',a.icon+' '+a.name+' — '+a.desc),500)}
+    return `<div class="achievement ${unlocked?'unlocked':'locked'}" title="${esc(a.desc)}">
+      <span class="ach-icon">${a.icon}</span>${esc(a.name)}</div>`;
+  }).join('');
+}
+
+async function refresh(){
+  const st=await fetchJSON('/api/upgrade/status');
+  if(!st) return;
+
+  // Top cards
+  if(st.ml_model){
+    document.getElementById('mlAccuracy').textContent=fmt(st.ml_model.accuracy,1)+'%';
+    document.getElementById('mlSamples').textContent=st.ml_model.samples_count+' samples';
+  }
+  const statusList=st.trader_status||[];
+  const paused=statusList.filter(t=>t.status==='paused').length;
+  // Get total from trader-performance API (fetched later), use 7 as default
+  const totalTraders = 7;
+  document.getElementById('activeTraders').textContent=(totalTraders-paused)+'/'+totalTraders;
+  document.getElementById('traderDetail').textContent=paused+' paused';
+  const c=st.candidates||{};
+  document.getElementById('candidateCount').textContent=c.total||0;
+  document.getElementById('candidateDetail').textContent=(c.promoted||0)+' promoted';
+  const a=st.autonomous||{};
+  document.getElementById('autoCount').textContent=a.total||0;
+  document.getElementById('autoDetail').textContent=(a.open_count||0)+' open';
+
+  // Bot mood based on recent performance
+  const moods=['&#x1F480; REKT','&#x1F612; Meh','&#x1F60C; Chill','&#x1F60E; Vibing','&#x1F911; PROFIT','&#x1F525; ON FIRE'];
+  // We'll set mood based on data later
+
+  // Trader performance with power levels
+  const tp=await fetchJSON('/api/upgrade/trader-performance');
+  let bestPnl=0, maxStreak=0, totalWins=0, totalTrades=0;
+  if(tp&&tp.traders){
+    const tbody=document.getElementById('tTraders');
+    tbody.innerHTML=tp.traders.map(t=>{
+      const status=t.trader_status||'active';
+      const dot=`<span class="status-dot status-${status}"></span>`;
+      const wr=t.winrate||0;const pnl=t.total_pnl||0;const cnt=t.trades_count||0;
+      totalWins+=(t.wins||0);totalTrades+=cnt;
+      if(pnl>bestPnl) bestPnl=pnl;
+      const pl=getPowerLevel(wr,pnl,cnt);
+      // Streak (approximate from last trades)
+      const streak=pnl>0&&wr>55?Math.floor((wr-50)/5):0;
+      if(streak>maxStreak) maxStreak=streak;
+      const isOnFire=streak>=3;
+      const kelly=pnl>0?fmt(0.063*wr/50,2)+'x':'0.5x';
+      return `<tr${isOnFire?' class="on-fire"':''}>
+        <td>${dot}</td>
+        <td style="color:var(--gold);font-weight:600">${t.trader_name} ${isOnFire?'&#x1F525;':''}</td>
+        <td><span class="power-level ${pl.cls}">${pl.power}</span> <span style="font-size:.55rem;color:var(--text-dim)">${pl.tier}</span></td>
+        <td>${streak>0?'&#x1F525;'.repeat(Math.min(streak,5)):'--'}</td>
+        <td>${fmt(wr,1)}%</td>
+        <td class="${pnlClass(pnl)}">$${fmt(pnl)}</td>
+        <td style="font-size:.65rem">${kelly}</td>
+        <td style="font-size:.65rem">${t.reason||status}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Category heatmap
+  const ch=await fetchJSON('/api/upgrade/category-heatmap');
+  let profitableCats=0;
+  if(ch&&ch.categories){
+    const hm=document.getElementById('heatmap');
+    const maxPnl=Math.max(...ch.categories.map(c=>Math.abs(c.total_pnl||0)),1);
+    ch.categories.forEach(c=>{if((c.total_pnl||0)>0) profitableCats++});
+    hm.innerHTML=ch.categories.map(c=>{
+      const pnl=c.total_pnl||0;const wr=c.winrate||0;
+      const alloc=((c.allocation||0.1)*100).toFixed(0);
+      const color=pnl>=0?'var(--green)':'var(--red)';
+      const barW=Math.min(Math.abs(pnl)/maxPnl*100,100);
+      return `<div class="heat-cell">
+        <div class="heat-name">${c.category}</div>
+        <div class="heat-val" style="color:${color}">$${fmt(pnl)}</div>
+        <div class="heat-sub">${c.trades_count}t | ${fmt(wr,0)}%WR | ${alloc}%</div>
+        <div class="heat-bar"><div class="heat-bar-fill" style="width:${barW}%;background:${color}"></div></div>
+      </div>`;
+    }).join('');
+  }
+
+  // ML details
+  const ml=await fetchJSON('/api/upgrade/ml-info');
+  if(ml&&ml.training_history&&ml.training_history.length>0){
+    const latest=ml.training_history[0];
+    let imp={};try{imp=JSON.parse(latest.feature_importance.replace(/'/g,'"'))}catch(e){}
+    const impSorted=Object.entries(imp).sort((a,b)=>b[1]-a[1]);
+    document.getElementById('mlDetails').innerHTML=`
+      <div style="margin-bottom:6px"><strong>Last trained:</strong> ${latest.trained_at}</div>
+      <div style="margin-bottom:6px"><strong>Accuracy:</strong> ${fmt(latest.accuracy,1)}% | <strong>Samples:</strong> ${latest.samples_count}</div>
+      <div style="margin-bottom:4px"><strong>Feature Importance:</strong></div>
+      ${impSorted.map(([k,v])=>{const w=(v*100).toFixed(0);
+        return `<div style="display:flex;align-items:center;gap:6px;margin:2px 0">
+          <span style="width:80px;font-size:.65rem">${k}</span>
+          <div class="score-bar" style="flex:1;max-width:180px"><div class="score-fill" style="width:${w}%;background:var(--gold)"></div></div>
+          <span style="font-size:.6rem;color:var(--text-dim)">${(v*100).toFixed(1)}%</span>
+        </div>`}).join('')}`;
+  }
+
+  // Candidates
+  const ca=await fetchJSON('/api/upgrade/candidates');
+  if(ca&&ca.candidates){
+    document.getElementById('tCandidates').innerHTML=ca.candidates.filter(c=>c.status!=="inactive").slice(0,10).map(c=>`<tr>
+      <td style="color:var(--gold)">${c.username||c.address.slice(0,8)}</td>
+      <td class="${pnlClass(c.profit_total)}">$${Number(c.profit_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
+      <td>$${Number(c.volume_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
+      <td>${c.total||0}</td>
+      <td><span class="badge badge-${c.status==='promoted'?'fire':'live'}">${c.status}</span></td>
+    </tr>`).join('')||'<tr><td colspan="5" style="color:var(--text-dim);text-align:center">Scanning...</td></tr>';
+  }
+
+  // Autonomous trades
+  const at=await fetchJSON('/api/upgrade/autonomous-trades');
+  if(at&&at.trades){
+    if(at.trades.length>lastTradeCount&&lastTradeCount>0){
+      playWin();showWhale('New Autonomous Trade!',at.trades[0].market_question||'Momentum signal detected');
+    }
+    lastTradeCount=at.trades.length;
+    document.getElementById('tAuto').innerHTML=at.trades.slice(0,10).map(t=>{
+      const pnl=t.pnl_realized||0;
+      return `<tr>
+        <td><span class="badge badge-fire">${t.signal_type}</span></td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.market_question||'--'}</td>
+        <td>${t.side||'--'}</td>
+        <td>${t.entry_price?(t.entry_price*100).toFixed(0)+'c':'--'}</td>
+        <td>${t.current_price?(t.current_price*100).toFixed(0)+'c':'--'}</td>
+        <td>$${fmt(t.size)}</td>
+        <td class="${pnlClass(pnl)}">$${fmt(pnl)}</td>
+        <td><span class="badge badge-${t.status==='open'?'live':'paused'}">${t.status}</span></td>
+      </tr>`}).join('')||'<tr><td colspan="8" style="color:var(--text-dim);text-align:center">Waiting for momentum signals...</td></tr>';
+  }
+
+  // Achievements
+  renderAchievements({
+    totalWins, totalTrades,
+    maxStreak, mlTrained:!!(st.ml_model),
+    candidates:(c.total||0),
+    bestTraderPnl:bestPnl,
+    profitableCategories:profitableCats,
+    autoTrades:(a.total||0),
+    nightTrades:1,
+  });
+
+  // Bot mood
+  const moodIdx = bestPnl>=50?5:bestPnl>=20?4:bestPnl>=5?3:bestPnl>=0?2:bestPnl>=-10?1:0;
+  document.getElementById('botMood').innerHTML=moods[moodIdx];
+  document.getElementById('moodDetail').textContent=['run.','okay.','stable.','nice.','money!','LFG!'][moodIdx];
+
+  // Heartbeat speed based on open positions
+  const hb=document.getElementById('heartIcon');
+  hb.className='heartbeat'+(totalTrades>100?' heartbeat-fast':' heartbeat-slow');
+}
+
+setInterval(()=>{countdown--;document.getElementById('timer').textContent=countdown;
+  if(countdown<=0){countdown=20;refresh()}},1000);
+refresh();
+</script>
+
+  <!-- === TICKER TAPE === -->
+  <div id="tickerWrap" style="position:fixed;top:0;left:0;right:0;z-index:100;height:28px;background:var(--bg2);border-bottom:1px solid var(--border);overflow:hidden">
+    <div id="ticker" style="display:flex;gap:40px;white-space:nowrap;animation:tickerScroll 30s linear infinite;padding:5px 0;font-size:.65rem;font-family:var(--mono)"></div>
+  </div>
+  <style>
+  @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+  .app{padding-top:38px!important}
+  /* Trading Cards */
+  .cards-grid{display:flex;gap:16px;overflow-x:auto;padding:10px 0;scroll-snap-type:x mandatory}
+  .tcard{min-width:200px;max-width:220px;scroll-snap-align:start;border-radius:14px;padding:2px;
+    background:linear-gradient(135deg,var(--border),var(--bg3));transition:.3s;cursor:pointer;flex-shrink:0}
+  .tcard:hover{transform:translateY(-4px) scale(1.02)}
+  .tcard-inner{background:var(--bg2);border-radius:12px;padding:16px;height:100%;position:relative;overflow:hidden}
+  .tcard-inner::before{content:'';position:absolute;top:-50%;right:-50%;width:100%;height:100%;
+    background:radial-gradient(circle,rgba(201,168,76,0.06),transparent 60%);pointer-events:none}
+  .tcard.legendary{background:linear-gradient(135deg,#ff6400,#c9a84c,#ff6400);animation:legendaryGlow 3s ease-in-out infinite}
+  .tcard.epic{background:linear-gradient(135deg,#a78bfa,#6366f1,#a78bfa)}
+  .tcard.rare{background:linear-gradient(135deg,#60a5fa,#3b82f6,#60a5fa)}
+  .tcard.common{background:linear-gradient(135deg,#4b5563,#374151,#4b5563)}
+  @keyframes legendaryGlow{0%,100%{box-shadow:0 0 20px rgba(255,100,0,0.3)}50%{box-shadow:0 0 40px rgba(255,100,0,0.5),0 0 60px rgba(201,168,76,0.2)}}
+  .tcard-name{font-size:1rem;font-weight:800;color:var(--gold);margin-bottom:2px}
+  .tcard-title{font-size:.6rem;color:var(--text-dim);font-style:italic;margin-bottom:8px}
+  .tcard-rarity{position:absolute;top:10px;right:12px;font-size:.5rem;text-transform:uppercase;
+    letter-spacing:.1em;font-weight:800;padding:2px 6px;border-radius:4px}
+  .tcard-rarity.legendary{color:#ff6400;background:rgba(255,100,0,0.15)}
+  .tcard-rarity.epic{color:#a78bfa;background:rgba(167,139,250,0.15)}
+  .tcard-rarity.rare{color:#60a5fa;background:rgba(96,165,250,0.15)}
+  .tcard-rarity.common{color:#9ca3af;background:rgba(156,163,175,0.15)}
+  .tcard-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:8px 0}
+  .tcard-stat{font-size:.6rem;color:var(--text-mid)}
+  .tcard-stat span{display:block;font-size:.85rem;font-weight:700;font-family:var(--mono);color:var(--text)}
+  .tcard-special{font-size:.55rem;color:var(--gold);border-top:1px solid var(--border);padding-top:6px;margin-top:6px}
+  .tcard-power{position:absolute;bottom:10px;right:12px;font-size:1.4rem;font-weight:900;font-family:var(--mono);opacity:.15}
+  .tcard-status{margin-top:4px;font-size:.55rem}
+  /* Live Chat Feed — Phone Mockup */
+  .chat-wrap{position:fixed;right:20px;top:70px;bottom:30px;width:320px;z-index:99;display:flex;flex-direction:column;
+    border-radius:28px;overflow:hidden;border:3px solid #333;box-shadow:0 10px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);
+    background:var(--bg)}
+  .chat-notch{width:120px;height:22px;background:#111;border-radius:0 0 14px 14px;margin:0 auto;position:relative;z-index:2}
+  .chat-notch::after{content:'';width:8px;height:8px;border-radius:50%;background:#1a1a28;position:absolute;right:16px;top:6px}
+  .chat-header{background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.05));
+    padding:10px 14px;font-size:.72rem;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px;
+    border-bottom:1px solid var(--border)}
+  .chat-header .live-dot{width:6px;height:6px;border-radius:50%;background:#34d399;animation:pulse 2s infinite}
+  .chat-feed{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;
+    scrollbar-width:thin;scrollbar-color:var(--border-h) transparent;
+    background:url('/static/logo.png') center center / 60% no-repeat;background-blend-mode:soft-light;
+    background-color:var(--bg2)}
+  .chat-feed::before{content:'';position:sticky;top:0;display:block;width:100%;height:0;z-index:1}
+  .chat-feed::-webkit-scrollbar{width:4px}
+  .chat-feed::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
+  .chat-msg{animation:msgSlide .3s ease-out}
+  @keyframes msgSlide{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}
+  .chat-msg-inner{background:var(--bg3);border-radius:12px 12px 12px 4px;padding:8px 12px;max-width:250px;
+    font-size:.66rem;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+  .chat-msg.win .chat-msg-inner{background:rgba(52,211,153,0.08);border-radius:12px 12px 4px 12px}
+  .chat-msg.loss .chat-msg-inner{background:rgba(248,113,113,0.08);border-radius:12px 12px 4px 12px}
+  .chat-msg.system .chat-msg-inner{background:rgba(201,168,76,0.06);border-radius:12px;text-align:center;max-width:100%}
+  .chat-msg.roast .chat-msg-inner{background:rgba(255,100,0,0.06);border-radius:12px 12px 4px 12px}
+  .chat-msg.system .chat-user{justify-content:center}
+  .chat-user{font-weight:700;font-size:.62rem;margin-bottom:2px;display:flex;align-items:center;gap:4px}
+  .chat-user .avatar{width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;
+    justify-content:center;font-size:.55rem;background:var(--bg4)}
+  .chat-text{color:var(--text);word-break:break-word}
+  .chat-pnl{font-family:var(--mono);font-weight:700;font-size:.7rem;margin-top:2px}
+  .chat-time{font-size:.5rem;color:var(--text-dim);margin-top:2px;text-align:right}
+  .chat-typing{font-size:.6rem;color:var(--text-dim);padding:4px 10px;font-style:italic}
+  .chat-typing span{animation:typingDot 1.4s infinite}
+  .chat-typing span:nth-child(2){animation-delay:.2s}
+  .chat-typing span:nth-child(3){animation-delay:.4s}
+  @keyframes typingDot{0%,60%,100%{opacity:.2}30%{opacity:1}}
+  /* Three column layout: left activity | center content | right phone */
+  .left-panel{position:fixed;left:0;top:60px;bottom:0;width:280px;z-index:98;
+    background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:12px;
+    scrollbar-width:thin;scrollbar-color:var(--border-h) transparent}
+  .left-panel::-webkit-scrollbar{width:3px}
+  .left-panel::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
+  .left-panel .lp-header{font-size:.72rem;font-weight:700;color:var(--gold);padding:6px 0;
+    border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .left-panel .lp-header .live-dot{width:5px;height:5px;border-radius:50%;background:#34d399;animation:pulse 2s infinite}
+  @media(min-width:1100px){.app{margin-left:290px!important;margin-right:340px!important;max-width:none!important}}
+  @media(max-width:1099px){.chat-wrap{display:none}.left-panel{display:none}}
+
+  /* Konfetti */
+  .konfetti{position:fixed;top:-10px;z-index:10000;width:10px;height:10px;pointer-events:none}
+  @keyframes konfettiFall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+  </style>
+
+  <!-- Trading Cards Section -->
+  <div class="sec" style="margin-top:20px">
+    <div class="sec-hd">Trader Cards <span class="badge badge-fire">COLLECTIBLE</span></div>
+    <div class="cards-grid" id="traderCards"></div>
+  </div>
+
+  <!-- Live Chat Feed — Phone Style -->
+  <div class="chat-wrap">
+    <div class="chat-notch"></div>
+    <div class="chat-header">
+      <span class="live-dot"></span> SSC SAUNA CHAT
+      <span style="font-weight:300;color:var(--text-dim);margin-left:auto;font-size:.5rem" id="chatCount">0 msgs</span>
+    </div>
+    <div class="chat-feed" id="chatFeed">
+      <div class="chat-typing">Bot is analyzing<span>.</span><span>.</span><span>.</span></div>
+    </div>
+  </div>
+
+<script>
+// === TICKER TAPE ===
+async function loadTicker(){
+  const d=await fetchJSON('/api/fun/ticker');
+  if(!d||!d.events) return;
+  const el=document.getElementById('ticker');
+  const items=d.events.map(e=>{
+    const color=e.pnl>0?'var(--green)':e.pnl<0?'var(--red)':'var(--text-dim)';
+    const icon=e.type==='buy'?'&#x1F4B0;':e.type==='sell'?'&#x1F4B8;':e.type==='smart_sell'?'&#x1F9E0;':'&#x26A1;';
+    return `<span>${icon} <span style="color:${color}">${esc(e.title)}</span> <span style="color:var(--text-dim)">${e.detail.slice(0,40)}</span></span>`;
+  }).join('');
+  // Duplicate for seamless loop
+  el.innerHTML=items+items;
+}
+
+// === TRADING CARDS ===
+async function loadCards(){
+  const d=await fetchJSON('/api/fun/trader-cards');
+  if(!d||!d.cards) return;
+  const el=document.getElementById('traderCards');
+  el.innerHTML=d.cards.map(c=>{
+    const statusIcon=c.status==='paused'?'&#x1F6D1;':c.status==='throttled'?'&#x26A0;':'&#x2705;';
+    return `<div class="tcard ${c.rarity}">
+      <div class="tcard-inner">
+        <div class="tcard-rarity ${c.rarity}">${c.rarity}</div>
+        <div class="tcard-name">${esc(c.name)}</div>
+        <div class="tcard-title">${esc(c.title)}</div>
+        <div class="tcard-stats">
+          <div class="tcard-stat">WR<span>${c.winrate}%</span></div>
+          <div class="tcard-stat">P&L<span class="${pnlClass(c.total_pnl)}">$${fmt(c.total_pnl)}</span></div>
+          <div class="tcard-stat">Trades<span>${c.total_trades}</span></div>
+          <div class="tcard-stat">W/L<span>${c.wins}/${c.losses}</span></div>
+        </div>
+        <div class="tcard-stat" style="font-size:.55rem">Best: <span class="pos" style="display:inline;font-size:.65rem">$${fmt(c.best_trade)}</span> | Worst: <span class="neg" style="display:inline;font-size:.65rem">$${fmt(c.worst_trade)}</span></div>
+        <div class="tcard-special">&#x2728; ${c.special}</div>
+        <div class="tcard-status">${statusIcon} ${c.status}</div>
+        <div class="tcard-power">${c.power}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// === LIVE CHAT FEED ===
+const CHAT_USERS = [
+  {name:'Postl',avatar:'\ud83e\uddd6',color:'#c9a84c'},
+  {name:'K\u00f6nig',avatar:'\ud83d\udc51',color:'#fbbf24'},
+  {name:'Chris K.',avatar:'\ud83c\udf7a',color:'#60a5fa'},
+  {name:'Reszner',avatar:'\ud83c\udfa8',color:'#a78bfa'},
+  {name:'Steiger',avatar:'\ud83d\udcb0',color:'#34d399'},
+  {name:'Kevin K.',avatar:'\ud83c\udf7e',color:'#f472b6'},
+  {name:'Simetzberger',avatar:'\ud83d\udd25',color:'#f87171'},
+  {name:'Grill',avatar:'\ud83c\udf56',color:'#f59e0b'},
+  {name:'Hohenegger',avatar:'\ud83e\udd43',color:'#e879f9'},
+  {name:'Ganaus',avatar:'\ud83c\udf7b',color:'#22d3ee'},
+  {name:'Fr\u00f6schl',avatar:'\ud83d\udc38',color:'#86efac'},
+  {name:'Vymyslicky',avatar:'\ud83c\udf93',color:'#fca5a5'},
+  {name:'Kaiser',avatar:'\ud83c\udfb0',color:'#fbbf24'},
+  {name:'Geissler',avatar:'\ud83e\udde0',color:'#c084fc'},
+  {name:'Piff',avatar:'\ud83d\ude0e',color:'#c9a84c'},
+  {name:'Siegl',avatar:'\ud83c\udf19',color:'#93c5fd'},
+];
+
+const CHAT_WIN_REACTIONS = [
+  'JAAA {trader}!! Runde Bier fuer alle!! \ud83c\udf7a\ud83c\udf7a \ud83d\udcb0',
+  '{trader} druckt! Extra Aufguss zur Feier! \ud83d\udd25\ud83e\uddd6 \ud83d\udcaa',
+  'GEWONNEN! Shots shots shots! {trader} Legende \ud83e\udd43',
+  '{amount} Profit?! Champagner wird gekoepft \ud83c\udf7e \ud83e\udd11',
+  '{trader} tradet besser besoffen als andere nuechtern \ud83c\udf7a',
+  '{trader} ist heisser als unser Saunaofen! Geld fliesst! \ud83d\udd25\ud83d\udcb0 \ud83d\udc8e',
+  'Noch ein Bier und noch ein Win! {trader} MVP \ud83c\udf7a\ud83c\udfc6',
+  '{trader} GOAT! Runde Jaegermeister! \ud83e\udd43\ud83d\udd25',
+  'Prost auf {trader}! {amount} reicher! \ud83c\udf7b',
+  'Besoffen und trotzdem am gewinnen. {trader} built different \ud83c\udf7a \ud83d\udd25',
+];
+
+const CHAT_LOSS_REACTIONS = [
+  '{trader} Bruder... ich brauch jetzt einen Doppelten \ud83e\udd43\ud83e\udd43 \ud83d\ude29',
+  'Meine USDC... {trader} du schuldest mir ne Flasche Vodka \ud83d\ude2d \ud83d\ude2d',
+  '{trader} war das betrunken oder nuechtern? Beides schlimm \ud83c\udf7a',
+  '{amount} weg... ich trink jetzt einen Doppelten \ud83e\udd43 muss das verarbeiten',
+  '{trader} hat zu tief ins Glas geschaut vor dem Trade \ud83c\udf7a\ud83d\ude35',
+  'RIP. Da hilft nur noch Whisky. {trader} du Katastrophe \ud83e\udd43 \ud83c\udf7a',
+  '{trader} traded mit 3 Promille confirmed \ud83c\udf7e',
+  '{trader}... erstmal Bierpause \ud83c\udf7a \ud83d\udc80',
+  '{trader} verbrennt Geld schneller als der Saunaofen Holz \ud83d\udd25',
+  'Ich brauch jetzt Alkohol. Viel davon. Danke {trader} \ud83c\udf7a\ud83d\ude2d',
+];
+
+const CHAT_PAUSED_REACTIONS = [
+  '\ud83d\udea8 {trader} GESPERRT! Ab in die Ausnuechterungszelle! \ud83c\udf7a\u274c',
+  'Bot hat {trader} den Alkohol weggenommen. Kein Trading! \ud83e\udd23 \ud83e\udd23',
+  '{trader} muss seinen Rausch ausschlafen \ud83d\ude34\ud83c\udf7e',
+  '{trader} hat Saunaverbot! Ab unter die kalte Dusche! \ud83d\udebf',
+  'INTERVENTION! {trader} hat ein Trading-Problem \ud83d\udc80',
+];
+
+const CHAT_RANDOM = [
+  'wann Lambo? \ud83c\udf7a *trinkt Bier*',
+  '*nimmt Schluck Bier* \ud83c\udf7a sovereign GOAT frfr',
+  'hat jemand Snacks? Hunger nach der Sauna \ud83c\udf55\ud83c\udf7a',
+  'ich bin so betrunken und der Bot macht einfach Geld \ud83c\udf7a',
+  'Prost! \ud83c\udf7b Auf den naechsten Win!',
+  '*oeffnet drittes Bier* \ud83c\udf7a Bot tradet, ich trinke.',
+  'stellt euch vor ihr tradet nuechtern lmao \ud83e\udd23',
+  '*bestellt noch ein Bier* \ud83c\udf7a ah Bot laeuft. Alles gut.',
+  'mein Wirt hat bessere Odds als RN1 \ud83d\ude02\ud83c\udf7a',
+  'wer bringt naechstes Bier? \ud83c\udf7a',
+  '*Whisky eingegossen* \ud83e\udd43 so. Jetzt P&L checken.',
+  'Sauna + Bier + Bot = Lifestyle \ud83e\uddd6\ud83c\udf7a \ud83c\udf89',
+  'Prost! \ud83c\udf7a und der Bot casht auch! \ud83d\udd25',
+];
+
+let chatMessages = [];
+let lastChatHash = '';
+
+function addChatMessage(user, text, type='normal', pnl=null, time='') {
+  const feed = document.getElementById('chatFeed');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg ' + type;
+  const pnlHtml = pnl ? `<div class="chat-pnl ${pnlClass(pnl)}">$${fmt(pnl)}</div>` : '';
+  const timeStr = time ? time.split(' ').pop().slice(0,5) : new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});
+  msg.innerHTML = `<div class="chat-msg-inner">
+    <div class="chat-user"><span class="avatar">${user.avatar}</span><span style="color:${user.color}">${esc(user.name)}</span></div>
+    <div class="chat-text">${text}</div>${pnlHtml}
+    <div class="chat-time">${timeStr}</div>
+  </div>`;
+  // Remove typing indicator
+  const typing = feed.querySelector('.chat-typing');
+  if(typing) typing.remove();
+  feed.appendChild(msg);
+  // Keep max 50 messages
+  while(feed.children.length > 5) feed.children[0].remove();
+  feed.scrollTop = feed.scrollHeight;
+  document.getElementById('chatCount').textContent = feed.children.length + ' messages';
+}
+
+function randomUser() { return CHAT_USERS[Math.floor(Math.random()*CHAT_USERS.length)]; }
+function randomFrom(arr, vars={}) {
+  let t = arr[Math.floor(Math.random()*arr.length)];
+  for(const [k,v] of Object.entries(vars)) t = t.replaceAll('{'+k+'}', v);
+  return t;
+}
+
+async function loadChat(){
+  const d = await fetchJSON('/api/fun/trash-talk');
+  if(!d||!d.talks) return;
+  const hash = JSON.stringify(d.talks.map(t=>t.talk));
+  if(hash === lastChatHash) {
+    // No new data — add random chat message occasionally
+    if(Math.random() < 0.06) {
+      addChatMessage(randomUser(), randomFrom(CHAT_RANDOM), 'system');
+    }
+    return;
+  }
+  lastChatHash = hash;
+
+  const _oneTalk = [d.talks[Math.floor(Math.random()*d.talks.length)]]; for(const t of _oneTalk) {
+    const user = randomUser();
+    const trader = t.trader || '?';
+    const amount = '$' + Math.abs(t.pnl||0).toFixed(2);
+    if(t.pnl > 0) {
+      addChatMessage(user, randomFrom(CHAT_WIN_REACTIONS, {trader, amount}), 'win', t.pnl, t.time);
+    } else if(t.pnl < 0) {
+      addChatMessage(user, randomFrom(CHAT_LOSS_REACTIONS, {trader, amount}), 'loss', t.pnl, t.time);
+    } else {
+      addChatMessage(user, randomFrom(CHAT_PAUSED_REACTIONS, {trader}), 'roast', null, t.time);
+    }
+    // Small delay between messages for effect
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+// Add random messages every 30-60 seconds
+setInterval(() => {
+  if(Math.random() < 0.2) {
+    addChatMessage(randomUser(), randomFrom(CHAT_RANDOM), 'system');
+  }
+}, 50000);
+
+// === KONFETTI ===
+async function checkKonfetti(){
+  const d=await fetchJSON('/api/fun/daily-pnl');
+  if(!d) return;
+  if(d.konfetti && !window._konfettiDone){
+    window._konfettiDone=true;
+    launchKonfetti();
+    playWin();playWin();
+    setTimeout(()=>showWhale('Profitable Day! &#x1F389;','Today P&L: $'+fmt(d.today_pnl)),500);
+  }
+}
+
+function launchKonfetti(){
+  const colors=['#c9a84c','#34d399','#60a5fa','#f87171','#a78bfa','#fbbf24','#ff6400','#ec4899'];
+  for(let i=0;i<80;i++){
+    setTimeout(()=>{
+      const k=document.createElement('div');
+      k.className='konfetti';
+      k.style.left=Math.random()*100+'vw';
+      k.style.background=colors[Math.floor(Math.random()*colors.length)];
+      k.style.width=(4+Math.random()*8)+'px';
+      k.style.height=(4+Math.random()*8)+'px';
+      k.style.borderRadius=Math.random()>.5?'50%':'2px';
+      k.style.animation=`konfettiFall ${2+Math.random()*3}s linear forwards`;
+      document.body.appendChild(k);
+      setTimeout(()=>k.remove(),5000);
+    },i*30);
+  }
+}
+
+// Load Recent Activity
+async function loadActivity(){
+  const d=await fetchJSON('/api/fun/ticker');
+  if(!d||!d.events) return;
+  const el=document.getElementById('activityLog');
+  el.innerHTML=d.events.slice(0,15).map(e=>{
+    const icon=e.type==='buy'?'\ud83d\udcb0':e.type==='sell'||e.type==='smart_sell'?'\ud83d\udcb8':e.type==='redeem'?'\ud83d\udcb5':'\u26a1';
+    const color=e.pnl>0?'#34d399':e.pnl<0?'#f87171':'#7a7890';
+    const pnl=e.pnl?' <span style="color:'+color+';font-weight:700">$'+Number(e.pnl).toFixed(2)+'</span>':'';
+    const time=e.time?e.time.split(' ').pop().slice(0,5):'';
+    return '<div style="padding:3px 0;border-bottom:1px solid rgba(30,30,48,0.3);display:flex;gap:6px;align-items:baseline">'+
+      '<span>'+icon+'</span>'+
+      '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+e.title+'</span>'+
+      pnl+
+      '<span style="color:#7a7890;font-size:.55rem;flex-shrink:0">'+time+'</span></div>';
+  }).join('');
+}
+
+// Load all fun features
+loadActivity();loadTicker();loadCards();loadChat();checkKonfetti();
+
+// Refresh fun features every 20s too
+const _origRefresh=refresh;
+refresh=async function(){
+  await _origRefresh();
+  loadActivity();loadTicker();loadCards();loadChat();checkKonfetti();
+};
+</script>
+</body>
+</html>

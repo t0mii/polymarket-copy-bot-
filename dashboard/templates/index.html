@@ -109,6 +109,7 @@ tr:hover{background:rgba(201,168,76,0.02)}
   <div class="foot">Read-only. To change settings: edit <code>settings.env</code> (or <code>secrets.env</code> for keys) and restart the bot.</div>
 </div>
 <script>
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 const cats={
   'LIVE_MODE':'core','STARTING_BALANCE':'core','COPY_SCAN_INTERVAL':'core',
   'BET_SIZE_PCT':'size','MAX_POSITION_SIZE':'size','RATIO_MIN':'size','RATIO_MAX':'size',
@@ -137,7 +138,7 @@ fetch('/api/settings').then(r=>r.json()).then(d=>{
     const c=cats[s.key]||'core';
     let catHtml='';
     if(c!==lastCat){catHtml=`<tr><td colspan="3" style="padding:14px 14px 4px;border:0"><span class="cat ${catCls[c]}">${catLabels[c]||c}</span></td></tr>`;lastCat=c}
-    return catHtml+`<tr><td class="k">${s.key}</td><td class="v">${s.value}</td><td class="d">${s.desc}</td></tr>`;
+    return catHtml+`<tr><td class="k">${esc(s.key)}</td><td class="v">${s.value}</td><td class="d">${esc(s.desc)}</td></tr>`;
   }).join('');
 
   const expMap={};
@@ -149,14 +150,14 @@ fetch('/api/settings').then(r=>r.json()).then(d=>{
   const defPct=defaultExp?defaultExp.value:'33%';
 
   document.getElementById('tradersBody').innerHTML=d.traders.map(t=>
-    `<tr><td><a class="trader-link" href="https://polymarket.com/profile/${t.address}" target="_blank">${t.username}</a></td>
+    `<tr><td><a class="trader-link" href="https://polymarket.com/profile/${t.address}" target="_blank">${esc(t.username)}</a></td>
      <td class="d" style="font-family:var(--mono);font-size:.75rem">${t.address.substring(0,8)}...${t.address.substring(38)}</td>
      <td class="${(t.pnl||0)>=0?'pos':'neg'}" style="font-family:var(--mono)">$${Number(t.pnl||0).toLocaleString()}</td>
      <td style="font-family:var(--mono);font-weight:600">${expMap[t.username]||defPct}</td></tr>`
   ).join('')||'<tr><td colspan="4" class="d">No traders followed</td></tr>';
 
   document.getElementById('statusBody').innerHTML=d.status.map(s=>
-    `<tr><td>${s.name}</td><td><span class="dot ${s.ok?'on':'off'}"></span>${s.label}</td></tr>`).join('');
+    `<tr><td>${esc(s.name)}</td><td><span class="dot ${s.ok?'on':'off'}"></span>${s.label}</td></tr>`).join('');
 }).catch(()=>{document.getElementById('settingsBody').innerHTML='<tr><td colspan="3" style="color:var(--red)">Failed to load</td></tr>'});
 </script>
 </body>

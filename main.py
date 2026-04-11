@@ -24,28 +24,8 @@ logging.basicConfig(
 logger = logging.getLogger("poly-copybot")
 
 
-def scheduled_scan():
-    """Run a scheduled wallet scan."""
-    from scan_wallets import run_scan
-    try:
-        run_scan(
-            limit=config.SCAN_WALLET_LIMIT,
-            max_analyze=config.MAX_AI_ANALYSES,
-            top_n=config.TOP_N_REPORT,
-            open_report=False,
-        )
-    except Exception as e:
-        logger.exception("Error in scheduled scan: %s", e)
 
 
-def auto_follow_scan():
-    """Auto-follow Top-Trader nach ROI-Effizienz."""
-    from bot.wallet_scanner import auto_follow_top_traders
-    try:
-        top = auto_follow_top_traders(count=config.AUTO_FOLLOW_COUNT)
-        logger.info("Auto-Follow abgeschlossen: %d Trader werden jetzt gefolgt.", len(top))
-    except Exception as e:
-        logger.exception("Error in auto-follow: %s", e)
 
 
 def copy_scan():
@@ -61,6 +41,129 @@ def copy_scan():
 
 _update_counter = 0
 _recently_closed: dict = {}  # cid → timestamp, prevents duplicate logs
+
+
+
+def auto_redeem():
+    """Auto-redeem resolved positions via Builder Relayer (every 5 min)."""
+    try:
+        import requests as _rq
+        import time as _t
+        from web3 import Web3
+        from bot.order_executor import get_wallet_balance
+        from database.db import log_activity
+
+        funder = config.POLYMARKET_FUNDER
+        if not funder or not config.BUILDER_KEY:
+            return
+
+        # Fetch all positions
+        all_pos = []
+        _off = 0
+        while True:
+            _r = _rq.get("https://data-api.polymarket.com/positions", params={
+                "user": funder, "limit": 500, "offset": _off, "sizeThreshold": 0
+            }, timeout=15)
+            if not _r.ok: break
+            _page = _r.json()
+            if not _page: break
+            all_pos.extend(_page)
+            if len(_page) < 500: break
+            _off += 500
+
+        # Find redeemable positions (API says redeemable + on-chain verified)
+        _w3 = Web3(Web3.HTTPProvider("https://polygon-bor-rpc.publicnode.com"))
+        CTF_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
+        CTF_ABI = [{"inputs":[{"name":"","type":"bytes32"}],"name":"payoutDenominator","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
+        _ctf = _w3.eth.contract(address=Web3.to_checksum_address(CTF_ADDRESS), abi=CTF_ABI)
+
+        to_redeem = []
+        for p in all_pos:
+            cp = float(p.get("curPrice", 0) or 0)
+            cv = float(p.get("currentValue", 0) or 0)
+            cid = p.get("conditionId", "")
+            if cp < 0.99 or cv <= 0.20 or not cid:
+                continue
+            if not p.get("redeemable", False):
+                continue
+            try:
+                cid_bytes = bytes.fromhex(cid.replace("0x", ""))
+                if _ctf.functions.payoutDenominator(cid_bytes).call() == 0:
+                    continue
+            except Exception:
+                continue
+            to_redeem.append(cid)
+
+        if not to_redeem:
+            return
+
+        total_value = sum(float(p.get("currentValue", 0) or 0) for p in all_pos
+                         if p.get("conditionId") in to_redeem)
+        logger.info("[AUTO-REDEEM] %d positions to redeem ($%.2f)", len(to_redeem), total_value)
+
+        # Connect to Relayer
+        from py_clob_client.client import ClobClient
+        from py_clob_client.constants import POLYGON
+        from py_builder_relayer_client.client import RelayClient
+        from py_builder_signing_sdk.config import BuilderConfig
+        from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
+        from poly_web3 import RELAYER_URL, PolyWeb3Service
+
+        client = ClobClient(
+            host="https://clob.polymarket.com",
+            key=config.POLYMARKET_PRIVATE_KEY,
+            chain_id=POLYGON, signature_type=1,
+            funder=config.POLYMARKET_FUNDER,
+        )
+        client.set_api_creds(client.create_or_derive_api_creds())
+
+        relayer_client = RelayClient(
+            RELAYER_URL, POLYGON, config.POLYMARKET_PRIVATE_KEY,
+            BuilderConfig(local_builder_creds=BuilderApiKeyCreds(
+                key=config.BUILDER_KEY,
+                secret=config.BUILDER_SECRET,
+                passphrase=config.BUILDER_PASSPHRASE,
+            )),
+        )
+
+        service = PolyWeb3Service(
+            clob_client=client, relayer_client=relayer_client,
+            rpc_url="https://polygon-bor-rpc.publicnode.com",
+        )
+
+        bal_before = get_wallet_balance()
+
+        # Try batch first, then individual
+        redeemed = 0
+        try:
+            result = service.redeem_all(batch_size=10)
+            if hasattr(result, 'success_list') and result.success_list:
+                redeemed = len(result.success_list)
+                logger.info("[AUTO-REDEEM] Batch: %d redeemed", redeemed)
+        except Exception:
+            pass
+
+        if redeemed < len(to_redeem):
+            for cid in to_redeem:
+                try:
+                    r = service.redeem([cid], batch_size=1)
+                    if hasattr(r, 'success_list') and r.success_list:
+                        redeemed += 1
+                except Exception:
+                    pass
+                _t.sleep(2)
+
+        bal_after = get_wallet_balance()
+        gained = bal_after - bal_before
+        if gained > 0.10:
+            logger.info("[AUTO-REDEEM] Done: +$%.2f (wallet $%.2f -> $%.2f)", gained, bal_before, bal_after)
+            log_activity("redeem", "CASH", "Auto-Redeem",
+                         "Won shares redeemed: +$%.2f (wallet $%.2f)" % (gained, bal_after), gained)
+        elif redeemed > 0:
+            logger.info("[AUTO-REDEEM] %d redeemed but no USDC change yet (settlement pending)", redeemed)
+
+    except Exception as e:
+        logger.warning("[AUTO-REDEEM] Error: %s", e)
 
 
 def auto_generate_report():
@@ -374,8 +477,7 @@ def run_startup_baseline():
 def main():
     logger.info("=" * 60)
     logger.info("Poly CopyBot starting...")
-    logger.info("Scan interval: %d hours | Dashboard port: %d",
-                config.SCAN_INTERVAL_HOURS, config.DASHBOARD_PORT)
+    logger.info("Dashboard port: %d", config.DASHBOARD_PORT)
     logger.info("=" * 60)
 
     # Initialize database
@@ -488,22 +590,6 @@ def main():
 
     # Schedule daily scans
     scheduler = BackgroundScheduler()
-    # AI-Scan deaktiviert — Copy Bot braucht keine AI, spart Tokens
-    # scheduler.add_job(
-    #     scheduled_scan,
-    #     "interval",
-    #     hours=config.SCAN_INTERVAL_HOURS,
-    #     id="wallet_scan",
-    #     next_run_time=datetime.now(),
-    # )
-    # Auto-Follow deaktiviert — nur manuell gefolgte Trader (RN1)
-    # scheduler.add_job(
-    #     auto_follow_scan,
-    #     "interval",
-    #     hours=1,
-    #     id="auto_follow",
-    #     next_run_time=datetime.now() + timedelta(minutes=5),
-    # )
     # Copy-Scan (Intervall einstellbar via COPY_SCAN_INTERVAL in .env)
     scheduler.add_job(
         copy_scan,
@@ -511,14 +597,20 @@ def main():
         seconds=config.COPY_SCAN_INTERVAL,
         id="copy_scan",
         next_run_time=datetime.now(),
+        coalesce=True,
+        misfire_grace_time=30,
+        max_instances=1,
     )
     # Update copy trade prices + close-check alle 30 Sekunden (kostenlos)
     scheduler.add_job(
         update_prices,
         "interval",
-        seconds=30,
+        seconds=60,
         id="price_update",
         next_run_time=datetime.now(),
+        coalesce=True,
+        misfire_grace_time=60,
+        max_instances=1,
     )
     # Auto-generate performance report (every 5 min, only if 5+ new activities)
     scheduler.add_job(
@@ -548,6 +640,44 @@ def main():
         logger.info("AI Analyzer enabled (every 6h, first run in 30min)")
     else:
         logger.info("AI Analyzer disabled (no ANTHROPIC_API_KEY)")
+    # Auto-redeem resolved positions (every 5 min)
+    scheduler.add_job(
+        auto_redeem,
+        "interval",
+        minutes=5,
+        id="auto_redeem",
+        next_run_time=datetime.now() + timedelta(minutes=1),
+        coalesce=True,
+        misfire_grace_time=120,
+        max_instances=1,
+    )
+    logger.info("Auto-Redeem enabled (every 5 min)")
+
+    # UPGRADE: register new jobs
+    scheduler.add_job(performance_update, 'interval', minutes=30, id='performance_update',
+                      next_run_time=datetime.now() + timedelta(seconds=60))
+    scheduler.add_job(ml_train, 'cron', hour=4, minute=0, id='ml_train',
+                      next_run_time=datetime.now() + timedelta(seconds=120))
+    scheduler.add_job(discovery_scan, 'interval', hours=3, id='discovery_scan',
+                      next_run_time=datetime.now() + timedelta(seconds=180))
+    scheduler.add_job(autonomous_scan, 'interval', seconds=60, id='autonomous_scan', max_instances=1,
+                      next_run_time=datetime.now() + timedelta(seconds=90))
+    scheduler.add_job(daily_report, 'cron', hour=0, minute=5, id='daily_report')
+    scheduler.add_job(auto_backup, 'interval', hours=6, id='auto_backup',
+                      next_run_time=datetime.now() + timedelta(seconds=60))
+    scheduler.add_job(auto_tune_settings, 'interval', hours=2, id='auto_tuner',
+                      next_run_time=datetime.now() + timedelta(seconds=100))
+    scheduler.add_job(clv_update, 'interval', hours=2, id='clv_update',
+                      next_run_time=datetime.now() + timedelta(seconds=200))
+    scheduler.add_job(arbitrage_scan, 'interval', minutes=30, id='arbitrage_scan',
+                      next_run_time=datetime.now() + timedelta(seconds=240))
+    scheduler.add_job(ai_news_scan, 'interval', hours=2, id='ai_news_scan',
+                      next_run_time=datetime.now() + timedelta(seconds=300))
+    scheduler.add_job(smart_sell_check, 'interval', seconds=60, id='smart_sell',
+                      next_run_time=datetime.now() + timedelta(seconds=45))
+    scheduler.add_job(smart_rebalance, 'cron', day_of_week='mon', hour=4, minute=30,
+                      id='smart_rebalance',
+                      next_run_time=datetime.now() + timedelta(seconds=150))
     scheduler.start()
     logger.info("Scheduler started (copy scan every %ds, prices every 30s, outcome every 30min).",
                 config.COPY_SCAN_INTERVAL)
@@ -569,6 +699,120 @@ def main():
         price_tracker.stop()
         logger.info("Scheduler + WebSocket stopped. Goodbye!")
 
+
+
+
+# =====================================================================
+# UPGRADE: Performance, ML, Discovery, Autonomous, Router
+# =====================================================================
+
+def performance_update():
+    """Update trader + category performance stats (every 30 min)."""
+    from bot.trader_performance import update_all_trader_stats, update_category_stats, update_adaptive_stop_loss
+    try:
+        update_all_trader_stats()
+        update_category_stats()
+        update_adaptive_stop_loss()
+    except Exception as e:
+        logger.exception('Error in performance update: %s', e)
+
+def ml_train():
+    """Re-train ML model daily at 4 AM."""
+    from bot.ml_scorer import train_model
+    try:
+        train_model()
+    except Exception as e:
+        logger.exception('Error in ML training: %s', e)
+
+def discovery_scan():
+    """Scan leaderboard + paper-follow + check promotions (every 6h)."""
+    from bot.auto_discovery import check_inactivity, check_reactivation, scan_leaderboard, scan_all_sources, paper_follow_candidates, check_promotions
+    try:
+        scan_all_sources()
+        paper_follow_candidates()
+        check_promotions()
+        check_reactivation()
+        check_inactivity()
+    except Exception as e:
+        logger.exception('Error in discovery scan: %s', e)
+
+def autonomous_scan():
+    """Scan for autonomous trading signals (every 60 sec)."""
+    from bot.autonomous_signals import scan_momentum_signals, update_autonomous_positions
+    try:
+        scan_momentum_signals()
+        update_autonomous_positions()
+    except Exception as e:
+        logger.exception('Error in autonomous scan: %s', e)
+
+
+
+
+def daily_report():
+    """Generate daily AI report at midnight."""
+    from bot.daily_report import generate_daily_report
+    try:
+        generate_daily_report()
+    except Exception as e:
+        logger.exception("Error in daily report: %s", e)
+
+def auto_backup():
+    """Auto-backup to GitHub every 6h."""
+    from bot.auto_backup import run_backup
+    try:
+        run_backup()
+    except Exception as e:
+        logger.exception("Error in auto backup: %s", e)
+
+
+def auto_tune_settings():
+    """Auto-tune all per-trader settings based on performance (every 2h)."""
+    from bot.auto_tuner import auto_tune
+    try:
+        auto_tune()
+    except Exception as e:
+        logger.exception('Error in auto-tuner: %s', e)
+
+def clv_update():
+    """Update CLV tracking stats (every 2h)."""
+    from bot.clv_tracker import update_clv_for_closed_trades
+    try:
+        update_clv_for_closed_trades()
+    except Exception as e:
+        logger.exception("Error in CLV update: %s", e)
+
+def arbitrage_scan():
+    """Scan for complete-set and logic arbitrage (every 30 min)."""
+    from bot.arbitrage import scan_complete_set_arb, scan_logic_arb
+    try:
+        scan_complete_set_arb()
+        scan_logic_arb()
+    except Exception as e:
+        logger.exception("Error in arbitrage scan: %s", e)
+
+def ai_news_scan():
+    """AI news trading scan (every 2h)."""
+    from bot.ai_news_trader import scan_ai_opportunities
+    try:
+        scan_ai_opportunities()
+    except Exception as e:
+        logger.exception("Error in AI news scan: %s", e)
+
+def smart_sell_check():
+    """Check if traders exited positions we are copying (every 60s)."""
+    from bot.smart_sell import check_trader_exits
+    try:
+        check_trader_exits()
+    except Exception as e:
+        logger.exception('Error in smart sell check: %s', e)
+
+def smart_rebalance():
+    """Weekly smart router rebalancing (Monday 4 AM)."""
+    from bot.smart_router import rebalance
+    try:
+        rebalance()
+    except Exception as e:
+        logger.exception('Error in smart rebalance: %s', e)
 
 if __name__ == "__main__":
     main()

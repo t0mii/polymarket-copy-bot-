@@ -3,6 +3,8 @@ Order Executor - Echte Polymarket CLOB Orders.
 Kauft und verkauft Shares auf Polymarket mit echtem Geld.
 """
 import logging
+import re
+import threading
 import time
 
 from py_clob_client.client import ClobClient
@@ -15,15 +17,20 @@ import config
 logger = logging.getLogger(__name__)
 
 _client: ClobClient | None = None
+_client_lock = threading.Lock()
 
 
 def _get_client() -> ClobClient:
-    """CLOB Client initialisieren (Singleton).
+    """CLOB Client initialisieren (Singleton, thread-safe).
 
     signature_type=1 = Polymarket Proxy Wallet (dort liegt das USDC).
     """
     global _client
-    if _client is None:
+    if _client is not None:
+        return _client
+    with _client_lock:
+        if _client is not None:
+            return _client
         if not config.POLYMARKET_PRIVATE_KEY:
             raise RuntimeError("POLYMARKET_PRIVATE_KEY nicht gesetzt!")
         _client = ClobClient(
@@ -59,6 +66,19 @@ def get_token_id(condition_id: str, side: str) -> str | None:
         for t in tokens:
             if t.get("outcome", "").lower() == side.lower():
                 return t["token_id"]
+
+        # Normalisierter Match: Apostrophe/Sonderzeichen entfernen
+        def _norm(s):
+            import unicodedata
+            s = unicodedata.normalize("NFKD", s)
+            s = s.translate({0x27: None, 0x22: None, 0x2018: None, 0x2019: None, 0x201C: None, 0x201D: None, 0x60: None})
+            return re.sub(r"\s+", " ", s).strip().lower()
+
+        side_norm = _norm(side)
+        for t in tokens:
+            if _norm(t.get("outcome", "")) == side_norm:
+                return t["token_id"]
+
 
         # YES/NO Fallback
         side_upper = side.upper()
@@ -164,6 +184,10 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         Fill-Details dict with usdc_spent, shares_bought, effective_price,
         fee_rate_bps, token_id — or None on failure.
     """
+    # Polymarket Minimum: 1 USD fuer marketable Orders
+    if amount_usd < 1.0:
+        logger.warning("ORDER SKIP: amount %.2f < 1.00 Minimum | %s / %s", amount_usd, condition_id[:20], side)
+        return None
     try:
         client = _get_client()
         token_id = get_token_id(condition_id, side)
@@ -258,7 +282,11 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
         return None
 
     except Exception as e:
-        logger.error("ORDER FEHLER (BUY): %s | %s / %s / $%.2f", e, condition_id[:20], side, amount_usd)
+        err_str = str(e)
+        if "geoblock" in err_str.lower() or "403" in err_str:
+            logger.error("GEOBLOCK DETECTED (BUY): VPN down? | %s / %s / $%.2f | %s", condition_id[:20], side, amount_usd, e)
+        else:
+            logger.error("ORDER FEHLER (BUY): %s | %s / %s / $%.2f", e, condition_id[:20], side, amount_usd)
         return None
 
 
@@ -370,9 +398,13 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
                                     shares, price * 100, sell_price * 100, slippage * 100, side)
                         return _build_sell_result(bal_before_usdc, shares, fee_rate, response)
                     else:
-                        logger.warning("ORDER SELL: delayed order did not fill after %ds — giving up (no retry to prevent double sell)",
-                                        config.DELAYED_SELL_VERIFY_SECS)
-                        return None
+                        # Partial fill? If shares changed, count as filled (avoid double sell)
+                        if _shares2 < shares * 0.80:
+                            logger.info("ORDER SELL: partial fill (%.2f -> %.2f shares) — accepting as filled", shares, _shares2)
+                            return _build_sell_result(bal_before_usdc, shares - _shares2, fee_rate, response)
+                        # No fill at all — try next slippage level (not return None!)
+                        logger.info("ORDER SELL: delayed not filled at -%.0fc slip, trying next level...",
+                                    slippage * 100)
             elif response:
                 success = True
 
@@ -390,7 +422,11 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
         return None
 
     except Exception as e:
-        logger.error("ORDER FEHLER (SELL): %s | %s / %s", e, condition_id[:20], side)
+        err_str = str(e)
+        if "geoblock" in err_str.lower() or "403" in err_str:
+            logger.error("GEOBLOCK DETECTED (SELL): VPN down? | %s / %s | %s", condition_id[:20], side, e)
+        else:
+            logger.error("ORDER FEHLER (SELL): %s | %s / %s", e, condition_id[:20], side)
         return None
 
 

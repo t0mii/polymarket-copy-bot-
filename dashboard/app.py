@@ -95,7 +95,17 @@ def api_live_data():
     DEPOSIT = float(config.STARTING_BALANCE)
     funder = config.POLYMARKET_FUNDER
     DATA_API = "https://data-api.polymarket.com"
-    _sport_map = {"mlb": "\u26BE MLB", "nba": "\U0001F3C0 NBA", "nhl": "\U0001F3D2 NHL",
+    _sport_map = {
+                  # Tennis tournaments (MUST be before soccer to catch "Barcelona Open" etc)
+                  "barcelona open": "\U0001F3BE TENNIS", "bmw open": "\U0001F3BE TENNIS",
+                  "rouen": "\U0001F3BE TENNIS", "capfinances": "\U0001F3BE TENNIS",
+                  "qualification:": "\U0001F3BE TENNIS", "qualif": "\U0001F3BE TENNIS",
+                  "challenger": "\U0001F3BE TENNIS", "sarasota": "\U0001F3BE TENNIS",
+                  "roland garros": "\U0001F3BE TENNIS", "wimbledon": "\U0001F3BE TENNIS",
+                  "indian wells": "\U0001F3BE TENNIS", "miami open": "\U0001F3BE TENNIS",
+                  "rome open": "\U0001F3BE TENNIS",
+                  # Main sports
+                  "mlb": "\u26BE MLB", "nba": "\U0001F3C0 NBA", "nhl": "\U0001F3D2 NHL",
                   "nfl": "\U0001F3C8 NFL", "ufc": "\U0001F94A UFC", "mma": "\U0001F94A MMA",
                   "atp": "\U0001F3BE ATP", "wta": "\U0001F3BE WTA",
                   "soccer": "\u26BD", "epl": "\u26BD EPL", "ucl": "\u26BD UCL",
@@ -108,7 +118,7 @@ def api_live_data():
                   "mex-": "\u26BD MX", "liga mx": "\u26BD MX",
                   "puebla": "\u26BD MX", "juarez": "\u26BD MX", "cruz": "\u26BD MX",
                   "necaxa": "\u26BD MX", "tigre": "\u26BD MX", "tijuana": "\u26BD MX", "mazatl": "\u26BD MX",
-                  "southampton": "\u26BD EPL", "barcelona": "\u26BD LAL", "madrid": "\u26BD LAL",
+                  "southampton": "\u26BD EPL", "fc barcelona": "\u26BD LAL", "real madrid": "\u26BD LAL",
                   "serie a": "\u26BD SA", "premier": "\u26BD EPL",
                   # NHL teams
                   "avalanche": "\U0001F3D2 NHL", "blackhawks": "\U0001F3D2 NHL", "bruins": "\U0001F3D2 NHL",
@@ -256,6 +266,11 @@ def api_live_data():
 
     # Fetch event start times from Gamma API (cached per slug)
     _unique_slugs = set(p.get("event_slug", "") for p in open_positions if p.get("event_slug"))
+    # Also include DB slugs (may differ from API slugs)
+    for _dbt in _db_open_trades:
+        _dbs = _dbt.get("event_slug", "")
+        if _dbs:
+            _unique_slugs.add(_dbs)
     _uncached = [s for s in _unique_slugs if s not in _event_start_cache]
     for _slug in _uncached:
         try:
@@ -270,12 +285,66 @@ def api_live_data():
                     _event_start_cache[_slug] = {"start": _st, "end": _et}
         except Exception:
             _event_start_cache[_slug] = {}  # mark as tried, don't retry
+    import re as _re_ev
     for _pos in open_positions:
         _es = _pos.get("event_slug", "")
+        # Also check DB event_slug if API slug differs
+        _cid_lookup = _pos.get("condition_id", "")
+        _db_match = _open_by_cid.get(_cid_lookup)
+        _db_slug = _db_match.get("event_slug", "") if _db_match else ""
+        if not _es and _db_slug:
+            _es = _db_slug
+            _pos["event_slug"] = _es
         _cached = _event_start_cache.get(_es)
+        if not _cached and _db_slug and _db_slug != _es:
+            _cached = _event_start_cache.get(_db_slug)
         if _cached:
             _pos["event_start"] = _cached.get("start", "")
             _pos["event_end"] = _cached.get("end", "")
+        # Fix: for sports matches, slug date (match day) beats tournament end date
+        # e.g. slug "atp-bueno-midon-2026-04-11" → match is today, but API endDate = tournament end
+        _slug_date_match = _re_ev.search(r"(\d{4}-\d{2}-\d{2})", _es) if _es else None
+        if _slug_date_match:
+            _slug_end = _slug_date_match.group(1) + "T23:59:59Z"
+            if not _pos.get("event_start"):
+                _pos["event_start"] = _slug_date_match.group(1) + "T00:00:00Z"
+            # If slug date is BEFORE the API event_end, use slug date (it's the actual match day)
+            if _pos.get("event_end") and _slug_end < _pos["event_end"]:
+                _pos["event_end"] = _slug_end
+            elif not _pos.get("event_end"):
+                _pos["event_end"] = _slug_end
+        elif not _pos.get("event_start") and _es:
+            _date_match = _re_ev.search(r"(\d{4}-\d{2}-\d{2})", _es)
+            if _date_match:
+                _pos["event_start"] = _date_match.group(1) + "T00:00:00Z"
+        # Fallback 2: extract deadline from title ("by April 30", "by end of April", "by June 30")
+        if not _pos.get("event_end"):
+            _mq = _pos.get("market_question", "")
+            _months_map = {"january":"01","february":"02","march":"03","april":"04","may":"05","june":"06","july":"07","august":"08","september":"09","october":"10","november":"11","december":"12"}
+            _month_names = "|".join(_months_map.keys())
+            _deadline = None
+            _yr = "2026"
+            _mn = "01"
+            _dy = "28"
+            if _mq:
+                # "by April 30" or "by April 30, 2026"
+                _deadline = _re_ev.search(r"by\s+(%s)\s+(\d{1,2})(?:,?\s*(\d{4}))?" % _month_names, _mq, _re_ev.IGNORECASE)
+                if _deadline:
+                    _yr = _deadline.group(3) or "2026"
+                    _mn = _months_map.get(_deadline.group(1).lower(), "01")
+                    _dy = _deadline.group(2).zfill(2)
+                else:
+                    # "by end of April"
+                    _end_of = _re_ev.search(r"by\s+end\s+of\s+(%s)(?:\s*(\d{4}))?" % _month_names, _mq, _re_ev.IGNORECASE)
+                    if _end_of:
+                        _mn = _months_map.get(_end_of.group(1).lower(), "01")
+                        _yr = _end_of.group(2) or "2026"
+                        # Last day of month
+                        import calendar
+                        _dy = str(calendar.monthrange(int(_yr), int(_mn))[1])
+                        _deadline = _end_of
+            if _deadline:
+                _pos["event_end"] = "%s-%s-%sT23:59:59Z" % (_yr, _mn, _dy)
 
     # Closed positions from DB (accurate bot-level data)
     closed_positions = []
@@ -375,6 +444,46 @@ def api_live_data():
             "is_orphan": True,
         })
 
+    # Apply event time fallback to orphan positions
+    for _orph in display_open:
+        if not _orph.get("is_orphan"):
+            continue
+        _oes = _orph.get("event_slug", "")
+        # Check gamma cache
+        _oc = _event_start_cache.get(_oes)
+        if _oc:
+            _orph["event_start"] = _oc.get("start", "")
+            _orph["event_end"] = _oc.get("end", "")
+        # Fix: slug date beats tournament end for orphans too
+        _orph_slug_dm = _re_ev.search(r"(\d{4}-\d{2}-\d{2})", _oes) if _oes else None
+        if _orph_slug_dm:
+            _orph_slug_end = _orph_slug_dm.group(1) + "T23:59:59Z"
+            if not _orph.get("event_start"):
+                _orph["event_start"] = _orph_slug_dm.group(1) + "T00:00:00Z"
+            if _orph.get("event_end") and _orph_slug_end < _orph["event_end"]:
+                _orph["event_end"] = _orph_slug_end
+            elif not _orph.get("event_end"):
+                _orph["event_end"] = _orph_slug_end
+        elif not _orph.get("event_start") and _oes:
+            _odm = _re_ev.search(r"(\d{4}-\d{2}-\d{2})", _oes)
+            if _odm:
+                _orph["event_start"] = _odm.group(1) + "T00:00:00Z"
+        # Title date fallback
+        if not _orph.get("event_end"):
+            _omq = _orph.get("market_question", "")
+            _months_map = {"january":"01","february":"02","march":"03","april":"04","may":"05","june":"06","july":"07","august":"08","september":"09","october":"10","november":"11","december":"12"}
+            _mn_pat = "|".join(_months_map.keys())
+            _odl = _re_ev.search(r"by\s+(%s)\s+(\d{1,2})(?:,?\s*(\d{4}))?" % _mn_pat, _omq, _re_ev.IGNORECASE) if _omq else None
+            if _odl:
+                _orph["event_end"] = "%s-%s-%sT23:59:59Z" % (_odl.group(3) or "2026", _months_map.get(_odl.group(1).lower(),"01"), _odl.group(2).zfill(2))
+            elif _omq:
+                _oeo = _re_ev.search(r"by\s+end\s+of\s+(%s)(?:\s*(\d{4}))?" % _mn_pat, _omq, _re_ev.IGNORECASE)
+                if _oeo:
+                    import calendar
+                    _omn = _months_map.get(_oeo.group(1).lower(),"01")
+                    _oyr = _oeo.group(2) or "2026"
+                    _orph["event_end"] = "%s-%s-%sT23:59:59Z" % (_oyr, _omn, str(calendar.monthrange(int(_oyr), int(_omn))[1]))
+
     # Counts from bot-copies only
     bot_wins = wins
     bot_losses = losses
@@ -470,7 +579,7 @@ def logs_page():
 @app.route("/api/logs")
 def api_logs():
     """Return last N lines of the bot log, optionally filtered."""
-    lines = int(request.args.get("lines", 200))
+    lines = min(int(request.args.get("lines", 200)), 5000)
     filt = request.args.get("filter", "").lower()
     try:
         with open(config.LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
@@ -535,8 +644,6 @@ def api_settings():
         {"key": "MAX_ENTRY_PRICE_CAP", "value": str(int(config.MAX_ENTRY_PRICE_CAP * 100)) + "c", "desc": "Hard ceiling after slippage"},
         {"key": "TRADE_SEC_FROM_RESOLVE", "value": _sec(config.TRADE_SEC_FROM_RESOLVE), "desc": "Stop buying before market close"},
         # --- Hedge Detection ---
-        {"key": "HEDGE_WAIT_SECS", "value": _sec(config.HEDGE_WAIT_SECS), "desc": "Default hedge wait time"},
-        {"key": "HEDGE_WAIT_TRADERS", "value": config.HEDGE_WAIT_TRADERS or "none", "desc": "Per-trader hedge config"},
         # --- Cash Management ---
         {"key": "CASH_FLOOR", "value": _dlr(config.CASH_FLOOR), "desc": "Stop buying below this"},
         {"key": "CASH_RECOVERY", "value": _dlr(config.CASH_RECOVERY), "desc": "Recovery threshold above floor"},
@@ -558,7 +665,6 @@ def api_settings():
         # --- Feature Toggles ---
         {"key": "COPY_SELLS", "value": _onoff(config.COPY_SELLS), "desc": "Copy sell signals from traders"},
         {"key": "POSITION_DIFF_ENABLED", "value": _onoff(config.POSITION_DIFF_ENABLED), "desc": "Position-diff fallback scan"},
-        {"key": "IDLE_REPLACE_ENABLED", "value": _onoff(config.IDLE_REPLACE_ENABLED), "desc": "Auto-replace inactive traders"},
         # --- Circuit Breaker ---
         {"key": "CB_THRESHOLD", "value": str(config.CB_THRESHOLD) + " failures", "desc": "API failures before pause"},
         {"key": "CB_PAUSE_SECS", "value": _sec(config.CB_PAUSE_SECS), "desc": "Pause duration after breaker trips"},
@@ -665,23 +771,6 @@ def serve_report(filename):
     return send_from_directory(config.REPORTS_DIR, filename)
 
 
-@app.route("/api/scan/trigger", methods=["POST"])
-def api_trigger_scan():
-    """Trigger a scan from the dashboard (runs in background thread)."""
-    import threading
-    from scan_wallets import run_scan
-
-    def do_scan():
-        run_scan(
-            limit=config.SCAN_WALLET_LIMIT,
-            max_analyze=config.MAX_AI_ANALYSES,
-            top_n=config.TOP_N_REPORT,
-            open_report=False,
-        )
-
-    thread = threading.Thread(target=do_scan, daemon=True)
-    thread.start()
-    return jsonify({"status": "scan_started"})
 
 
 # --- Position Copying ---
@@ -722,6 +811,23 @@ def api_trader_stats():
 
     all_trades = [dict(t) for t in db.get_all_copy_trades(limit=5000)]
     trader_map = {}
+
+    # Pre-populate with ALL followed wallets (including auto-promoted with 0 trades)
+    try:
+        followed = db.get_followed_wallets()
+        for w in followed:
+            addr = w["address"]
+            trader_map[addr] = {
+                "username": w["username"] or addr[:12],
+                "address": addr,
+                "open": 0, "closed": 0, "wins": 0, "losses": 0,
+                "pnl_realized": 0.0, "pnl_unrealized": 0.0,
+                "total_invested": 0.0,
+                "all_closed": 0, "all_pnl": 0.0, "all_wins": 0, "all_losses": 0,
+            }
+    except Exception:
+        pass
+
     for t in all_trades:
         addr = t["wallet_address"]
         if addr not in trader_map:
@@ -900,6 +1006,8 @@ def api_sell_orphan():
 @app.route("/api/copy/scan", methods=["POST"])
 def api_copy_scan():
     """Manually trigger copy-trade scan of followed wallets."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     import threading
     from bot.copy_trader import copy_followed_wallets, update_copy_positions
 
@@ -915,6 +1023,8 @@ def api_copy_scan():
 @app.route("/api/copy/update", methods=["POST"])
 def api_copy_update():
     """Update prices for open positions."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     import threading
     from bot.copy_trader import update_copy_positions
 
@@ -1229,3 +1339,364 @@ def api_ai_dismiss(rec_id):
         return jsonify({"error": "unauthorized"}), 401
     db.update_recommendation_status(rec_id, "dismissed")
     return jsonify({"ok": True})
+
+
+# =====================================================================
+# UPGRADE: Performance, ML, Discovery, Router, Autonomous Endpoints
+# =====================================================================
+
+@app.route("/api/upgrade/trader-performance")
+def api_trader_performance():
+    """Performance aller Trader mit Status."""
+    with db.get_connection() as conn:
+        perf = conn.execute(
+            "SELECT tp.*, ts.status as trader_status, ts.bet_multiplier, ts.reason "
+            "FROM trader_performance tp "
+            "LEFT JOIN trader_status ts ON tp.trader_name = ts.trader_name "
+            "WHERE tp.period = '7d' AND tp.trader_name != 'imported' AND tp.trader_name != 'test' AND tp.trades_count > 0 ORDER BY tp.total_pnl DESC"
+        ).fetchall()
+    return jsonify({"traders": [dict(r) for r in perf]})
+
+
+@app.route("/api/upgrade/category-heatmap")
+def api_category_heatmap():
+    """Kategorie-Performance als Heatmap-Daten."""
+    with db.get_connection() as conn:
+        cats = conn.execute(
+            "SELECT * FROM category_performance WHERE period = '30d' "
+            "ORDER BY total_pnl DESC"
+        ).fetchall()
+    try:
+        from bot.smart_router import _load_allocations
+        allocs = _load_allocations()
+    except Exception:
+        allocs = {}
+    result = []
+    for c in cats:
+        d = dict(c)
+        d["allocation"] = allocs.get(c["category"], 0.10)
+        result.append(d)
+    return jsonify({"categories": result})
+
+
+@app.route("/api/upgrade/ml-info")
+def api_ml_info():
+    """ML-Modell Info und Training-History."""
+    with db.get_connection() as conn:
+        training = conn.execute(
+            "SELECT * FROM ml_training_log ORDER BY trained_at DESC LIMIT 5"
+        ).fetchall()
+    return jsonify({"training_history": [dict(r) for r in training]})
+
+
+@app.route("/api/upgrade/candidates")
+def api_candidates():
+    """Trader-Kandidaten mit Paper-Stats."""
+    candidates = db.get_all_candidates()
+    for c in candidates:
+        stats = db.get_candidate_stats(c["address"])
+        c.update(stats)
+    return jsonify({"candidates": candidates})
+
+
+@app.route("/api/upgrade/autonomous-trades")
+def api_autonomous_trades():
+    """Autonome Trades (Paper + Live)."""
+    with db.get_connection() as conn:
+        trades = conn.execute(
+            "SELECT * FROM autonomous_trades ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+    return jsonify({"trades": [dict(r) for r in trades]})
+
+
+@app.route("/api/upgrade/status")
+def api_upgrade_status():
+    """Overall upgrade status — alles auf einen Blick."""
+    result = {}
+
+    # Trader status
+    with db.get_connection() as conn:
+        traders = conn.execute("SELECT * FROM trader_status").fetchall()
+        result["trader_status"] = [dict(r) for r in traders]
+
+    # ML model
+    with db.get_connection() as conn:
+        ml = conn.execute(
+            "SELECT * FROM ml_training_log ORDER BY trained_at DESC LIMIT 1"
+        ).fetchone()
+        result["ml_model"] = dict(ml) if ml else None
+
+    # Candidates count
+    with db.get_connection() as conn:
+        cand = conn.execute(
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN status='observing' THEN 1 ELSE 0 END) as observing, "
+            "SUM(CASE WHEN status='promoted' THEN 1 ELSE 0 END) as promoted "
+            "FROM trader_candidates"
+        ).fetchone()
+        result["candidates"] = dict(cand) if cand else {"total": 0}
+
+    # Autonomous trades
+    with db.get_connection() as conn:
+        auto = conn.execute(
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count "
+            "FROM autonomous_trades"
+        ).fetchone()
+        result["autonomous"] = dict(auto) if auto else {"total": 0}
+
+    # Category allocations
+    try:
+        from bot.smart_router import _load_allocations
+        result["allocations"] = _load_allocations()
+    except Exception:
+        result["allocations"] = {}
+
+    return jsonify(result)
+
+
+@app.route("/brain")
+def brain_dashboard():
+    """Intelligence Dashboard — ML, Performance, Discovery, Router."""
+    return render_template("brain.html")
+
+
+# =====================================================================
+# FUN FEATURES: Trash Talk, Trader Cards, Ticker, Konfetti
+# =====================================================================
+
+import random as _random
+
+_TRASH_TALK_WINS = [
+    "hat mal wieder geliefert! Druckmaschine geht BRRRR",
+    "zeigt wie man's macht. Easy money.",
+    "casht ein wie ein Boss. Respekt!",
+    "hat den Markt gelesen wie ein offenes Buch.",
+    "macht Polymarket zu seinem persoenlichen Geldautomaten.",
+    "auf Feuer! Alles was er anfasst wird Gold.",
+    "kennt offensichtlich die Zukunft. Zeitreisender?",
+    "der absolute GOAT. Kein Wunder dass wir den kopieren.",
+]
+
+_TRASH_TALK_LOSSES = [
+    "hat wieder daneben gegriffen. Classic.",
+    "versenkt unser Geld. Danke fuer nichts!",
+    "sollte vielleicht eine Muenze werfen stattdessen.",
+    "Blindfold-Trading waere profitabler.",
+    "das Geld haette man auch verbrennen koennen.",
+    "macht einen auf Experte, liefert wie ein Anfaenger.",
+    "hat offensichtlich den Wetterbericht mit Sportergebnissen verwechselt.",
+    "RIP unsere USDC. Gone but not forgotten.",
+]
+
+_TRASH_TALK_PAUSED = [
+    "wurde auf die Bank gesetzt. Ab in die Ecke und schaemen!",
+    "darf erstmal zugucken. Lern was, Bruder.",
+    "ist gesperrt. Der Bot hat genug von deinen Verlusten.",
+    "sitzt auf der Strafbank. Rote Karte!",
+]
+
+_TRADER_TITLES = {
+    "sovereign2013": "The Sovereign",
+    "KING7777777": "The King",
+    "xsaghav": "The Wildcard",
+    "RN1": "Random Number One",
+    "Jargs": "The Ghost",
+    "fsavhlc": "The Rookie",
+}
+
+_TRADER_SPECIALS = {
+    "sovereign2013": "NBA Oracle — sieht die Zukunft",
+    "KING7777777": "CS2 Sniper — headshots only",
+    "xsaghav": "Volume King — tradet wie verueckt",
+    "RN1": "Spray & Pray — quantity over quality",
+    "Jargs": "Silent Assassin — selten aber praezise",
+    "fsavhlc": "Fresh Blood — noch in der Ausbildung",
+}
+
+
+@app.route("/api/fun/trash-talk")
+def api_trash_talk():
+    """Generate AI trash talk for recent trades."""
+    talks = []
+    with db.get_connection() as conn:
+        # Last 10 closed trades
+        rows = conn.execute(
+            "SELECT wallet_username, market_question, pnl_realized, closed_at "
+            "FROM copy_trades WHERE status = 'closed' AND pnl_realized IS NOT NULL "
+            "ORDER BY closed_at DESC LIMIT 10"
+        ).fetchall()
+
+    for r in rows:
+        trader = r["wallet_username"] or "Unknown"
+        pnl = r["pnl_realized"] or 0
+        market = (r["market_question"] or "")[:50]
+        if pnl > 0:
+            talk = _random.choice(_TRASH_TALK_WINS)
+        else:
+            talk = _random.choice(_TRASH_TALK_LOSSES)
+        talks.append({
+            "trader": trader,
+            "market": market,
+            "pnl": round(pnl, 2),
+            "talk": "%s %s" % (trader, talk),
+            "time": r["closed_at"] or "",
+        })
+
+    # Add paused trader trash talk
+    with db.get_connection() as conn:
+        paused = conn.execute(
+            "SELECT trader_name FROM trader_status WHERE status = 'paused'"
+        ).fetchall()
+    for p in paused:
+        talks.insert(0, {
+            "trader": p["trader_name"],
+            "market": "",
+            "pnl": 0,
+            "talk": "%s %s" % (p["trader_name"], _random.choice(_TRASH_TALK_PAUSED)),
+            "time": "",
+        })
+
+    return jsonify({"talks": talks})
+
+
+@app.route("/api/fun/trader-cards")
+def api_trader_cards():
+    """Trader trading card data with stats, titles, specials."""
+    cards = []
+    with db.get_connection() as conn:
+        traders = conn.execute(
+            "SELECT wallet_username, COUNT(*) as total, "
+            "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
+            "SUM(CASE WHEN pnl_realized < 0 THEN 1 ELSE 0 END) as losses, "
+            "ROUND(SUM(pnl_realized), 2) as total_pnl, "
+            "ROUND(MAX(pnl_realized), 2) as best_trade, "
+            "ROUND(MIN(pnl_realized), 2) as worst_trade "
+            "FROM copy_trades WHERE status = 'closed' AND wallet_username != '' "
+            "GROUP BY wallet_username ORDER BY SUM(pnl_realized) DESC"
+        ).fetchall()
+        # Pre-fetch all trader statuses while conn is open
+        _status_map = {}
+        for _sr in conn.execute("SELECT trader_name, status FROM trader_status").fetchall():
+            _status_map[_sr['trader_name']] = _sr['status']
+
+    for t in traders:
+        name = t["wallet_username"]
+        total = t["total"] or 0
+        wins = t["wins"] or 0
+        pnl = t["total_pnl"] or 0
+        wr = round(wins / total * 100, 1) if total > 0 else 0
+
+        # Rarity based on P&L
+        if pnl >= 20:
+            rarity = "legendary"
+        elif pnl >= 5:
+            rarity = "epic"
+        elif pnl >= 0:
+            rarity = "rare"
+        else:
+            rarity = "common"
+
+        # Power level
+        power = max(0, round((wr * 2) + (pnl * 5) + (total * 0.5)))
+
+        # Status
+        status = _status_map.get(name, 'active')
+
+        cards.append({
+            "name": name,
+            "title": _TRADER_TITLES.get(name, "The Trader"),
+            "special": _TRADER_SPECIALS.get(name, "Copy-Trading Pro"),
+            "rarity": rarity,
+            "power": power,
+            "total_trades": total,
+            "wins": wins,
+            "losses": t["losses"] or 0,
+            "winrate": wr,
+            "total_pnl": pnl,
+            "best_trade": t["best_trade"] or 0,
+            "worst_trade": t["worst_trade"] or 0,
+            "status": status,
+        })
+
+    return jsonify({"cards": cards})
+
+
+@app.route("/api/fun/ticker")
+def api_ticker():
+    """Live ticker tape data — last 20 events."""
+    events = []
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT event_type, title, detail, pnl, created_at "
+            "FROM activity_log ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()
+    for r in rows:
+        events.append({
+            "type": r["event_type"],
+            "title": r["title"],
+            "detail": r["detail"],
+            "pnl": r["pnl"] or 0,
+            "time": r["created_at"] or "",
+        })
+    return jsonify({"events": events})
+
+
+@app.route("/api/fun/daily-pnl")
+def api_daily_pnl():
+    """Daily P&L for konfetti check + calendar heatmap."""
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DATE(closed_at) as day, ROUND(SUM(pnl_realized), 2) as pnl, COUNT(*) as trades "
+            "FROM copy_trades WHERE status = 'closed' AND closed_at IS NOT NULL "
+            "GROUP BY DATE(closed_at) ORDER BY day DESC LIMIT 30"
+        ).fetchall()
+    days = [{"day": r["day"], "pnl": r["pnl"] or 0, "trades": r["trades"] or 0} for r in rows]
+    today_pnl = days[0]["pnl"] if days and days[0]["day"] else 0
+    return jsonify({"days": days, "today_pnl": today_pnl, "konfetti": today_pnl > 0})
+
+
+@app.route("/api/upgrade/clv")
+def api_clv():
+    """CLV tracking stats."""
+    from bot.clv_tracker import get_clv_by_trader, update_clv_for_closed_trades
+    try:
+        overall = update_clv_for_closed_trades()
+        by_trader = get_clv_by_trader()
+        return jsonify({"overall": overall, "by_trader": by_trader})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/gazette")
+def reports_gazette():
+    """SSC Trading Gazette — daily reports, password protected."""
+    return render_template("reports.html")
+
+
+@app.route("/api/fun/daily-reports")
+def api_daily_reports():
+    """Latest daily reports for gazette."""
+    import json as _json
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, report_text, data_snapshot, created_at FROM ai_reports "
+            "WHERE LENGTH(report_text) < 5000 "
+            "ORDER BY created_at DESC LIMIT 10"
+        ).fetchall()
+    reports = []
+    for r in rows:
+        data = {}
+        try:
+            data = _json.loads(r["data_snapshot"] or "{}")
+        except Exception:
+            pass
+        if data.get("type") == "daily_auto":
+            reports.append({
+                "id": r["id"],
+                "text": r["report_text"],
+                "date": r["created_at"],
+                "pnl": data.get("pnl", 0),
+                "trades": data.get("trades", 0),
+            })
+    return jsonify({"reports": reports})
