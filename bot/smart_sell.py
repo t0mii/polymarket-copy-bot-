@@ -60,7 +60,14 @@ def check_trader_exits():
 
                 # Trader hat Position verlassen
                 entry = our_trade.get("actual_entry_price") or our_trade.get("entry_price") or 0
-                current = our_trade.get("current_price") or entry
+                # Use live WebSocket price instead of stale DB price
+                _live_price = None
+                try:
+                    from bot.ws_price_tracker import price_tracker
+                    _live_price = price_tracker.get_price(cid, our_trade.get("side", "YES"))
+                except Exception:
+                    pass
+                current = _live_price or our_trade.get("current_price") or entry
                 if entry <= 0:
                     continue
 

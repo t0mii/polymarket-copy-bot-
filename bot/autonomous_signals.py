@@ -190,3 +190,66 @@ def update_autonomous_positions():
             logger.info("[AUTO-SL] Closed: %s @ %.0fc -> %.0fc | P&L $%.2f",
                         trade["market_question"][:40] if trade["market_question"] else "?",
                         entry * 100, price * 100, pnl)
+
+
+# --- AI vs Humans Divergence Signal (via PolymarketScan) ---
+POLYSCAN_API = "https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api"
+DIVERGENCE_THRESHOLD = 0.10  # 10%+ difference between AI and market odds
+DIVERGENCE_MIN_VOLUME = 50000  # Min $50K volume for reliability
+
+
+def scan_ai_divergence_signals():
+    """Find markets where AI consensus strongly disagrees with market odds."""
+    if _get_autonomous_exposure() >= _get_autonomous_budget():
+        return
+
+    try:
+        r = requests.get(POLYSCAN_API, params={
+            "action": "ai-vs-humans", "limit": 20, "agent_id": "maryyo-copybot"
+        }, timeout=15)
+        if not r.ok:
+            return
+        markets = r.json().get("data", [])
+        if not markets:
+            return
+
+        for m in markets:
+            divergence = abs(float(m.get("divergence", 0) or 0))
+            volume = float(m.get("volume_usd", 0) or 0)
+            ai_prob = float(m.get("ai_probability", 0) or 0)
+            market_prob = float(m.get("market_probability", 0) or 0)
+
+            if divergence < DIVERGENCE_THRESHOLD or volume < DIVERGENCE_MIN_VOLUME:
+                continue
+
+            # AI thinks YES is more likely than market
+            if ai_prob > market_prob + DIVERGENCE_THRESHOLD:
+                side = "YES"
+                price = market_prob
+            elif ai_prob < market_prob - DIVERGENCE_THRESHOLD:
+                side = "NO"
+                price = 1.0 - market_prob
+            else:
+                continue
+
+            if price < MOMENTUM_MIN_PRICE or price > MOMENTUM_MAX_PRICE:
+                continue
+
+            cid = m.get("condition_id") or m.get("market_id", "")
+            if not cid:
+                continue
+
+            signal = {
+                "type": "ai_divergence",
+                "condition_id": cid,
+                "side": side,
+                "price": price,
+                "magnitude": divergence,
+            }
+            _execute_signal(signal)
+            logger.info("[AUTO-AI] Divergence signal: %s %s @ %.0fc | AI=%.0f%% Market=%.0f%% | %s",
+                        side, m.get("question", "")[:40], price * 100,
+                        ai_prob * 100, market_prob * 100, m.get("question", "")[:40])
+
+    except Exception as e:
+        logger.debug("[AUTO-AI] Divergence scan error: %s", e)
