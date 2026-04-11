@@ -510,6 +510,20 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
 
         trade_data["entry_price"] = round(min(current + ENTRY_SLIPPAGE, 0.97), 4)
         trade_data["size"] = size
+        # LIVE_MODE: echte Order platzieren BEVOR DB-Record erstellt wird
+        if LIVE_MODE and cid:
+            try:
+                order_resp = buy_shares(cid, trade_data["side"], size, trade_data["entry_price"])
+                if not order_resp:
+                    logger.warning("[PENDING] Order failed, skipping: %s", trade_data["market_question"][:40])
+                    expired_keys.append(cid)
+                    continue
+                _apply_fill_details(trade_data, order_resp, size, trade_data["entry_price"])
+                size = trade_data["size"]
+            except Exception as _pe:
+                logger.warning("[PENDING] Buy error: %s", _pe)
+                expired_keys.append(cid)
+                continue
         trade_id = db.create_copy_trade(trade_data)
         if trade_id:
             fired += 1
@@ -629,9 +643,16 @@ def _position_diff_scan(address: str, username: str, balance: float,
             # Max per match (DB query includes recently closed)
             _diff_remaining = None
             if config.MAX_PER_MATCH > 0:
-                _diff_evt = pos.get("event_slug", "") or ""
-                if _diff_evt:
-                    _diff_match_inv = db.get_invested_for_event(_diff_evt)
+                _diff_mkey = _match_key(_q)
+                if _diff_mkey and len(_diff_mkey) > 3:
+                    _diff_match_inv = sum(
+                        ot["size"] for ot in _diff_open
+                        if _match_key(ot.get("market_question", "")) == _diff_mkey
+                    )
+                    _diff_evt_for_match = pos.get("event_slug", "") or ""
+                    if _diff_evt_for_match:
+                        _db_evt_inv = db.get_invested_for_event(_diff_evt_for_match)
+                        _diff_match_inv = max(_diff_match_inv, _db_evt_inv)
                     _diff_remaining = config.MAX_PER_MATCH - _diff_match_inv
                     if _diff_remaining < config.MIN_TRADE_SIZE:
                         logger.info("[DIFF] Match full $%.0f/$%.0f, skipping: %s",
@@ -639,9 +660,10 @@ def _position_diff_scan(address: str, username: str, balance: float,
                         _log_block(username, _q, cid, _s, entry_price_raw, "match_full",
                                    "$%.0f/$%.0f invested" % (_diff_match_inv, config.MAX_PER_MATCH), "diff")
                         continue
-                    # Merge event + match remaining (take the stricter one)
                     if _diff_evt_remaining is not None:
                         _diff_remaining = min(_diff_remaining, _diff_evt_remaining)
+                    else:
+                        _diff_remaining = _diff_remaining
                 elif _diff_evt_remaining is not None:
                     _diff_remaining = _diff_evt_remaining
 
@@ -1946,7 +1968,7 @@ def copy_followed_wallets():
                     try:
                         from bot.liquidity_check import check_liquidity
                         if not check_liquidity(cid, t["side"], size):
-                            _log_block(trader_name, question, cid, t["side"], entry_price,
+                            _log_block(username, question, cid, t["side"], entry_price,
                                        "low_liquidity", "Orderbook too thin for $%.2f" % size, "liquidity")
                             continue
                     except Exception:
@@ -2368,7 +2390,10 @@ def update_copy_positions():
                         # Miss count: position vanished from trader's wallet — after N misses, auto-close
                         miss = db.increment_miss_count(trade["id"])
                         if MISS_COUNT_TO_CLOSE > 0 and miss >= MISS_COUNT_TO_CLOSE:
-                            _close_price = live_price if live_price is not None else (trade["current_price"] or _get_entry_price(trade))
+                            _close_price = live_price if (live_price is not None and live_price > 0) else (trade.get("current_price") or 0)
+                            if _close_price <= 0 or _close_price >= 1:
+                                logger.debug("Trade #%d: invalid close price %.4f, skipping miss-close", trade["id"], _close_price)
+                                continue
                             _pnl, _ = _calc_pnl(trade, _close_price)
                             # Sell first, then close DB
                             _miss_resp = None

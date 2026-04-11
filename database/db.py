@@ -294,39 +294,42 @@ def update_copy_trade_end_date(trade_id: int, end_date: str):
 
 
 def get_invested_for_event(event_slug: str) -> float:
-    """Total invested on an event (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested on an event (open + closed within NO_REBUY window). Prevents rapid re-entry."""
     if not event_slug:
         return 0
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades WHERE event_slug=? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (event_slug,)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (event_slug, str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
 
 def get_invested_for_match(match_pattern: str) -> float:
-    """Total invested on a match pattern (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested on a match pattern (open + closed within NO_REBUY window). Prevents rapid re-entry."""
     if not match_pattern or len(match_pattern) <= 3:
         return 0
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades "
             "WHERE LOWER(market_question) LIKE ? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (match_pattern + '%',)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (match_pattern + '%', str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
 
 def get_trader_exposure(wallet_address: str) -> float:
-    """Total invested by a trader (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested by a trader (open + closed within NO_REBUY window). Prevents rapid re-entry."""
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades WHERE wallet_address=? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (wallet_address,)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (wallet_address, str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
