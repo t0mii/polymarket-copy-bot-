@@ -8,7 +8,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-REPO_DIR = '/root/polymarket-copy-bot'
+REPO_DIR = '/home/walter/polymarketscanner'
 REMOTE = 'piff'
 BRANCH = 'piff-custom'
 
