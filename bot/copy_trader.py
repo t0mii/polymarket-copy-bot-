@@ -1918,7 +1918,7 @@ def copy_followed_wallets():
                     market_question=question,
                     category=trade["category"],
                     event_slug=t.get("event_slug", ""),
-                    trader_size_usd=t.get("size", 0),
+                    trader_size_usd=t.get("usdc_size", 0),
                     spread=0.03,
                     hours_until_event=12,
                 )

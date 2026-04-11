@@ -1267,6 +1267,8 @@ def update_lifecycle_status(address: str, status: str, notes: str = ""):
         if old and old["notes"]:
             try:
                 old_notes = _json.loads(old["notes"])
+                if not isinstance(old_notes, list):
+                    old_notes = []
             except (_json.JSONDecodeError, TypeError):
                 old_notes = []
         if notes:

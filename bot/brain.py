@@ -22,15 +22,17 @@ MIN_LIVE_TRADERS = 2
 def run_brain():
     logger.info("[BRAIN] === Brain Engine starting ===")
     try:
-        _classify_losses()
-        _check_trader_health()
-        _optimize_score_weights()
-        _check_autonomous_performance()
+        # Auto-tuner FIRST: sets baseline tiers
+        # Brain decisions AFTER: override/tighten what auto-tuner set
         try:
             from bot.auto_tuner import auto_tune
             auto_tune()
         except Exception as e:
             logger.warning("[BRAIN] Auto-tuner error: %s", e)
+        _classify_losses()
+        _check_trader_health()
+        _optimize_score_weights()
+        _check_autonomous_performance()
         try:
             from bot.trader_lifecycle import check_transitions
             check_transitions()

@@ -168,7 +168,7 @@ def _add_followed_trader(address: str, username: str):
     content = _read_settings()
     match = re.search(r'^FOLLOWED_TRADERS=(.*)$', content, re.MULTILINE)
     current = match.group(1).strip() if match else ""
-    entry = "%s:%s" % (address, username) if username else address
+    entry = "%s:%s" % (username, address) if username else address
     if address in current:
         return
     new_val = ("%s,%s" % (current, entry)).strip(",")

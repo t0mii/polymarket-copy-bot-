@@ -374,6 +374,7 @@ CREATE TABLE IF NOT EXISTS trade_scores (
 CREATE INDEX IF NOT EXISTS idx_trade_scores_time ON trade_scores(created_at);
 CREATE INDEX IF NOT EXISTS idx_trade_scores_trader ON trade_scores(trader_name);
 CREATE INDEX IF NOT EXISTS idx_trade_scores_action ON trade_scores(action);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_trade_id ON trade_scores(trade_id);
 
 CREATE TABLE IF NOT EXISTS trader_lifecycle (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

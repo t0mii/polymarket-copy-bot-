@@ -204,10 +204,13 @@ def score(trader_name: str, condition_id: str, side: str, entry_price: float,
     best = max(components, key=components.get)
     reason = "score=%d (%s=%d best, %s=%d worst)" % (
         total, best, components[best], worst, components[worst])
-    db.log_trade_score(
-        condition_id=condition_id, trader_name=trader_name, side=side,
-        entry_price=entry_price, market_question=market_question,
-        score_total=total, components=components, action=action
-    )
+    try:
+        db.log_trade_score(
+            condition_id=condition_id, trader_name=trader_name, side=side,
+            entry_price=entry_price, market_question=market_question,
+            score_total=total, components=components, action=action
+        )
+    except Exception as _dbe:
+        logger.warning("[SCORER] DB log failed: %s", _dbe)
     logger.info("[SCORE] %s %s: %d -> %s | %s", trader_name, market_question[:30], total, action, reason)
     return {"score": total, "action": action, "components": components, "reason": reason}
