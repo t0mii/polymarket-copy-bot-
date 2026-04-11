@@ -372,3 +372,37 @@ def check_reactivation():
         except Exception as e:
             logger.debug("[DISCOVERY] Reactivation check error for %s: %s",
                          cand["address"][:10], e)
+
+
+
+def scan_all_sources():
+    """Scan all sources for new candidates: Polymarket Leaderboard + PolymarketScan Whales."""
+    scan_leaderboard()
+
+    try:
+        whale_candidates = scan_polyscan_whales()
+        for wc in whale_candidates:
+            existing = None
+            with db.get_connection() as conn:
+                existing = conn.execute(
+                    "SELECT address FROM trader_candidates WHERE address=?", (wc["address"],)
+                ).fetchone()
+
+            if not existing:
+                with db.get_connection() as conn:
+                    conn.execute(
+                        "INSERT INTO trader_candidates (address, username, source, profit_total, "
+                        "volume_total, winrate, markets_traded, status, discovered_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, 'observing', datetime('now','localtime'))",
+                        (wc["address"], wc["username"], wc["source"],
+                         wc["pnl"], wc["volume"], wc["win_rate"], wc["trades"])
+                    )
+                logger.info("[DISCOVERY] New from PolymarketScan: %s (PnL=$%.0f, WR=%.1f%%)",
+                            wc["username"], wc["pnl"], wc["win_rate"])
+    except Exception as e:
+        logger.warning("[DISCOVERY] PolymarketScan scan error: %s", e)
+
+    try:
+        scan_polyscan_traders()
+    except Exception as e:
+        logger.debug("[DISCOVERY] PolymarketScan update error: %s", e)
