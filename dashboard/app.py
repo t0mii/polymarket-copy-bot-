@@ -1083,8 +1083,6 @@ def api_copy_chart():
 @app.route("/api/equity-curve")
 def api_equity_curve():
     """Eigener Equity-Curve Endpoint — berechnet aus copy_trades DB."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     curve = db.get_equity_curve()
     return jsonify({
         "labels": [p["date"] for p in curve],
@@ -1097,8 +1095,6 @@ def api_equity_curve():
 @app.route("/api/brain/decisions")
 def api_brain_decisions():
     """Recent brain engine decisions."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     limit = request.args.get("limit", 50, type=int)
     decisions = db.get_brain_decisions(limit)
     return jsonify(decisions)
@@ -1106,16 +1102,12 @@ def api_brain_decisions():
 @app.route("/api/brain/scores")
 def api_brain_scores():
     """Trade score distribution and performance."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     perf = db.get_score_range_performance()
     return jsonify(perf)
 
 @app.route("/api/brain/lifecycle")
 def api_brain_lifecycle():
     """All traders in the lifecycle pipeline."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     result = {}
     for status in ["DISCOVERED", "OBSERVING", "PAPER_FOLLOW", "LIVE_FOLLOW", "PAUSED", "KICKED"]:
         result[status] = db.get_lifecycle_traders_by_status(status)
