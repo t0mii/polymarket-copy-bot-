@@ -16,6 +16,7 @@ from bot.wallet_scanner import (
 )
 from bot.ws_price_tracker import price_tracker
 from bot.order_executor import buy_shares, sell_shares, test_connection
+from bot.trade_scorer import score as score_trade
 
 logger = logging.getLogger(__name__)
 
@@ -484,7 +485,8 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
             logger.info("[PENDING] Verworfen (timeout): %s", entry["trade_data"]["market_question"][:40])
             continue
 
-        if elapsed < PENDING_BUY_MIN_SECS:
+        _extra = entry.get("extra_wait", 0)
+        if elapsed < PENDING_BUY_MIN_SECS + _extra:
             continue  # Noch nicht reif
 
         # Aktuellen Preis prüfen
@@ -508,6 +510,20 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
 
         trade_data["entry_price"] = round(min(current + ENTRY_SLIPPAGE, 0.97), 4)
         trade_data["size"] = size
+        # LIVE_MODE: echte Order platzieren BEVOR DB-Record erstellt wird
+        if LIVE_MODE and cid:
+            try:
+                order_resp = buy_shares(cid, trade_data["side"], size, trade_data["entry_price"])
+                if not order_resp:
+                    logger.warning("[PENDING] Order failed, skipping: %s", trade_data["market_question"][:40])
+                    expired_keys.append(cid)
+                    continue
+                _apply_fill_details(trade_data, order_resp, size, trade_data["entry_price"])
+                size = trade_data["size"]
+            except Exception as _pe:
+                logger.warning("[PENDING] Buy error: %s", _pe)
+                expired_keys.append(cid)
+                continue
         trade_id = db.create_copy_trade(trade_data)
         if trade_id:
             fired += 1
@@ -627,9 +643,16 @@ def _position_diff_scan(address: str, username: str, balance: float,
             # Max per match (DB query includes recently closed)
             _diff_remaining = None
             if config.MAX_PER_MATCH > 0:
-                _diff_evt = pos.get("event_slug", "") or ""
-                if _diff_evt:
-                    _diff_match_inv = db.get_invested_for_event(_diff_evt)
+                _diff_mkey = _match_key(_q)
+                if _diff_mkey and len(_diff_mkey) > 3:
+                    _diff_match_inv = sum(
+                        ot["size"] for ot in _diff_open
+                        if _match_key(ot.get("market_question", "")) == _diff_mkey
+                    )
+                    _diff_evt_for_match = pos.get("event_slug", "") or ""
+                    if _diff_evt_for_match:
+                        _db_evt_inv = db.get_invested_for_event(_diff_evt_for_match)
+                        _diff_match_inv = max(_diff_match_inv, _db_evt_inv)
                     _diff_remaining = config.MAX_PER_MATCH - _diff_match_inv
                     if _diff_remaining < config.MIN_TRADE_SIZE:
                         logger.info("[DIFF] Match full $%.0f/$%.0f, skipping: %s",
@@ -637,9 +660,10 @@ def _position_diff_scan(address: str, username: str, balance: float,
                         _log_block(username, _q, cid, _s, entry_price_raw, "match_full",
                                    "$%.0f/$%.0f invested" % (_diff_match_inv, config.MAX_PER_MATCH), "diff")
                         continue
-                    # Merge event + match remaining (take the stricter one)
                     if _diff_evt_remaining is not None:
                         _diff_remaining = min(_diff_remaining, _diff_evt_remaining)
+                    else:
+                        _diff_remaining = _diff_remaining
                 elif _diff_evt_remaining is not None:
                     _diff_remaining = _diff_evt_remaining
 
@@ -721,6 +745,46 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 "condition_id": cid,
                 "category": _detect_category(pos["market_question"]),
             }
+            # === TRADE SCORER ===
+            try:
+                _score_result = score_trade(
+                    trader_name=username,
+                    condition_id=cid,
+                    side=pos["side"],
+                    entry_price=entry_price,
+                    market_question=pos["market_question"],
+                    category=trade["category"],
+                    event_slug=pos.get("event_slug", ""),
+                    trader_size_usd=pos.get("size", 0),
+                    spread=0.03,
+                    hours_until_event=12,
+                )
+            except Exception as _se:
+                logger.warning("[SCORE] Scorer error, defaulting to EXECUTE: %s", _se)
+                _score_result = {"action": "EXECUTE", "score": 50, "components": {}, "reason": "scorer_error"}
+            if _score_result["action"] == "BLOCK":
+                _log_block(username, pos["market_question"], cid, pos["side"], entry_price,
+                           "score_block", _score_result["reason"], "diff")
+                continue
+            if _score_result["action"] == "QUEUE":
+                _pending_buys[cid] = {
+                    "trade_data": trade, "queued_at": _time.time(),
+                    "extra_wait": int(PENDING_BUY_MIN_SECS * 0.5),
+                    "score": _score_result["score"],
+                }
+                logger.info("[SCORE-QUEUE] %s queued (score=%d): %s",
+                            username, _score_result["score"], pos["market_question"][:40])
+                continue
+            if _score_result["action"] == "BOOST":
+                from bot.kelly import get_kelly_multiplier
+                _kelly_m = get_kelly_multiplier(username)
+                size = round(size * _kelly_m, 2)
+                size = min(size, MAX_POSITION_SIZE, balance - total_invested - _load_dynamic_floor())
+                if size < MIN_TRADE_SIZE:
+                    continue
+                trade["size"] = size
+                logger.info("[SCORE-BOOST] %s boosted x%.2f (score=%d): %s",
+                            username, _kelly_m, _score_result["score"], pos["market_question"][:40])
             # LIVE MODE: Echte Order platzieren
             with _buy_lock:
                 if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
@@ -1844,6 +1908,46 @@ def copy_followed_wallets():
                     logger.info("[DOMAIN] %s (%s) kopiert %s-Trade: %s",
                                 username, trader_domain, trade_domain, question[:40])
 
+            # === TRADE SCORER ===
+            try:
+                _score_result = score_trade(
+                    trader_name=username,
+                    condition_id=cid,
+                    side=t["side"],
+                    entry_price=entry_price,
+                    market_question=question,
+                    category=trade["category"],
+                    event_slug=t.get("event_slug", ""),
+                    trader_size_usd=t.get("usdc_size", 0),
+                    spread=0.03,
+                    hours_until_event=12,
+                )
+            except Exception as _se:
+                logger.warning("[SCORE] Scorer error, defaulting to EXECUTE: %s", _se)
+                _score_result = {"action": "EXECUTE", "score": 50, "components": {}, "reason": "scorer_error"}
+            if _score_result["action"] == "BLOCK":
+                _log_block(username, question, cid, t["side"], entry_price,
+                           "score_block", _score_result["reason"], "activity")
+                continue
+            if _score_result["action"] == "QUEUE":
+                _pending_buys[cid] = {
+                    "trade_data": trade, "queued_at": _time.time(),
+                    "extra_wait": int(PENDING_BUY_MIN_SECS * 0.5),
+                    "score": _score_result["score"],
+                }
+                logger.info("[SCORE-QUEUE] %s queued (score=%d): %s",
+                            username, _score_result["score"], question[:40])
+                continue
+            if _score_result["action"] == "BOOST":
+                from bot.kelly import get_kelly_multiplier
+                _kelly_m = get_kelly_multiplier(username)
+                size = round(size * _kelly_m, 2)
+                size = min(size, MAX_POSITION_SIZE, balance - total_invested - _load_dynamic_floor())
+                if size < MIN_TRADE_SIZE:
+                    continue
+                trade["size"] = size
+                logger.info("[SCORE-BOOST] %s boosted x%.2f (score=%d): %s",
+                            username, _kelly_m, _score_result["score"], question[:40])
             # LIVE MODE: Echte Order auf Polymarket platzieren
             # Lock prevents race conditions between concurrent buy attempts
             with _buy_lock:
@@ -1864,7 +1968,7 @@ def copy_followed_wallets():
                     try:
                         from bot.liquidity_check import check_liquidity
                         if not check_liquidity(cid, t["side"], size):
-                            _log_block(trader_name, question, cid, t["side"], entry_price,
+                            _log_block(username, question, cid, t["side"], entry_price,
                                        "low_liquidity", "Orderbook too thin for $%.2f" % size, "liquidity")
                             continue
                     except Exception:
@@ -2286,7 +2390,10 @@ def update_copy_positions():
                         # Miss count: position vanished from trader's wallet — after N misses, auto-close
                         miss = db.increment_miss_count(trade["id"])
                         if MISS_COUNT_TO_CLOSE > 0 and miss >= MISS_COUNT_TO_CLOSE:
-                            _close_price = live_price if live_price is not None else (trade["current_price"] or _get_entry_price(trade))
+                            _close_price = live_price if (live_price is not None and live_price > 0) else (trade.get("current_price") or 0)
+                            if _close_price <= 0 or _close_price >= 1:
+                                logger.debug("Trade #%d: invalid close price %.4f, skipping miss-close", trade["id"], _close_price)
+                                continue
                             _pnl, _ = _calc_pnl(trade, _close_price)
                             # Sell first, then close DB
                             _miss_resp = None

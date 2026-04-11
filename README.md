@@ -70,6 +70,10 @@ Weil selbst Profis manchmal Mist machen. Deshalb hat der Bot ein ganzes System a
 - **Live Dashboard** — Echtzeit mit Equity-Kurve, 24h-Trader-Performance, Exposure-Meter, Sound-System
 - **Circuit Breaker** — Pausiert nach 8 API-Fehlern fuer 60 Sekunden
 - **AI Analysis Pipeline** — Loggt alle geblockten Trades, trackt Outcomes ("was waere gewesen?"), Claude analysiert und empfiehlt Parameter-Aenderungen
+- **Brain Engine** — Selbst-optimierendes Intelligenz-Modul (laeuft alle 2h): klassifiziert Verluste, pausiert/kickt schlechte Trader, optimiert Score-Gewichte automatisch
+- **Trade Scorer** — Bewertet jeden Trade vor Ausfuehrung mit Score 0-100 (Trader Edge, Category WR, Price Signal, Conviction, Market Quality, Correlation). Blockt schlechte Trades, boostet gute
+- **Trader Lifecycle** — Automatischer Lebenszyklus: DISCOVERED → OBSERVING → PAPER_FOLLOW → LIVE_FOLLOW → PAUSED → KICKED. Findet, testet und promoted neue Trader selbstaendig
+- **Autonomous Trading** — Eigene Trades basierend auf Momentum + AI Divergence Signalen. Startet im Paper-Modus, wird bei bewiesener Performance automatisch auf Live promoted
 
 ---
 
@@ -246,6 +250,100 @@ Eine Website auf deinem Server die in Echtzeit zeigt was passiert:
 - **Widescreen-Modus** — Fullscreen-Layout fuer grosse Bildschirme (`/copy?wide=1`)
 
 ---
+
+## Brain Engine (Self-Optimizing)
+
+Der Bot optimiert sich alle 2 Stunden selbst. Keine manuelle Anpassung noetig.
+
+### Trade Scorer (vor jedem Trade)
+
+Jeder Trade bekommt einen Score von 0-100 bevor er ausgefuehrt wird:
+
+| Komponente | Gewicht | Was wird gemessen |
+|------------|---------|-------------------|
+| Trader Edge | 30% | 7-Tage Rolling Winrate + PnL des Traders |
+| Category WR | 20% | Winrate des Traders in dieser Kategorie (CS, LoL, NHL...) |
+| Price Signal | 15% | Ist der Preis im Sweet-Spot (30-65c)? |
+| Conviction | 15% | Wie gross ist der Trade vs. Trader-Durchschnitt? |
+| Market Quality | 10% | Spread + Zeit bis Event |
+| Correlation | 10% | Haben wir schon Positionen im selben Event? |
+
+| Score | Aktion |
+|-------|--------|
+| 0-39 | **BLOCK** — Trade wird nicht ausgefuehrt |
+| 40-59 | **QUEUE** — Wartet laenger in Pending-Buy |
+| 60-79 | **EXECUTE** — Normal ausfuehren |
+| 80-100 | **BOOST** — Groesserer Einsatz (Kelly Multiplier) |
+
+Gewichte und Schwellenwerte werden von der Brain Engine automatisch optimiert.
+
+### Brain Engine (alle 2 Stunden)
+
+```
+1. Verluste klassifizieren
+   → BAD_TRADER (Trader insgesamt negativ)
+   → BAD_CATEGORY (Trader gut, Kategorie schlecht)
+   → BAD_PRICE (Entry-Preis ausserhalb Sweet-Spot)
+
+2. What-If Analyse
+   → "Wie waere die PnL ohne BAD_CATEGORY Trades?"
+   → Groessten Hebel identifizieren
+
+3. Auto-Actions ausfuehren
+   → PAUSE_TRADER (7d PnL < -$10 oder 5+ Verluste)
+   → BOOST_TRADER (7d WR > 60% und PnL > +$5)
+   → BLACKLIST_CATEGORY (Kategorie-WR < 40%)
+   → TIGHTEN_FILTER (Price-Range verschaerfen)
+   → ADJUST_SCORE_THRESHOLD (Scorer optimieren)
+
+4. Autonomous Trading bewerten
+   → Paper-Performance tracken
+   → Bei 30+ Trades, >55% WR, PnL+ → automatisch Live schalten
+
+5. Trader Lifecycle pruefen
+   → Neue Trader promoten, schlechte pausieren/kicken
+```
+
+Sicherheitsnetz: Mindestens 2 Live-Trader bleiben immer aktiv.
+
+### Trader Lifecycle (automatisch)
+
+```
+DISCOVERED → OBSERVING (48h) → PAPER_FOLLOW (7-14d) → LIVE_FOLLOW
+                                       ↑                    ↓
+                                       └──── PAUSED (24-72h) ←── Brain Engine
+                                                    ↓
+                                              KICKED (permanent)
+```
+
+| Uebergang | Kriterien |
+|-----------|-----------|
+| OBSERVING → PAPER | Nach 48h automatisch |
+| PAPER → LIVE | 15+ Trades, >52% WR, PnL positiv |
+| LIVE → PAUSED | 7d PnL < -$10 oder 5+ Verluste in Folge |
+| PAUSED → PAPER | Nach Pause-Ablauf (Rehabilitation) |
+| PAUSED → KICKED | 2x pausiert oder 30d PnL < -$30 |
+
+### Dashboard Endpoints
+
+| Endpoint | Beschreibung |
+|----------|-------------|
+| `GET /api/equity-curve` | Taegliche Portfolio-Kurve |
+| `GET /api/brain/decisions` | Alle Brain-Engine Entscheidungen |
+| `GET /api/brain/scores` | Score-Performance nach Range |
+| `GET /api/brain/lifecycle` | Trader gruppiert nach Lifecycle-Status |
+
+### Neue DB-Tabellen
+
+| Tabelle | Inhalt |
+|---------|--------|
+| `brain_decisions` | Jede Entscheidung mit Grund und erwartetem Impact |
+| `trade_scores` | Score + 6 Komponenten fuer jeden Trade |
+| `trader_lifecycle` | Status-History pro Trader mit Timestamps |
+| `autonomous_performance` | Taegliche Paper/Live Performance |
+
+---
+
 
 ## AI Analysis Pipeline
 
@@ -461,6 +559,15 @@ main.py                      → Scheduler + Flask + Startup
 ├── bot/ai_report.py         → Performance-Report Generator
 ├── bot/ai_analyzer.py       → Claude AI Analyse: geblockte vs ausgefuehrte Trades → Empfehlungen
 ├── bot/outcome_tracker.py   → Checkt was geblockte Trades verdient haetten (Polymarket API)
+├── bot/trade_scorer.py      → Score 0-100 vor jeder Trade-Ausfuehrung (6 Komponenten)
+├── bot/brain.py             → Brain Engine: Selbst-Diagnose, Auto-Actions, Score-Optimierung (alle 2h)
+├── bot/trader_lifecycle.py  → Trader Lifecycle: Auto Discover/Observe/Paper/Live/Pause/Kick
+├── bot/autonomous_signals.py → Eigene Trades: Momentum + AI Divergence (Paper/Live)
+├── bot/auto_tuner.py        → Trader-Tiers (star/solid/neutral/weak/terrible) → Settings
+├── bot/auto_discovery.py    → Findet neue Trader via Leaderboard + PolymarketScan
+├── bot/kelly.py             → Kelly Criterion Bet Sizing + Win-Streak Boost
+├── bot/smart_sell.py        → Verkauft wenn Trader Position verlaesst
+├── bot/clv_tracker.py       → Customer Lifetime Value Tracking
 ├── database/db.py           → Datenbank-Operationen (SQLite + WAL), Migration mit Verification
 ├── database/models.py       → Datenbank-Schema (inkl. blocked_trades, ai_recommendations)
 ├── config.py                → Laedt secrets.env → settings.env (kein .env Fallback)

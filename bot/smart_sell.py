@@ -102,8 +102,13 @@ def check_trader_exits():
                     except Exception as e:
                         logger.debug("[SMART-SELL] Sell error: %s", e)
 
-                # Immer DB schliessen wenn Trader raus ist
-                closed = db.close_copy_trade(our_trade["id"], pnl, close_price=current)
+                # DB nur schliessen wenn Sell OK oder Markt resolved (Preis nahe 0/1)
+                if sell_success or current >= 0.95 or current <= 0.05 or not config.LIVE_MODE:
+                    closed = db.close_copy_trade(our_trade["id"], pnl, close_price=current)
+                else:
+                    logger.warning("[SMART-SELL] Sell failed, keeping DB open (shares still in wallet): %s",
+                                   our_trade["market_question"][:40])
+                    closed = False
                 if closed:
                     logger.info("[SMART-SELL] #%d CLOSED: %s exited %s — P&L $%.2f%s",
                                 our_trade["id"], username,

@@ -77,6 +77,7 @@ def scan_polyscan_whales():
                         "volume": volume,
                         "source": "polyscan_whale",
                     })
+                    db.upsert_lifecycle_trader(wallet, wallet[:12], "DISCOVERED", "polyscan_whale")
                     logger.info("[POLYSCAN] Good whale: %s | PnL=$%.0f | WR=%.1f%% | %d trades",
                                 wallet[:12], pnl, wr, trades)
             except Exception as e:
@@ -179,6 +180,7 @@ def scan_leaderboard():
         if address not in current_candidates:
             new_count += 1
             current_candidates.add(address)
+            db.upsert_lifecycle_trader(address, username, "DISCOVERED", "leaderboard")
             logger.info("[DISCOVERY] New candidate: %s (profit=$%.0f, vol=$%.0f)",
                         username, profit, volume)
 

@@ -294,39 +294,42 @@ def update_copy_trade_end_date(trade_id: int, end_date: str):
 
 
 def get_invested_for_event(event_slug: str) -> float:
-    """Total invested on an event (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested on an event (open + closed within NO_REBUY window). Prevents rapid re-entry."""
     if not event_slug:
         return 0
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades WHERE event_slug=? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (event_slug,)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (event_slug, str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
 
 def get_invested_for_match(match_pattern: str) -> float:
-    """Total invested on a match pattern (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested on a match pattern (open + closed within NO_REBUY window). Prevents rapid re-entry."""
     if not match_pattern or len(match_pattern) <= 3:
         return 0
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades "
             "WHERE LOWER(market_question) LIKE ? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (match_pattern + '%',)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (match_pattern + '%', str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
 
 def get_trader_exposure(wallet_address: str) -> float:
-    """Total invested by a trader (open + closed <30min). Prevents rapid re-entry."""
+    """Total invested by a trader (open + closed within NO_REBUY window). Prevents rapid re-entry."""
+    _window = max(config.NO_REBUY_MINUTES, 30) if config.NO_REBUY_MINUTES > 0 else 30
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) as total FROM copy_trades WHERE wallet_address=? "
-            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-30 minutes', 'localtime')))",
-            (wallet_address,)
+            "AND (status='open' OR (status='closed' AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')))",
+            (wallet_address, str(_window))
         ).fetchone()
         return row["total"] if row else 0
 
@@ -1150,3 +1153,195 @@ def get_candidate_stats(address: str) -> dict:
             (address,)
         ).fetchone()
         return dict(row) if row else {"total": 0, "wins": 0, "losses": 0, "total_pnl": 0}
+
+
+# === Brain Engine Helpers ===
+
+def log_brain_decision(action: str, target: str, reason: str, data: str = "", expected_impact: str = ""):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO brain_decisions (action, target, reason, data, expected_impact) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (action, target, reason, data, expected_impact)
+        )
+
+def get_brain_decisions(limit: int = 50) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM brain_decisions ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# === Trade Scorer Helpers ===
+
+def log_trade_score(condition_id: str, trader_name: str, side: str, entry_price: float,
+                    market_question: str, score_total: int, components: dict,
+                    action: str, trade_id: int = None):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO trade_scores (condition_id, trader_name, side, entry_price, "
+            "market_question, score_total, score_trader_edge, score_category_wr, "
+            "score_price_signal, score_conviction, score_market_quality, score_correlation, "
+            "action, trade_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (condition_id, trader_name, side, entry_price, market_question, score_total,
+             components.get("trader_edge", 0), components.get("category_wr", 0),
+             components.get("price_signal", 0), components.get("conviction", 0),
+             components.get("market_quality", 0), components.get("correlation", 0),
+             action, trade_id)
+        )
+
+def get_trade_scores_with_outcomes(days: int = 7) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT ts.*, ct.pnl_realized FROM trade_scores ts "
+            "LEFT JOIN copy_trades ct ON ts.trade_id = ct.id "
+            "WHERE ts.created_at >= datetime('now', '-%d days', 'localtime') "
+            "ORDER BY ts.created_at DESC" % days
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def get_score_range_performance() -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT "
+            "CASE "
+            "  WHEN ts.score_total < 40 THEN '0-39' "
+            "  WHEN ts.score_total < 60 THEN '40-59' "
+            "  WHEN ts.score_total < 80 THEN '60-79' "
+            "  ELSE '80-100' "
+            "END as score_range, "
+            "COUNT(*) as total, "
+            "SUM(CASE WHEN ct.pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
+            "SUM(CASE WHEN ct.pnl_realized <= 0 THEN 1 ELSE 0 END) as losses, "
+            "ROUND(SUM(COALESCE(ct.pnl_realized, 0)), 2) as total_pnl "
+            "FROM trade_scores ts "
+            "LEFT JOIN copy_trades ct ON ts.trade_id = ct.id "
+            "WHERE ts.trade_id IS NOT NULL AND ct.status = 'closed' "
+            "GROUP BY score_range ORDER BY score_range"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# === Trader Lifecycle Helpers ===
+
+def get_lifecycle_trader(address: str) -> dict:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM trader_lifecycle WHERE address = ?", (address,)
+        ).fetchone()
+        return dict(row) if row else None
+
+def get_lifecycle_traders_by_status(status: str) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM trader_lifecycle WHERE status = ?", (status,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def upsert_lifecycle_trader(address: str, username: str, status: str, source: str = ""):
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT id FROM trader_lifecycle WHERE address = ?", (address,)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE trader_lifecycle SET status = ?, username = ?, "
+                "status_changed_at = datetime('now','localtime') WHERE address = ?",
+                (status, username, address)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO trader_lifecycle (address, username, status, source) "
+                "VALUES (?, ?, ?, ?)",
+                (address, username, status, source)
+            )
+
+def update_lifecycle_status(address: str, status: str, notes: str = ""):
+    import json as _json
+    with get_connection() as conn:
+        old = conn.execute(
+            "SELECT notes, pause_count FROM trader_lifecycle WHERE address = ?", (address,)
+        ).fetchone()
+        old_notes = []
+        if old and old["notes"]:
+            try:
+                old_notes = _json.loads(old["notes"])
+                if not isinstance(old_notes, list):
+                    old_notes = []
+            except (_json.JSONDecodeError, TypeError):
+                old_notes = []
+        if notes:
+            from datetime import datetime
+            old_notes.append({"ts": datetime.now().isoformat(), "status": status, "reason": notes})
+        pause_increment = ""
+        if status == "PAUSED":
+            pause_increment = ", pause_count = pause_count + 1"
+        conn.execute(
+            "UPDATE trader_lifecycle SET status = ?, status_changed_at = datetime('now','localtime'), "
+            "notes = ?" + pause_increment + " WHERE address = ?",
+            (status, _json.dumps(old_notes), address)
+        )
+
+def update_lifecycle_paper_stats(address: str, paper_trades: int, paper_pnl: float, paper_wr: float):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE trader_lifecycle SET paper_trades = ?, paper_pnl = ?, paper_wr = ? WHERE address = ?",
+            (paper_trades, paper_pnl, paper_wr, address)
+        )
+
+def set_lifecycle_pause_until(address: str, pause_until: str):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE trader_lifecycle SET pause_until = ? WHERE address = ?",
+            (pause_until, address)
+        )
+
+def get_lifecycle_pause_count(address: str) -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT pause_count FROM trader_lifecycle WHERE address = ?", (address,)
+        ).fetchone()
+        return row["pause_count"] if row else 0
+
+
+# === Autonomous Performance Helpers ===
+
+def log_autonomous_daily(date_str: str, mode: str, signal_type: str, trades: int, wins: int, pnl: float):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO autonomous_performance (date, mode, signal_type, trades, wins, pnl) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(date, mode, signal_type) DO UPDATE SET "
+            "trades = excluded.trades, wins = excluded.wins, pnl = excluded.pnl",
+            (date_str, mode, signal_type, trades, wins, pnl)
+        )
+
+def get_autonomous_performance(days: int = 14, mode: str = None) -> list:
+    with get_connection() as conn:
+        q = "SELECT * FROM autonomous_performance WHERE date >= date('now', '-%d days', 'localtime')" % days
+        params = []
+        if mode:
+            q += " AND mode = ?"
+            params.append(mode)
+        q += " ORDER BY date DESC"
+        rows = conn.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+
+# === Equity Curve Helper ===
+
+def get_equity_curve() -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DATE(closed_at) as date, "
+            "SUM(pnl_realized) as daily_pnl "
+            "FROM copy_trades WHERE status = 'closed' AND closed_at IS NOT NULL "
+            "GROUP BY DATE(closed_at) ORDER BY date"
+        ).fetchall()
+        result = []
+        cumulative = config.STARTING_BALANCE
+        for r in rows:
+            cumulative += (r["daily_pnl"] or 0)
+            result.append({"date": r["date"], "value": round(cumulative, 2)})
+        return result

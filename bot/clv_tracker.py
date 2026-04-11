@@ -27,6 +27,7 @@ def update_clv_for_closed_trades():
     count = 0
 
     for t in trades:
+        t = dict(t)
         cid = t["condition_id"]
         entry = t["actual_entry_price"] or t["entry_price"] or 0
         pnl = t["pnl_realized"] or 0
@@ -74,6 +75,7 @@ def get_clv_by_trader():
 
     by_trader = {}
     for t in trades:
+        t = dict(t)
         trader = t["wallet_username"] or "?"
         entry = t["actual_entry_price"] or t["entry_price"] or 0
         pnl = t["pnl_realized"] or 0

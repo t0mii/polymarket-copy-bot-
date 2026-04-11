@@ -340,4 +340,70 @@ CREATE TABLE IF NOT EXISTS signal_performance (
     is_active INTEGER DEFAULT 1,
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
+CREATE TABLE IF NOT EXISTS brain_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    action TEXT NOT NULL,
+    target TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    data TEXT,
+    expected_impact TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_brain_decisions_time ON brain_decisions(created_at);
+CREATE INDEX IF NOT EXISTS idx_brain_decisions_action ON brain_decisions(action);
+
+CREATE TABLE IF NOT EXISTS trade_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    condition_id TEXT NOT NULL,
+    trader_name TEXT NOT NULL,
+    side TEXT,
+    entry_price REAL,
+    market_question TEXT,
+    score_total INTEGER NOT NULL,
+    score_trader_edge INTEGER,
+    score_category_wr INTEGER,
+    score_price_signal INTEGER,
+    score_conviction INTEGER,
+    score_market_quality INTEGER,
+    score_correlation INTEGER,
+    action TEXT NOT NULL,
+    trade_id INTEGER,
+    outcome_pnl REAL
+);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_time ON trade_scores(created_at);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_trader ON trade_scores(trader_name);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_action ON trade_scores(action);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_trade_id ON trade_scores(trade_id);
+
+CREATE TABLE IF NOT EXISTS trader_lifecycle (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    address TEXT NOT NULL,
+    username TEXT,
+    status TEXT NOT NULL DEFAULT 'DISCOVERED',
+    status_changed_at TEXT DEFAULT (datetime('now','localtime')),
+    source TEXT,
+    pause_count INTEGER DEFAULT 0,
+    pause_until TEXT,
+    paper_trades INTEGER DEFAULT 0,
+    paper_pnl REAL DEFAULT 0,
+    paper_wr REAL DEFAULT 0,
+    live_pnl REAL DEFAULT 0,
+    kick_reason TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(address)
+);
+CREATE INDEX IF NOT EXISTS idx_lifecycle_status ON trader_lifecycle(status);
+
+CREATE TABLE IF NOT EXISTS autonomous_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    signal_type TEXT,
+    trades INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    pnl REAL DEFAULT 0,
+    UNIQUE(date, mode, signal_type)
+);
 """

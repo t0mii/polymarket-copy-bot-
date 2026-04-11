@@ -1080,7 +1080,54 @@ def api_copy_chart():
     })
 
 
+@app.route("/api/equity-curve")
+def api_equity_curve():
+    """Eigener Equity-Curve Endpoint mit Perioden-Filter."""
+    from datetime import datetime, timedelta
+    period = request.args.get("period", "all")
+    curve = db.get_equity_curve()
+    if not curve:
+        return jsonify({"labels": [], "values": []})
+    # Filter by period
+    now = datetime.now()
+    if period == "4h" or period == "1d":
+        cutoff = (now - timedelta(days=3)).strftime("%Y-%m-%d")
+    elif period == "1w":
+        cutoff = (now - timedelta(weeks=1)).strftime("%Y-%m-%d")
+    elif period == "1m":
+        cutoff = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    else:
+        cutoff = None
+    if cutoff:
+        curve = [p for p in curve if p["date"] >= cutoff]
+    return jsonify({
+        "labels": [p["date"] for p in curve],
+        "values": [p["value"] for p in curve],
+    })
 
+
+
+
+@app.route("/api/brain/decisions")
+def api_brain_decisions():
+    """Recent brain engine decisions."""
+    limit = request.args.get("limit", 50, type=int)
+    decisions = db.get_brain_decisions(limit)
+    return jsonify(decisions)
+
+@app.route("/api/brain/scores")
+def api_brain_scores():
+    """Trade score distribution and performance."""
+    perf = db.get_score_range_performance()
+    return jsonify(perf)
+
+@app.route("/api/brain/lifecycle")
+def api_brain_lifecycle():
+    """All traders in the lifecycle pipeline."""
+    result = {}
+    for status in ["DISCOVERED", "OBSERVING", "PAPER_FOLLOW", "LIVE_FOLLOW", "PAUSED", "KICKED"]:
+        result[status] = db.get_lifecycle_traders_by_status(status)
+    return jsonify(result)
 
 # --- PandaScore Stream Cache (avoid hammering API) ---
 _stream_cache = {}  # {cache_key: {"url": str, "ts": float}}
