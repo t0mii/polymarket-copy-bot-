@@ -16,6 +16,7 @@ from bot.wallet_scanner import (
 )
 from bot.ws_price_tracker import price_tracker
 from bot.order_executor import buy_shares, sell_shares, test_connection
+from bot.trade_scorer import score as score_trade
 
 logger = logging.getLogger(__name__)
 
@@ -721,11 +722,53 @@ def _position_diff_scan(address: str, username: str, balance: float,
                 "condition_id": cid,
                 "category": _detect_category(pos["market_question"]),
             }
+            # === TRADE SCORER ===
+            _score_result = score_trade(
+                trader_name=username,
+                condition_id=cid,
+                side=pos["side"],
+                entry_price=entry_price,
+                market_question=pos["market_question"],
+                category=trade["category"],
+                event_slug=pos.get("event_slug", ""),
+                trader_size_usd=pos.get("size", 0),
+                spread=0.03,
+                hours_until_event=12,
+            )
+            if _score_result["action"] == "BLOCK":
+                _log_block(username, pos["market_question"], cid, pos["side"], entry_price,
+                           "score_block", _score_result["reason"], "diff")
+                continue
+            if _score_result["action"] == "QUEUE":
+                _pending_buys[cid] = {
+                    "trade_data": trade, "queued_at": _time.time(),
+                    "extra_wait": int(PENDING_BUY_MIN_SECS * 0.5),
+                    "score": _score_result["score"],
+                }
+                logger.info("[SCORE-QUEUE] %s queued (score=%d): %s",
+                            username, _score_result["score"], pos["market_question"][:40])
+                continue
+            if _score_result["action"] == "BOOST":
+                from bot.kelly import get_kelly_multiplier
+                _kelly_m = get_kelly_multiplier(username)
+                size = round(size * _kelly_m, 2)
+                size = min(size, MAX_POSITION_SIZE, balance - total_invested - _load_dynamic_floor())
+                if size < MIN_TRADE_SIZE:
+                    continue
+                trade["size"] = size
+                logger.info("[SCORE-BOOST] %s boosted x%.2f (score=%d): %s",
+                            username, _kelly_m, _score_result["score"], pos["market_question"][:40])
             # LIVE MODE: Echte Order platzieren
             with _buy_lock:
                 if cid and db.count_copies_for_market(address, cid) >= config.MAX_COPIES_PER_MARKET:
                     continue
                 if LIVE_MODE and cid:
+                    try:
+                        from bot.liquidity_check import check_liquidity
+                        if not check_liquidity(cid, pos["side"], size):
+                            continue
+                    except Exception:
+                        pass
                     order_resp = buy_shares(cid, pos["side"], size, entry_price)
                     if not order_resp:
                         logger.warning("[DIFF] Order fehlgeschlagen — ueberspringe: %s", pos["market_question"][:40])
@@ -1838,6 +1881,42 @@ def copy_followed_wallets():
                     logger.info("[DOMAIN] %s (%s) kopiert %s-Trade: %s",
                                 username, trader_domain, trade_domain, question[:40])
 
+            # === TRADE SCORER ===
+            _score_result = score_trade(
+                trader_name=username,
+                condition_id=cid,
+                side=t["side"],
+                entry_price=entry_price,
+                market_question=question,
+                category=trade["category"],
+                event_slug=t.get("event_slug", ""),
+                trader_size_usd=t.get("size", 0),
+                spread=0.03,
+                hours_until_event=12,
+            )
+            if _score_result["action"] == "BLOCK":
+                _log_block(username, question, cid, t["side"], entry_price,
+                           "score_block", _score_result["reason"], "activity")
+                continue
+            if _score_result["action"] == "QUEUE":
+                _pending_buys[cid] = {
+                    "trade_data": trade, "queued_at": _time.time(),
+                    "extra_wait": int(PENDING_BUY_MIN_SECS * 0.5),
+                    "score": _score_result["score"],
+                }
+                logger.info("[SCORE-QUEUE] %s queued (score=%d): %s",
+                            username, _score_result["score"], question[:40])
+                continue
+            if _score_result["action"] == "BOOST":
+                from bot.kelly import get_kelly_multiplier
+                _kelly_m = get_kelly_multiplier(username)
+                size = round(size * _kelly_m, 2)
+                size = min(size, MAX_POSITION_SIZE, balance - total_invested - _load_dynamic_floor())
+                if size < MIN_TRADE_SIZE:
+                    continue
+                trade["size"] = size
+                logger.info("[SCORE-BOOST] %s boosted x%.2f (score=%d): %s",
+                            username, _kelly_m, _score_result["score"], question[:40])
             # LIVE MODE: Echte Order auf Polymarket platzieren
             # Lock prevents race conditions between concurrent buy attempts
             with _buy_lock:
@@ -1854,6 +1933,15 @@ def copy_followed_wallets():
                         logger.warning("[LIVE] Nicht genug USDC ($%.2f < $%.2f): %s",
                                        real_balance, size, question[:40])
                         continue
+                    # Liquidity check before buying
+                    try:
+                        from bot.liquidity_check import check_liquidity
+                        if not check_liquidity(cid, t["side"], size):
+                            _log_block(trader_name, question, cid, t["side"], entry_price,
+                                       "low_liquidity", "Orderbook too thin for $%.2f" % size, "liquidity")
+                            continue
+                    except Exception:
+                        pass  # dont block on liquidity check errors
                     order_resp = buy_shares(cid, t["side"], size, entry_price)
                     if not order_resp:
                         logger.warning("[LIVE] Order fehlgeschlagen — ueberspringe: %s", question[:40])
