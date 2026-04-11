@@ -654,10 +654,10 @@ def main():
     logger.info("Auto-Redeem enabled (every 5 min)")
 
     # UPGRADE: register new jobs
-    scheduler.add_job(performance_update, 'interval', minutes=30, id='performance_update',
-                      next_run_time=datetime.now() + timedelta(seconds=60))
-    scheduler.add_job(ml_train, 'cron', hour=4, minute=0, id='ml_train',
-                      next_run_time=datetime.now() + timedelta(seconds=120))
+    # DISABLED (module not implemented): scheduler.add_job(performance_update, 'interval', minutes=30, id='performance_update',
+    #                       next_run_time=datetime.now() + timedelta(seconds=60))
+    # DISABLED (module not implemented): scheduler.add_job(ml_train, 'cron', hour=4, minute=0, id='ml_train',
+    #                       next_run_time=datetime.now() + timedelta(seconds=120))
     scheduler.add_job(discovery_scan, 'interval', hours=3, id='discovery_scan',
                       next_run_time=datetime.now() + timedelta(seconds=180))
     scheduler.add_job(autonomous_scan, 'interval', seconds=60, id='autonomous_scan', max_instances=1,
@@ -669,15 +669,15 @@ def main():
                       next_run_time=datetime.now() + timedelta(seconds=100))
     scheduler.add_job(clv_update, 'interval', hours=2, id='clv_update',
                       next_run_time=datetime.now() + timedelta(seconds=200))
-    scheduler.add_job(arbitrage_scan, 'interval', minutes=30, id='arbitrage_scan',
-                      next_run_time=datetime.now() + timedelta(seconds=240))
-    scheduler.add_job(ai_news_scan, 'interval', hours=2, id='ai_news_scan',
-                      next_run_time=datetime.now() + timedelta(seconds=300))
+    # DISABLED (module not implemented): scheduler.add_job(arbitrage_scan, 'interval', minutes=30, id='arbitrage_scan',
+    #                       next_run_time=datetime.now() + timedelta(seconds=240))
+    # DISABLED (module not implemented): scheduler.add_job(ai_news_scan, 'interval', hours=2, id='ai_news_scan',
+    #                       next_run_time=datetime.now() + timedelta(seconds=300))
     scheduler.add_job(smart_sell_check, 'interval', seconds=60, id='smart_sell',
                       next_run_time=datetime.now() + timedelta(seconds=45))
-    scheduler.add_job(smart_rebalance, 'cron', day_of_week='mon', hour=4, minute=30,
-                      id='smart_rebalance',
-                      next_run_time=datetime.now() + timedelta(seconds=150))
+    # DISABLED (module not implemented): scheduler.add_job(smart_rebalance, 'cron', day_of_week='mon', hour=4, minute=30,
+    #                       id='smart_rebalance',
+    #                       next_run_time=datetime.now() + timedelta(seconds=150))
     scheduler.add_job(brain_engine, 'interval', hours=2, id='brain_engine',
                       next_run_time=datetime.now() + timedelta(minutes=5))
     scheduler.start()
