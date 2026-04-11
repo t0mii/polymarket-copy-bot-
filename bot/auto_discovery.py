@@ -91,7 +91,7 @@ def scan_polyscan_whales():
 
 def scan_polyscan_traders():
     """Check if existing candidates have PolymarketScan data for better validation."""
-    candidates = db.get_all_candidates("observing") + db.get_all_candidates("inactive")
+    candidates = db.get_all_candidates("observing")
     updated = 0
     for cand in candidates[:20]:  # Rate limit friendly
         try:
@@ -194,7 +194,7 @@ def paper_follow_candidates():
     except Exception as e:
         logger.debug("[DISCOVERY] Paper close error: %s", e)
 
-    candidates = db.get_all_candidates("observing") + db.get_all_candidates("inactive")
+    candidates = db.get_all_candidates("observing")
     for cand in candidates[:20]:
         address = cand["address"]
         try:
@@ -278,26 +278,26 @@ def close_paper_trades():
 
 def check_promotions():
     """Pruefe ob Kandidaten promoted werden koennen."""
-    candidates = db.get_all_candidates("observing") + db.get_all_candidates("inactive")
+    candidates = db.get_all_candidates("observing")
     for cand in candidates:
         stats = db.get_candidate_stats(cand["address"])
         total = stats.get("total", 0) or 0
         wins = stats.get("wins", 0) or 0
         total_pnl = stats.get("total_pnl", 0) or 0
 
-#         # Skip if candidate has no recent trades (inactive)
-#         try:
-#             from bot.wallet_scanner import fetch_wallet_recent_trades
-#             recent = fetch_wallet_recent_trades(cand["address"], limit=3)
-#             if recent:
-#                 newest_ts = max(t.get("timestamp", 0) for t in recent)
-#                 days_since = (time.time() - newest_ts) / 86400 if newest_ts > 0 else 999
-#                 if days_since > 1:
-#                     continue  # Inactive, skip
-#             else:
-#                 continue  # No trades at all
-#         except Exception:
-#             pass
+        # Skip if candidate has no recent trades (inactive)
+        try:
+            from bot.wallet_scanner import fetch_wallet_recent_trades
+            recent = fetch_wallet_recent_trades(cand["address"], limit=3)
+            if recent:
+                newest_ts = max(t.get("timestamp", 0) for t in recent)
+                days_since = (time.time() - newest_ts) / 86400 if newest_ts > 0 else 999
+                if days_since > 1:
+                    continue  # Inactive, skip
+            else:
+                continue  # No trades at all
+        except Exception:
+            pass
 
         if total < PROMOTE_MIN_TRADES:
             continue

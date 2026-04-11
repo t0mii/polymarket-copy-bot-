@@ -64,9 +64,9 @@ def sync():
     logger.info("[SYNC] Upstream has %d changed files: %s", len(changed), ", ".join(changed))
 
     # Stash local changes (our patches)
-    rc, out, err = rc_stash, _, err_stash = run_git("stash", "push", "-m", "pre-sync-backup")
-    if rc_stash != 0:
-        logger.error("[SYNC] Stash failed — aborting: %s", err_stash)
+    rc, _, err = run_git("stash", "push", "-m", "pre-sync-backup")
+    if rc != 0:
+        logger.error("[SYNC] Stash failed — aborting: %s", err)
         return False
     if rc != 0:
         logger.error("[SYNC] Stash failed — aborting sync: %s", err)

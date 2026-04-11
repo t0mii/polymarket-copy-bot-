@@ -225,7 +225,7 @@ async function loadTag() {
     document.getElementById('tTraders').innerHTML = tp.traders.map(t => {
       const status = t.trader_status || 'active';
       const icon = status === 'paused' ? '&#x1F6D1;' : status === 'throttled' ? '&#x26A0;' : '&#x2705;';
-      return '<tr><td style="color:var(--gold)">'+t.trader_name+'</td><td>'+fmt(t.winrate,1)+'%</td>' +
+      return '<tr><td style="color:var(--gold)">'+esc(t.trader_name)+'</td><td>'+fmt(t.winrate,1)+'%</td>' +
         '<td class="'+(t.total_pnl>=0?'pos':'neg')+'">$'+fmt(t.total_pnl)+'</td><td>'+icon+'</td></tr>';
     }).join('');
   }
@@ -234,7 +234,7 @@ async function loadTag() {
   const ch = await fetchJSON('/api/upgrade/category-heatmap');
   if (ch && ch.categories) {
     document.getElementById('tCats').innerHTML = ch.categories.map(c =>
-      '<tr><td style="color:var(--gold)">'+c.category+'</td><td>'+c.trades_count+'</td>' +
+      '<tr><td style="color:var(--gold)">'+esc(c.category)+'</td><td>'+c.trades_count+'</td>' +
       '<td>'+fmt(c.winrate,0)+'%</td><td class="'+((c.total_pnl||0)>=0?'pos':'neg')+'">$'+fmt(c.total_pnl)+'</td></tr>'
     ).join('');
   }
@@ -247,9 +247,9 @@ async function loadTag() {
     if (r && r.training_history && r.training_history.length > 0) {
       const ml = r.training_history[0];
       aiDiv.innerHTML = '<div class="report-card ai">' +
-        '<div class="report-date">ML Model — Letztes Training: '+ml.trained_at+'</div>' +
+        '<div class="report-date">ML Model — Letztes Training: '+esc(ml.trained_at)+'</div>' +
         '<div class="report-text">Accuracy: '+fmt(ml.accuracy,1)+'% | Samples: '+ml.samples_count+
-        '\nFeature Importance: '+ml.feature_importance+'</div></div>';
+        '\nFeature Importance: '+esc(ml.feature_importance)+'</div></div>';
     }
   } catch(e) {}
 }

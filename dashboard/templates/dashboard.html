@@ -358,47 +358,31 @@ tr:hover{background:rgba(201,168,76,0.03)}
 @keyframes logoFloat{0%{background-position:40% center}50%{background-position:60% center}100%{background-position:40% center}}
 
 /* === SSC Mini Sauna === */
-.sauna-scene{display:none;height:42px;position:relative;margin-right:24px;font-size:10px;user-select:none}
-.wide .sauna-scene{display:flex;align-items:end;gap:10px;position:relative}
-.s-table{position:relative;width:34px;height:20px;background:#3d2b1a;border-radius:3px 3px 0 0;border:1px solid #5a3d20;border-bottom:none;display:flex;align-items:center;justify-content:center;z-index:2}
-.s-table::after{content:'';position:absolute;bottom:0;width:34px;height:2px;background:#5a3d20}
+.sauna-scene{display:none;height:32px;position:relative;margin-right:20px;font-size:10px;user-select:none}
+.wide .sauna-scene{display:flex;align-items:end;gap:8px}
+.s-table{position:relative;width:34px;height:20px;background:#3d2b1a;border-radius:3px 3px 0 0;border:1px solid #5a3d20;border-bottom:none;display:flex;align-items:center;justify-content:center}
+.s-table::after{content:'';position:absolute;bottom:0;width:32px;height:2px;background:#5a3d20}
 .s-beers{display:flex;gap:1px;position:relative;z-index:1}
 .s-beer{font-size:7px;animation:s-sip 3s ease-in-out infinite}
 .s-beer:nth-child(2){animation-delay:.5s}.s-beer:nth-child(3){animation-delay:1s}
 @keyframes s-sip{0%,100%{transform:translateY(0)}30%{transform:translateY(-2px) rotate(-8deg)}60%{transform:translateY(0)}}
-.s-guys{display:flex;position:absolute;bottom:14px;left:4px;z-index:5}
-.s-guy{font-size:9px;position:relative}
-.s-pool{width:22px;height:14px;background:linear-gradient(180deg,#2196F3,#0d47a1 60%,#0a3d8f);border-radius:3px;border:1px solid #42a5f5;position:relative;align-self:flex-end;overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,0.3),0 0 4px rgba(33,150,243,0.3)}
-.s-pool::before{content:'~~~';position:absolute;top:2px;left:1px;font-size:5px;color:rgba(255,255,255,0.4);animation:s-wave 1.5s ease-in-out infinite}
-.s-pool::after{content:'~~';position:absolute;top:7px;left:3px;font-size:4px;color:rgba(255,255,255,0.25);animation:s-wave 1.5s ease-in-out infinite;animation-delay:.7s}
-@keyframes s-wave{0%,100%{transform:translateY(0)}50%{transform:translateY(1px)}}
-.s-pool.splash{box-shadow:inset 0 2px 4px rgba(0,0,0,0.3),0 0 8px rgba(33,150,243,0.6);border-color:#64b5f6}
-.s-cabin{width:26px;height:30px;background:linear-gradient(180deg,#6b4c30 0%,#4a3525 40%,#3d2b1a);border-radius:3px 3px 0 0;border:1px solid #8b6914;position:relative;overflow:visible;box-shadow:0 0 6px rgba(201,168,76,0.15);z-index:2}
-.s-cabin::before{content:'';position:absolute;top:-1px;left:-2px;right:-2px;height:7px;background:linear-gradient(180deg,#8b6914,#6b4c30);border-radius:4px 4px 0 0;border:1px solid #a07c1c;border-bottom:none}
-.s-door{position:absolute;bottom:0;left:5px;width:16px;height:16px;background:#2a1d10;border-radius:3px 3px 0 0;border:1px solid #5a3d20;border-bottom:none;transition:all 0.3s}
-.s-door::after{content:'';position:absolute;right:2px;top:5px;width:2px;height:4px;background:#c9a84c;border-radius:1px;transition:opacity 0.3s}
-.s-door.open{background:#0d0804;border-color:#3d2b1a}
-.s-door.open::after{opacity:0}
-.s-steam{position:absolute;top:-8px;left:50%;display:none;z-index:4}
+.s-guys{display:flex;position:absolute;bottom:18px;left:-2px;z-index:2}
+.s-guy{font-size:9px;transition:all 1.5s ease-in-out}
+.s-guy.in-sauna{opacity:0;transform:translateX(20px) scale(0.5)}
+.s-cabin{width:26px;height:28px;background:linear-gradient(180deg,#6b4c30 0%,#4a3525 40%,#3d2b1a 100%);border-radius:3px 3px 0 0;border:1px solid #8b6914;position:relative;margin-left:4px;overflow:hidden;box-shadow:0 0 6px rgba(201,168,76,0.15)}
+.s-cabin::before{content:'';position:absolute;top:-1px;left:-2px;right:-2px;height:6px;background:linear-gradient(180deg,#8b6914,#6b4c30);border-radius:4px 4px 0 0;border:1px solid #a07c1c;border-bottom:none}
+.s-door{position:absolute;bottom:0;left:5px;width:16px;height:16px;background:#2a1d10;border-radius:3px 3px 0 0;border:1px solid #5a3d20;border-bottom:none}
+.s-door::after{content:'';position:absolute;right:2px;top:5px;width:2px;height:4px;background:#c9a84c;border-radius:1px}
+.s-steam{position:absolute;top:-6px;left:50%;display:none}
 .s-steam.active{display:block}
-.s-steam span{position:absolute;font-size:8px;opacity:0;animation:s-rise 2s ease-out infinite}
-.s-steam span:nth-child(1){left:-5px;animation-delay:0s}
-.s-steam span:nth-child(2){left:2px;animation-delay:.5s}
-.s-steam span:nth-child(3){left:-1px;animation-delay:1s}
-@keyframes s-rise{0%{opacity:.8;transform:translateY(0)}100%{opacity:0;transform:translateY(-12px)}}
-.s-door-steam{position:absolute;bottom:18px;left:6px;display:none;z-index:4}
-.s-door-steam.active{display:flex;gap:1px}
-.s-door-steam span{font-size:5px;opacity:0;animation:s-puff 1.2s ease-out infinite}
-.s-door-steam span:nth-child(2){animation-delay:.3s}
-.s-door-steam span:nth-child(3){animation-delay:.6s}
-@keyframes s-puff{0%{opacity:.6;transform:translateY(0)}100%{opacity:0;transform:translateY(-6px) translateX(-2px)}}
-@keyframes s-door-puff{0%{opacity:.7;transform:translateY(0)}100%{opacity:0;transform:translateY(-8px) translateX(-3px)}}
-/* AUFGUSS label */
-.s-aufguss{position:absolute;top:-6px;right:100%;margin-right:6px;font-size:11px;font-weight:900;opacity:0;white-space:nowrap;letter-spacing:.5px;text-transform:uppercase;background:linear-gradient(90deg,#ff0000,#ff8800,#ffff00,#00ff00,#00aaff,#ff00ff,#ff0000);background-size:200% 100%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 4px rgba(255,200,0,0.6)) drop-shadow(0 0 8px rgba(255,100,0,0.4))}
-.s-aufguss.show{animation:s-pop 6s ease-out forwards,s-rainbow 0.5s linear infinite,s-shake 0.3s ease-in-out 4}
-@keyframes s-pop{0%{opacity:0;transform:scale(0.5)}8%{opacity:1;transform:scale(1.3)}15%{transform:scale(1.0)}85%{opacity:1}100%{opacity:0;transform:scale(0.8) translateY(-8px)}}
-@keyframes s-rainbow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-@keyframes s-shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-3deg)}75%{transform:rotate(3deg)}}
+.s-steam span{position:absolute;font-size:7px;opacity:0;animation:s-rise 2s ease-out infinite}
+.s-steam span:nth-child(1){left:-4px;animation-delay:0s}
+.s-steam span:nth-child(2){left:2px;animation-delay:.6s}
+.s-steam span:nth-child(3){left:-1px;animation-delay:1.2s}
+@keyframes s-rise{0%{opacity:.8;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}
+.s-aufguss{position:absolute;top:-2px;right:100%;margin-right:4px;font-size:7px;color:var(--gold);font-weight:700;opacity:0;white-space:nowrap;letter-spacing:.3px;text-shadow:0 0 8px rgba(201,168,76,0.4)}
+.s-aufguss.show{animation:s-pop 4s ease-out forwards}
+@keyframes s-pop{0%{opacity:0;transform:translateX(-50%) translateY(4px)}10%{opacity:1;transform:translateX(-50%) translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-6px)}}
 </style>
 </head>
 <body>
@@ -413,17 +397,13 @@ tr:hover{background:rgba(201,168,76,0.03)}
     </div>
     <div class="hd-center">
       <div class="sauna-scene" id="saunaScene">
-        <div class="s-guys" id="saunaGuys"><span class="s-guy">🧖</span><span class="s-guy">🧖</span><span class="s-guy">🧖</span></div>
-        <div style="position:relative">
-          <div class="s-aufguss" id="saunaLabel">AUFGUSSSSSS!!!</div>
+        <div style="position:relative"><div class="s-aufguss" id="saunaLabel">AUFGUSSSSSS!!!</div>
           <div class="s-table"><div class="s-beers"><span class="s-beer">🍺</span><span class="s-beer">🍺</span><span class="s-beer">🍺</span></div></div>
-          
+          <div class="s-guys" id="saunaGuys"><span class="s-guy">🧖</span><span class="s-guy">🧖</span><span class="s-guy">🧖</span></div>
         </div>
-        <div class="s-pool" id="saunaPool"></div>
         <div class="s-cabin" id="saunaCabin">
-          <div class="s-door" id="saunaDoor"></div>
+          <div class="s-door"></div>
           <div class="s-steam" id="saunaSteam"><span>♨</span><span>♨</span><span>♨</span></div>
-          <div class="s-door-steam" id="saunaDoorSteam"><span>♨</span><span>♨</span><span>♨</span></div>
         </div>
       </div>
       <div id="digiclock" class="digiclock"></div>
@@ -847,8 +827,8 @@ function _showBigWinJackpot(t){
   const dur=16000;
   const ov=$('bigWinOv');
   $('bwGif').src=_rnd(_bigWinGifs);
-  $('bwMarket').textContent=(t.market||'?').substring(0,60);
-  $('bwDetail').innerHTML='@ '+(t.price||0)+'\u00A2 \u00B7 via <span class="hl">'+(t.trader||'?')+'</span>';
+  $('bwMarket').textContent=esc(t.market||'?').substring(0,60);
+  $('bwDetail').innerHTML='@ '+(t.price||0)+'\u00A2 \u00B7 via <span class="hl">'+esc(t.trader||'?')+'</span>';
   $('bwPnl').textContent='+$0.00';
   ov.style.display='flex';ov.classList.remove('fade-out');
   void ov.offsetWidth;ov.classList.add('active');
@@ -932,7 +912,7 @@ function _showCloseAlert(t){
   o.innerHTML=`<div class="al-ban${(!w?' big-loss':'')}" style="border-color:${w?'var(--green)':'var(--red)'}; display:flex;align-items:center;text-align:left">
     <div style="flex:1">
     <div class="al-lbl" style="color:${w?'var(--green)':'var(--red)'}">${w?'\u2705 POSITION CLOSED \u2014 WIN':'\u274C '+lossLbl}</div>
-    <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
+    <div class="al-ttl">${esc(t.market||'?').substring(0,50)}</div>
     <div class="al-det"><span class="hl" style="color:${w?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}$${(t.pnl||0).toFixed(2)}</span> @ ${t.price||0}\u00A2 \u00B7 via <span class="hl">${t.trader||'?'}</span></div>
     </div>${gifHtml}</div>`;
   if(w&&sfxWin){playMoney()}
@@ -1006,7 +986,7 @@ function dot(){
 function _showBuyAlert(t){
   const o=$('alOv');o.style.display='flex';
   o.innerHTML=`<div class="al-ban"><div class="al-lbl">\u26A1 New Trade Incoming</div>
-    <div class="al-ttl">${(t.market||'?').substring(0,50)}</div>
+    <div class="al-ttl">${esc(t.market||'?').substring(0,50)}</div>
     <div class="al-det"><span class="hl">${t.side||'?'}</span> @ ${t.price||0}\u00A2 \u00B7 $${fm(t.size)} \u00B7 via <span class="hl">${t.trader||'?'}</span>${t.live?' \u2014 LIVE':''}</div></div>`;
   _alertIsWin=false;_alertIsBigWin=false;
   if(_alertTimer)clearTimeout(_alertTimer);
@@ -1354,6 +1334,7 @@ setInterval(loadReport,60000);
 
 // Performance Report
 function fmtReport(t){
+  t=esc(t);
   return t
     .replace(/\n\n/g,'<div style="height:10px"></div>')
     .replace(/\n/g,'<br>')
@@ -1675,72 +1656,38 @@ function closeTrade(tradeId,btn){
 
 // === SSC Mini Sauna Animation ===
 (function(){
-  var _active=false,_audio=null;
-  function go(){
-    if(_active)return;_active=true;
-    var G=document.querySelectorAll('.s-guy');
+  var _saunaActive=false;
+  function doAufguss(){
+    if(_saunaActive)return;
+    _saunaActive=true;
+    var guys=document.querySelectorAll('.s-guy');
     var steam=document.getElementById('saunaSteam');
-    var lbl=document.getElementById('saunaLabel');
-    var pool=document.getElementById('saunaPool');
-    var door=document.getElementById('saunaDoor');
-    var dSteam=document.getElementById('saunaDoorSteam');
-    // Sound
-    try{if(!_audio)_audio=new Audio('/static/streak-crowd.mp3');_audio.volume=0.3;_audio.currentTime=0;_audio.play().catch(function(){});}catch(e){}
-    // Helper: animate guys with stagger
-    function mv(cls,del){G.forEach(function(g,i){setTimeout(function(){g.style.transition='all '+(del/1000)+'s ease-in-out';Object.assign(g.style,cls)},i*300)})}
-    function reset(){G.forEach(function(g){g.style.transition='none';g.style.transform='';g.style.opacity=''})}
-    // 0s: AUFGUSSSSSS!
-    lbl.classList.add('show');
-    // 0.5s: Walk to cabin
-    setTimeout(function(){mv({transform:'translateX(82px)',opacity:'1'},3000)},500);
-    // 3.5s: Door opens
-    setTimeout(function(){door.classList.add('open')},3500);
-    // 4s: Enter through door (shrink down into door)
-    setTimeout(function(){mv({transform:'translateX(82px) translateY(8px) scale(0.3)',opacity:'0'},800)},4000);
-    // 5s: Door closes, steam puffs from door
-    setTimeout(function(){door.classList.remove('open');dSteam.classList.add('active')},5000);
-    // 5.5s: Big steam from top
-    setTimeout(function(){steam.classList.add('active')},5500);
-    // 10s: Steam stops, door opens, guys come out
+    var label=document.getElementById('saunaLabel');
+    // Guys walk to sauna
+    guys.forEach(function(g){g.classList.add('in-sauna')});
+    // After 1.5s: steam starts
     setTimeout(function(){
-      steam.classList.remove('active');dSteam.classList.remove('active');
-      door.classList.add('open');
-      mv({transform:'translateX(82px) translateY(0) scale(1)',opacity:'1'},800);
-    },10000);
-    // 11s: Door closes, walk to pool
+      steam.classList.add('active');
+      label.classList.add('show');
+    },1500);
+    // After 6s: guys come back
     setTimeout(function(){
-      door.classList.remove('open');
-      mv({transform:'translateX(55px)',opacity:'1'},1000);
-    },11000);
-    // 12s: JUMP into pool! (up then down)
+      steam.classList.remove('active');
+      guys.forEach(function(g){g.classList.remove('in-sauna')});
+    },6000);
+    // After 8s: label gone, reset
     setTimeout(function(){
-      G.forEach(function(g,i){
-        setTimeout(function(){
-          g.style.transition='all 0.3s ease-out';
-          g.style.transform='translateX(55px) translateY(-14px)';
-          setTimeout(function(){
-            g.style.transition='all 0.3s ease-in';
-            g.style.transform='translateX(55px) translateY(10px) scale(0.7)';
-            g.style.opacity='0.5';
-          },300);
-        },i*250);
-      });
-      pool.classList.add('splash');
-    },12000);
-    // 14s: Chill in pool
-    // 15s: Get out, walk back
-    setTimeout(function(){
-      pool.classList.remove('splash');
-      mv({transform:'translateX(0)',opacity:'1'},2000);
-    },15000);
-    // 17s: Reset
-    setTimeout(function(){
-      reset();lbl.classList.remove('show');_active=false;
-    },17500);
+      label.classList.remove('show');
+      _saunaActive=false;
+    },8000);
   }
-  setInterval(function(){if(new Date().getMinutes()===0)go()},60000);
-  var cab=document.getElementById('saunaCabin');
-  if(cab){cab.style.cursor='pointer';cab.addEventListener('click',go)}
+  // Check every minute, trigger on full hour
+  setInterval(function(){
+    var m=new Date().getMinutes();
+    if(m===0)doAufguss();
+  },60000);
+  // Only hourly aufguss, no click trigger
+  // No demo on load — only on full hour
 })();
 </script>
 </body>

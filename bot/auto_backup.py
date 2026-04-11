@@ -27,10 +27,14 @@ def run_backup():
     # Add all changes (except secrets)
     subprocess.run(['git', 'add', '-A'], cwd=REPO_DIR)
 
-    # Dont add secrets
+    # Dont add secrets — verify they are unstaged
     for secret in ['secrets.env', '.env']:
-        subprocess.run(['git', 'reset', 'HEAD', secret],
-                      capture_output=True, cwd=REPO_DIR)
+        r = subprocess.run(['git', 'reset', 'HEAD', secret],
+                          capture_output=True, cwd=REPO_DIR)
+        if r.returncode != 0:
+            logger.warning('[BACKUP] Failed to unstage %s — aborting commit!', secret)
+            subprocess.run(['git', 'reset', 'HEAD'], cwd=REPO_DIR)
+            return
 
     # Commit
     from datetime import datetime

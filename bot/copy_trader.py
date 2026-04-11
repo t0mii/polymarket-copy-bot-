@@ -1443,7 +1443,7 @@ def copy_followed_wallets():
                     with _gc() as _rc:
                         _was_closed = _rc.execute(
                             "SELECT id FROM copy_trades WHERE condition_id=? AND status='closed' "
-                            "AND closed_at > datetime('now', '-' || ? || ' minutes')", (cid, str(config.NO_REBUY_MINUTES))
+                            "AND closed_at > datetime('now', '-' || ? || ' minutes', 'localtime')", (cid, str(config.NO_REBUY_MINUTES))
                         ).fetchone()
                         if _was_closed:
                             logger.info("[SKIP] Recently closed (no-rebuy %dmin): %s",
@@ -2109,7 +2109,7 @@ def update_copy_positions():
                             # Sell point = peak - MARGIN (follows peak upward, never downward)
                             # Only activates after position was genuinely 20%+ above entry
                             if config.TRAILING_STOP_ENABLED and _ep > 0:
-                                _peak = trade.get("peak_price") or effective_price
+                                _peak = trade.get("peak_price") if trade.get("peak_price") not in (None, 0) else effective_price
                                 _peak_gain = (_peak - _ep) / _ep
                                 _sell_at = _peak - config.TRAILING_STOP_MARGIN
                                 # Ensure sell point is at least at entry (never sell at a loss via trailing)
