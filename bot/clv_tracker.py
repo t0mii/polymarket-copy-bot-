@@ -38,9 +38,12 @@ def update_clv_for_closed_trades():
         if closing_price is None or closing_price <= 0:
             continue
 
-        # CLV = closing_price - entry_price (fuer YES side)
-        # Positiv = wir haben guenstiger gekauft als der Schlusspreis
-        clv = closing_price - entry
+        # CLV = closing_price - entry_price (YES) or entry - closing_price (NO)
+        side = (t.get("side") or "YES").upper()
+        if side == "NO":
+            clv = entry - closing_price
+        else:
+            clv = closing_price - entry
         total_clv += clv
         count += 1
 
@@ -65,7 +68,7 @@ def get_clv_by_trader():
     """CLV pro Trader berechnen."""
     with db.get_connection() as conn:
         trades = conn.execute(
-            "SELECT wallet_username, entry_price, actual_entry_price, pnl_realized, current_price "
+            "SELECT wallet_username, side, entry_price, actual_entry_price, pnl_realized, current_price "
             "FROM copy_trades WHERE status = 'closed' AND pnl_realized IS NOT NULL"
         ).fetchall()
 
@@ -78,7 +81,8 @@ def get_clv_by_trader():
             continue
 
         closing = t.get("current_price") if t.get("current_price") else (1.0 if pnl > 0 else 0.0)
-        clv = closing - entry
+        side = (t.get("side") or "YES").upper()
+        clv = (entry - closing) if side == "NO" else (closing - entry)
 
         if trader not in by_trader:
             by_trader[trader] = {"total_clv": 0, "count": 0}

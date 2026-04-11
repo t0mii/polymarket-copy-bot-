@@ -248,8 +248,10 @@ def auto_tune():
     content = _update_blacklist_setting(content, blacklist_map)
 
     if content != old_content:
-        with open(SETTINGS_PATH, "w") as f:
+        _tmp = SETTINGS_PATH + '.tmp'
+        with open(_tmp, 'w') as f:
             f.write(content)
+        os.replace(_tmp, SETTINGS_PATH)  # atomic rename
         changes = []
         for name, data in sorted(classifications.items(), key=lambda x: x[1]["pnl_7d"], reverse=True):
             changes.append("%s=%s($%.0f)" % (name, data["tier"].upper(), data["pnl_7d"]))
