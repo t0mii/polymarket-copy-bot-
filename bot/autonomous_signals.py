@@ -163,8 +163,11 @@ def update_autonomous_positions():
             continue
         side = trade["side"] or "YES"
         # NO-Positionen profitieren wenn Preis faellt
-        # NO tokens gain value when price rises (we bought NO, price going up = good)
-        pnl_pct = (price - entry) / entry
+        # NO loses when NO-token price drops, YES loses when YES-token price drops
+        if side.upper() == "NO":
+            pnl_pct = (entry - price) / entry
+        else:
+            pnl_pct = (price - entry) / entry
 
         with db.get_connection() as conn:
             conn.execute(

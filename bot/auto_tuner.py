@@ -208,8 +208,7 @@ def auto_tune():
         min_entry_map[name] = s["min_entry"]
         max_entry_map[name] = s["max_entry"]
         min_usd_map[name] = s["min_trader_usd"]
-        if s["take_profit"] != 2.0:
-            tp_map[name] = s["take_profit"]
+        tp_map[name] = s["take_profit"]
         copies_map[name] = s["max_copies"]
         hedge_map[name] = s["hedge_wait"]
         if data["blacklist"]:
