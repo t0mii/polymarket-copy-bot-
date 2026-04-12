@@ -1021,10 +1021,46 @@ def update_recommendation_status(rec_id: int, status: str):
 from datetime import datetime, timedelta
 
 
-def get_trader_rolling_pnl(trader_name: str, days: int = 7) -> dict:
-    """Rolling P&L fuer einen Trader ueber die letzten X Tage."""
+def get_trader_rolling_pnl(trader_name: str, days: int = 7, min_verified: int = 10) -> dict:
+    """Rolling P&L fuer einen Trader ueber die letzten X Tage.
+
+    Strategy: When the trader has >= min_verified trades with full fill data
+    (usdc_received + actual_size), return ONLY those verified trades. Verified
+    data is ground truth from wallet receipts. Otherwise fall back to ALL
+    trades using pnl_realized (less accurate, includes formula-based estimates
+    for old trades that lacked fill verification).
+
+    This was a critical bug: the auto_tuner was classifying KING7777777 as WEAK
+    because his 125 trades had a mix of 11 verified (+$48.62) and 114
+    unverified (-$41.27) summing to $+7.35. The 11 verified slice alone shows
+    he's a STAR (81.8% WR, +73% ROI). The 114 unverified slice has unreliable
+    pnl_realized values from before the fill-verification was working.
+    """
     with get_connection() as conn:
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        verified_count = conn.execute(
+            "SELECT COUNT(*) FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
+            "AND closed_at >= ? AND usdc_received IS NOT NULL AND actual_size IS NOT NULL",
+            (trader_name, cutoff)
+        ).fetchone()[0] or 0
+
+        if verified_count >= min_verified:
+            # Use ONLY verified trades — they're ground truth from wallet receipts
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt, "
+                "SUM(CASE WHEN (usdc_received - actual_size) > 0 THEN 1 ELSE 0 END) as wins, "
+                "SUM(CASE WHEN (usdc_received - actual_size) < 0 THEN 1 ELSE 0 END) as losses, "
+                "ROUND(COALESCE(SUM(usdc_received - actual_size), 0), 2) as total_pnl "
+                "FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
+                "AND closed_at >= ? AND usdc_received IS NOT NULL AND actual_size IS NOT NULL",
+                (trader_name, cutoff)
+            ).fetchone()
+            result = dict(row)
+            result["verified_count"] = verified_count
+            result["source"] = "verified_only"
+            return result
+
+        # Not enough verified data — fall back to all trades, formula-based PnL
         row = conn.execute(
             "SELECT COUNT(*) as cnt, "
             "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
@@ -1034,7 +1070,10 @@ def get_trader_rolling_pnl(trader_name: str, days: int = 7) -> dict:
             "AND closed_at >= ?",
             (trader_name, cutoff)
         ).fetchone()
-        return dict(row) if row else {"cnt": 0, "wins": 0, "losses": 0, "total_pnl": 0}
+        result = dict(row) if row else {"cnt": 0, "wins": 0, "losses": 0, "total_pnl": 0}
+        result["verified_count"] = verified_count
+        result["source"] = "all_trades_fallback"
+        return result
 
 
 def upsert_trader_performance(trader: str, period: str, stats: dict):

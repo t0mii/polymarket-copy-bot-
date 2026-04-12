@@ -261,17 +261,18 @@ def update_prices():
                         _close_pnl = round(-_our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
                         _did_close = False
+                        # Lost position: usdc_received = 0 (we got nothing back)
                         try:
                             from database.db import get_connection
                             with get_connection() as _conn:
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _did_close = _conn.execute(
-                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
+                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=?, usdc_received=0 "
                                     "WHERE condition_id=? AND side=? AND status='open'",
                                     (_close_pnl, _now, _cid_pos, _pos_side)).rowcount > 0
                                 if not _did_close:
                                     _did_close = _conn.execute(
-                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=? "
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, closed_at=?, usdc_received=0 "
                                         "WHERE condition_id=? AND status='open'",
                                         (_close_pnl, _now, _cid_pos)).rowcount > 0
                         except Exception:
@@ -291,6 +292,8 @@ def update_prices():
                     elif _cp >= config.AUTO_CLOSE_WON_PRICE and _iv > 0.01:
                         _shares = _our_size / _our_entry if _our_entry > 0 else 0
                         _pnl_won = round((1.0 - _our_entry) * _shares, 2)
+                        # Won position: usdc_received = shares * $1 (each share pays $1 at resolution)
+                        _usdc_won = round(_shares, 4)
                         _close_title = (_p.get("title") or "")[:50]
                         _did_close = False
                         try:
@@ -298,14 +301,14 @@ def update_prices():
                             with get_connection() as _conn:
                                 _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 _did_close = _conn.execute(
-                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
+                                    "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=?, usdc_received=? "
                                     "WHERE condition_id=? AND side=? AND status='open'",
-                                    (_pnl_won, _now, _cid_pos, _pos_side)).rowcount > 0
+                                    (_pnl_won, _now, _usdc_won, _cid_pos, _pos_side)).rowcount > 0
                                 if not _did_close:
                                     _did_close = _conn.execute(
-                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=? "
+                                        "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, closed_at=?, usdc_received=? "
                                         "WHERE condition_id=? AND status='open'",
-                                        (_pnl_won, _now, _cid_pos)).rowcount > 0
+                                        (_pnl_won, _now, _usdc_won, _cid_pos)).rowcount > 0
                         except Exception:
                             pass
                         if _did_close:
@@ -547,30 +550,32 @@ def main():
             _api_prices = {p.get("conditionId", ""): float(p.get("curPrice", 0) or 0) for p in _r_startup.json()}
             with get_connection() as _conn:
                 _open_trades = _conn.execute(
-                    "SELECT id, condition_id, size, market_question FROM copy_trades WHERE status='open'"
+                    "SELECT id, condition_id, size, actual_size, entry_price, actual_entry_price, market_question "
+                    "FROM copy_trades WHERE status='open'"
                 ).fetchall()
                 _cleaned = 0
                 for _ot in _open_trades:
                     _cp = _api_prices.get(_ot["condition_id"], -1)
+                    # Use actual fill data when available (Round 1 P&L fix)
+                    _ot_size = _ot["actual_size"] or _ot["size"] or 0
+                    _ot_entry = _ot["actual_entry_price"] or _ot["entry_price"] or 0
                     if _cp <= 0.01 and _cp >= 0:
-                        _pnl = round(-(_ot["size"] or 0), 2)
-                        _conn.execute("UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=datetime('now') WHERE id=?",
+                        _pnl = round(-_ot_size, 2)
+                        # Lost: usdc_received = 0
+                        _conn.execute("UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=0, "
+                                      "closed_at=datetime('now','localtime'), usdc_received=0 WHERE id=?",
                                       (_pnl, _ot["id"]))
                         _conn.execute("INSERT INTO activity_log (event_type, icon, title, detail, pnl) VALUES (?,?,?,?,?)",
                                       ("resolved", "LOSS", "Position lost", "%s — P&L $%.2f" % ((_ot["market_question"] or "")[:35], _pnl), _pnl))
                         _cleaned += 1
                     elif _cp >= config.AUTO_CLOSE_WON_PRICE:
-                        # Won: shares × $1 - invested
-                        _ep = 0
-                        try:
-                            _ep_row = _conn.execute("SELECT entry_price FROM copy_trades WHERE id=?", (_ot["id"],)).fetchone()
-                            _ep = _ep_row["entry_price"] if _ep_row else 0
-                        except Exception:
-                            pass
-                        _shares = (_ot["size"] or 0) / _ep if _ep > 0 else 0
-                        _pnl = round(_shares * 1.0 - (_ot["size"] or 0), 2)
-                        _conn.execute("UPDATE copy_trades SET status='closed', pnl_realized=?, closed_at=datetime('now') WHERE id=?",
-                                      (_pnl, _ot["id"]))
+                        # Won: shares × $1 - invested. usdc_received = shares
+                        _shares = _ot_size / _ot_entry if _ot_entry > 0 else 0
+                        _pnl = round(_shares - _ot_size, 2)
+                        _usdc_won = round(_shares, 4)
+                        _conn.execute("UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=1.0, "
+                                      "closed_at=datetime('now','localtime'), usdc_received=? WHERE id=?",
+                                      (_pnl, _usdc_won, _ot["id"]))
                         _conn.execute("INSERT INTO activity_log (event_type, icon, title, detail, pnl) VALUES (?,?,?,?,?)",
                                       ("resolved", "WIN", "Position won", "%s — P&L $+%.2f" % ((_ot["market_question"] or "")[:35], _pnl), _pnl))
                         _cleaned += 1

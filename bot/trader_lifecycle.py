@@ -13,7 +13,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-SETTINGS_PATH = '/root/polymarket-copy-bot/settings.env'
+SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'settings.env')
 
 PAPER_MIN_TRADES = 25
 PAPER_MIN_WR = 58.0

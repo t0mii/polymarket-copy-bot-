@@ -556,6 +556,8 @@ def api_generate_report():
 @app.route("/api/report/latest")
 def api_latest_report():
     """Get most recent AI report."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     report = db.get_latest_report()
     if report:
         return jsonify({"report": dict(report)["report_text"], "created_at": dict(report)["created_at"]})
@@ -582,6 +584,8 @@ def logs_page():
 @app.route("/api/logs")
 def api_logs():
     """Return last N lines of the bot log, optionally filtered."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     lines = min(int(request.args.get("lines", 200)), 5000)
     filt = request.args.get("filter", "").lower()
     try:
@@ -806,6 +810,8 @@ def api_trader_stats():
     ?hours=24 (default) filters closed trades to last N hours.
     ?hours=0 returns all-time stats.
     """
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     hours = request.args.get("hours", "24")
     try:
         hours = int(hours)
@@ -1053,6 +1059,8 @@ def api_copy_reset():
 @app.route("/api/copy/chart")
 def api_copy_chart():
     """Portfolio chart data for copy trading. Supports ?period=4h|1d|1w|1m|all"""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     period = request.args.get("period", "1d")
     now = datetime.now()
     if period == "4h":
@@ -1244,6 +1252,8 @@ def _find_stream(market_question: str) -> dict:
 @app.route("/api/stream/find")
 def api_stream_find():
     """Find livestream URL for a market question."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     question = request.args.get("q", "")
     if not question:
         return jsonify({"error": "missing q parameter"}), 400
@@ -1254,6 +1264,8 @@ def api_stream_find():
 @app.route("/api/copy/history")
 def api_copy_history():
     """Return positions, chart data, and stats filtered by period."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     period = request.args.get("period", "week")
     date_from = request.args.get("from")
     date_to = request.args.get("to")
@@ -1308,6 +1320,8 @@ def api_copy_history():
 @app.route("/api/ai/blocked-stats")
 def api_blocked_stats():
     """Get blocked trade statistics."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     hours = int(request.args.get("hours", 48))
     stats = db.get_blocked_trade_stats(hours=hours)
     return jsonify(stats)
@@ -1316,6 +1330,8 @@ def api_blocked_stats():
 @app.route("/api/ai/blocked-trades")
 def api_blocked_trades():
     """Get recent blocked trades."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     hours = int(request.args.get("hours", 48))
     limit = int(request.args.get("limit", 200))
     trades = db.get_blocked_trades_since(hours=hours, limit=limit)
@@ -1325,6 +1341,8 @@ def api_blocked_trades():
 @app.route("/api/ai/recommendations")
 def api_ai_recommendations():
     """Get AI recommendations."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     limit = int(request.args.get("limit", 5))
     recs = db.get_recommendations(limit=limit)
     return jsonify(recs)
@@ -1383,6 +1401,8 @@ def api_ai_dismiss(rec_id):
 @app.route("/api/upgrade/trader-performance")
 def api_trader_performance():
     """Performance aller Trader mit Status."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         perf = conn.execute(
             "SELECT tp.*, ts.status as trader_status, ts.bet_multiplier, ts.reason "
@@ -1396,6 +1416,8 @@ def api_trader_performance():
 @app.route("/api/upgrade/category-heatmap")
 def api_category_heatmap():
     """Kategorie-Performance als Heatmap-Daten."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         cats = conn.execute(
             "SELECT * FROM category_performance WHERE period = '30d' "
@@ -1417,6 +1439,8 @@ def api_category_heatmap():
 @app.route("/api/upgrade/ml-info")
 def api_ml_info():
     """ML-Modell Info und Training-History."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         training = conn.execute(
             "SELECT * FROM ml_training_log ORDER BY trained_at DESC LIMIT 5"
@@ -1427,6 +1451,8 @@ def api_ml_info():
 @app.route("/api/upgrade/candidates")
 def api_candidates():
     """Trader-Kandidaten mit Paper-Stats."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     candidates = db.get_all_candidates()
     for c in candidates:
         stats = db.get_candidate_stats(c["address"])
@@ -1437,6 +1463,8 @@ def api_candidates():
 @app.route("/api/upgrade/autonomous-trades")
 def api_autonomous_trades():
     """Autonome Trades (Paper + Live)."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         trades = conn.execute(
             "SELECT * FROM autonomous_trades ORDER BY created_at DESC LIMIT 50"
@@ -1447,6 +1475,8 @@ def api_autonomous_trades():
 @app.route("/api/upgrade/status")
 def api_upgrade_status():
     """Overall upgrade status — alles auf einen Blick."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     result = {}
 
     # Trader status
@@ -1553,6 +1583,8 @@ _TRADER_SPECIALS = {
 @app.route("/api/fun/trash-talk")
 def api_trash_talk():
     """Generate AI trash talk for recent trades."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     talks = []
     with db.get_connection() as conn:
         # Last 10 closed trades
@@ -1598,6 +1630,8 @@ def api_trash_talk():
 @app.route("/api/fun/trader-cards")
 def api_trader_cards():
     """Trader trading card data with stats, titles, specials."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     cards = []
     with db.get_connection() as conn:
         traders = conn.execute(
@@ -1660,6 +1694,8 @@ def api_trader_cards():
 @app.route("/api/fun/ticker")
 def api_ticker():
     """Live ticker tape data — last 20 events."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     events = []
     with db.get_connection() as conn:
         rows = conn.execute(
@@ -1680,6 +1716,8 @@ def api_ticker():
 @app.route("/api/fun/daily-pnl")
 def api_daily_pnl():
     """Daily P&L for konfetti check + calendar heatmap."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         rows = conn.execute(
             "SELECT DATE(closed_at) as day, ROUND(SUM(pnl_realized), 2) as pnl, COUNT(*) as trades "
@@ -1694,6 +1732,8 @@ def api_daily_pnl():
 @app.route("/api/upgrade/clv")
 def api_clv():
     """CLV tracking stats."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     from bot.clv_tracker import get_clv_by_trader, update_clv_for_closed_trades
     try:
         overall = update_clv_for_closed_trades()
@@ -1712,6 +1752,8 @@ def reports_gazette():
 @app.route("/api/fun/daily-reports")
 def api_daily_reports():
     """Latest daily reports for gazette."""
+    if not _check_auth():
+        return jsonify({"error": "unauthorized"}), 403
     import json as _json
     with db.get_connection() as conn:
         rows = conn.execute(

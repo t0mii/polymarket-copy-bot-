@@ -255,6 +255,32 @@ Eine Website auf deinem Server die in Echtzeit zeigt was passiert:
 
 Der Bot optimiert sich alle 2 Stunden selbst. Keine manuelle Anpassung noetig.
 
+> **WICHTIG:** Brain Engine + Auto-Tuner schreiben automatisch in
+> `settings.env`. Manuell editierte Werte in `BET_SIZE_MAP`,
+> `TRADER_EXPOSURE_MAP`, `MIN/MAX_ENTRY_PRICE_MAP`, `MIN_TRADER_USD_MAP`,
+> `TAKE_PROFIT_MAP`, `MAX_COPIES_PER_MARKET_MAP`, `HEDGE_WAIT_TRADERS`,
+> `CATEGORY_BLACKLIST_MAP`, `MIN_CONVICTION_RATIO_MAP` und
+> `FOLLOWED_TRADERS` werden bei jedem Brain-Cycle (alle 2h) ueberschrieben.
+> Initialwerte bleiben in `settings.example.env` als Fallback bis Brain
+> echte Daten hat. Nach einem `settings.env` Update muss `polybot`
+> restartet werden damit der laufende Prozess die neuen Werte liest.
+
+### Verified P&L (Datenqualitaet)
+
+Die Brain-Entscheidungen basieren auf VERIFIZIERTEN P&L-Daten wenn
+verfuegbar — `usdc_received - actual_size` aus echten Wallet-Receipts
+statt der Formel-basierten DB-`pnl_realized` (die durch Drag/Fees um
+~10.3% vom Wallet-Wert abweichen kann).
+
+`get_trader_rolling_pnl()` returnt verified-only Stats wenn ein Trader
+>= 10 Trades mit `usdc_received` UND `actual_size` im Zeitfenster hat.
+Sonst Fallback auf alle Trades (less accurate). Der Source-Mode steht
+in der return dict (`source: verified_only` oder `all_trades_fallback`).
+
+Ohne diesen Fix wuerde KING7777777 als WEAK-Tier eingestuft (DB sagt
+$+7), obwohl seine 11 verifizierten Trades $+48.62 mit 81.8% WR zeigen
+(STAR-Tier).
+
 ### Trade Scorer (vor jedem Trade)
 
 Jeder Trade bekommt einen Score von 0-100 bevor er ausgefuehrt wird:
@@ -276,6 +302,23 @@ Jeder Trade bekommt einen Score von 0-100 bevor er ausgefuehrt wird:
 | 80-100 | **BOOST** — Groesserer Einsatz (Kelly Multiplier) |
 
 Gewichte und Schwellenwerte werden von der Brain Engine automatisch optimiert.
+
+### Auto-Tuner Tier System
+
+Der Auto-Tuner klassifiziert jeden Trader alle 2h in 5 Tiers basierend
+auf 7d/30d P&L + Winrate (verified-only wenn moeglich):
+
+| Tier | Kriterien | BET_SIZE | EXPOSURE | TAKE_PROFIT | MAX_COPIES | HEDGE_WAIT |
+|------|-----------|----------|----------|-------------|------------|------------|
+| **STAR** | 7d PnL > +$5, WR > 55% | 7% | 40% | 3.0x | 3 | 30s |
+| **SOLID** | 7d PnL > $0, WR > 50% | 5% | 25% | 2.5x | 2 | 45s |
+| **NEUTRAL** | 7d PnL > -$5, WR > 45% | 3% | 10% | 2.0x | 1 | 60s |
+| **WEAK** | 7d PnL > -$10 | 2% | 3% | 1.5x | 1 | 90s |
+| **TERRIBLE** | 7d PnL < -$10 | 1% | 0.5% | 1.0x | 1 | 120s |
+
+TERRIBLE-Tier setzt zusaetzlich `MIN_CONVICTION_RATIO=3.0` (kopiert nur
+extreme Conviction-Trades). Tier-Aenderungen werden direkt in
+`settings.env` geschrieben — Polybot-Restart noetig damit sie greifen.
 
 ### Brain Engine (alle 2 Stunden)
 
@@ -399,6 +442,11 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+`requirements.txt` enthaelt jetzt auch `numpy` und `scikit-learn` —
+diese werden vom ML Scorer (RandomForest auf historischen Trades)
+gebraucht. Die Installation laedt zusaetzlich `scipy`, `joblib` und
+`threadpoolctl` als Abhaengigkeiten von `scikit-learn`.
 
 ### 2. Konfiguration
 
@@ -645,6 +693,8 @@ Immer `settings.example.env` mit dem Server syncen damit neue Einstellungen doku
 - WebSocket (Echtzeit-Preise)
 - Chart.js (Equity-Kurve)
 - APScheduler (Job-Scheduler)
+- scikit-learn + numpy (ML Scorer, RandomForest auf historischen Trades)
+- anthropic (Claude AI Analyzer, optional)
 
 ---
 

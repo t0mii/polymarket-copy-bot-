@@ -3,7 +3,7 @@ import os
 import threading
 
 settings_lock = threading.Lock()
-SETTINGS_PATH = "/root/polymarket-copy-bot/settings.env"
+SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.env")
 
 
 def read_settings() -> str:

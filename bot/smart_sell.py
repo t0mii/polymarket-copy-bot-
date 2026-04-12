@@ -84,6 +84,7 @@ def check_trader_exits():
 
                 # Versuche zu verkaufen
                 sell_success = False
+                usdc_received = 0
                 if config.LIVE_MODE:
                     try:
                         from bot.order_executor import sell_shares
@@ -105,6 +106,21 @@ def check_trader_exits():
                 # DB nur schliessen wenn Sell OK oder Markt resolved (Preis nahe 0/1)
                 if sell_success or current >= 0.95 or current <= 0.05 or not config.LIVE_MODE:
                     closed = db.close_copy_trade(our_trade["id"], pnl, close_price=current)
+                    if closed:
+                        # Persist usdc_received so future P&L analysis has verified fill data
+                        if usdc_received > 0:
+                            _real_usdc = usdc_received
+                        elif current >= 0.95:
+                            # Resolved as winner: each share pays $1
+                            _shares = shares or (size / entry if entry > 0 else 0)
+                            _real_usdc = round(_shares, 4)
+                        else:
+                            # Resolved as loser or paper mode
+                            _real_usdc = 0
+                        try:
+                            db.update_closed_trade_pnl(our_trade["id"], pnl, _real_usdc)
+                        except Exception:
+                            pass
                 else:
                     logger.warning("[SMART-SELL] Sell failed, keeping DB open (shares still in wallet): %s",
                                    our_trade["market_question"][:40])
