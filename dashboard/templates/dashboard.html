@@ -1511,11 +1511,14 @@ function loadReport(){
       const avatar=addr?mkBlockie(addr,28):'';
       // All-time line
       const allLine=p.all_closed>0?'<div style="text-align:center;margin-top:6px;font-size:.68em;color:var(--text-dim)">all-time: <span style="color:'+(p.all_pnl>=0?'var(--green)':'var(--red)')+'">$'+(p.all_pnl>=0?'+':'')+p.all_pnl.toFixed(2)+'</span> ('+p.all_closed+' trades, '+p.all_win_rate+'% WR)</div>':'';
+      const dayPnl=p.pnl_realized||0;const dayWr=p.closed>0?Math.round(p.wins/(p.wins+p.losses)*100):0;
+      const dayCol=dayPnl>=0?'var(--green)':'var(--red)';const dayWrCol=dayWr>=60?'var(--green)':dayWr>=40?'var(--gold)':'var(--red)';
       return`<div onclick="showTraderDetail('${esc(p.username)}')" style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;border-radius:6px;cursor:pointer;transition:border-color .2s" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="display:flex;align-items:center;gap:8px">
             ${avatar?'<img src="'+avatar+'" style="width:28px;height:28px;border-radius:4px">':''}
             <a href="https://polymarket.com/profile/${addr}" target="_blank" onclick="event.stopPropagation()" style="color:var(--gold);font-weight:700;font-size:1em;text-decoration:none" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'">${esc(p.username)}${crown}</a>
+            <span style="font-size:.65em;color:var(--text-dim);font-weight:500">${p.all_closed||0} copied</span>
           </div>
           <span style="color:${vc};font-weight:700;font-size:.62em;letter-spacing:.06em;background:${vBg};padding:2px 7px;border-radius:3px;text-transform:uppercase">${verdict}</span>
         </div>
@@ -1538,6 +1541,12 @@ function loadReport(){
           </div>
         </div>
         ${p.open>0?'<div style="text-align:center;margin-top:6px;font-size:.72em;color:var(--text-dim)">'+p.open+' open ($'+p.total_invested.toFixed(0)+' inv.)</div>':''}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;padding:5px 8px;background:var(--bg);border-radius:4px;font-size:.7em">
+          <span style="color:var(--text-dim)">1d:</span>
+          <span style="color:${dayCol};font-weight:700">$${dayPnl>=0?'+':''}${dayPnl.toFixed(2)}</span>
+          <span style="color:${dayWrCol};font-weight:600">${p.closed>0?dayWr+'% WR':'--'}</span>
+          <span style="color:var(--text-dim)">${p.closed} trades</span>
+        </div>
         ${allLine}
       </div>`;
     }).join('');

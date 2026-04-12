@@ -1386,7 +1386,7 @@ def api_ai_dismiss(rec_id):
 
 @app.route("/api/upgrade/trader-performance")
 def api_trader_performance():
-    """Performance aller Trader mit Status."""
+    """Performance aller Trader mit Status + 1d Daten + kopierte Trades."""
     with db.get_connection() as conn:
         perf = conn.execute(
             "SELECT tp.*, ts.status as trader_status, ts.bet_multiplier, ts.reason "
@@ -1394,7 +1394,36 @@ def api_trader_performance():
             "LEFT JOIN trader_status ts ON tp.trader_name = ts.trader_name "
             "WHERE tp.period = '7d' AND tp.trader_name != 'imported' AND tp.trader_name != 'test' ORDER BY tp.total_pnl DESC"
         ).fetchall()
-    return jsonify({"traders": [dict(r) for r in perf]})
+        result = []
+        for row in perf:
+            d = dict(row)
+            name = d["trader_name"]
+            # 1d stats
+            day = conn.execute(
+                "SELECT trades_count, wins, losses, total_pnl, winrate FROM trader_performance "
+                "WHERE trader_name = ? AND period = '7d'", (name,)
+            ).fetchone()
+            # Count total copied trades (all time from copy_trades)
+            copied = conn.execute(
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE wallet_username = ?", (name,)
+            ).fetchone()
+            d["copied_trades"] = copied["cnt"] if copied else 0
+            # 1d rolling stats from copy_trades directly
+            day_stats = conn.execute(
+                "SELECT COUNT(*) as cnt, "
+                "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins, "
+                "SUM(CASE WHEN pnl_realized < 0 THEN 1 ELSE 0 END) as losses, "
+                "COALESCE(SUM(pnl_realized), 0) as pnl "
+                "FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
+                "AND closed_at > datetime('now', '-1 day')", (name,)
+            ).fetchone()
+            d["pnl_1d"] = round(day_stats["pnl"], 2) if day_stats else 0
+            d["trades_1d"] = day_stats["cnt"] if day_stats else 0
+            d["wins_1d"] = day_stats["wins"] or 0 if day_stats else 0
+            d["losses_1d"] = day_stats["losses"] or 0 if day_stats else 0
+            d["winrate_1d"] = round(d["wins_1d"] / d["trades_1d"] * 100, 1) if d["trades_1d"] > 0 else 0
+            result.append(d)
+    return jsonify({"traders": result})
 
 
 @app.route("/api/upgrade/category-heatmap")
