@@ -659,8 +659,11 @@ def main():
     logger.info("Auto-Redeem enabled (every 5 min)")
 
     # UPGRADE: register new jobs
-    # DISABLED (module not implemented): scheduler.add_job(performance_update, 'interval', minutes=30, id='performance_update',
-    #                       next_run_time=datetime.now() + timedelta(seconds=60))
+    # Re-enabled 2026-04-12 — was disabled because update_adaptive_stop_loss() crashed
+    # on missing `import os`. Fixed in bot/trader_performance.py. Updates trader_performance
+    # table every 30 min so dashboard /api/upgrade/trader-performance shows fresh data.
+    scheduler.add_job(performance_update, 'interval', minutes=30, id='performance_update',
+                      next_run_time=datetime.now() + timedelta(seconds=60))
     # DISABLED (module not implemented): scheduler.add_job(ml_train, 'cron', hour=4, minute=0, id='ml_train',
     #                       next_run_time=datetime.now() + timedelta(seconds=120))
     scheduler.add_job(discovery_scan, 'interval', hours=3, id='discovery_scan',

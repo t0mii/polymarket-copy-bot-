@@ -3,6 +3,7 @@ Trader Performance Tracker - berechnet Rolling-Performance und passt Trader-Stat
 Laeuft als Scheduler-Job alle 30 Minuten.
 """
 import logging
+import os
 from datetime import datetime, timedelta
 
 from database import db
