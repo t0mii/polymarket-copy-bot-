@@ -1,0 +1,15 @@
+{
+  "weights": {
+    "trader_edge": 0.30,
+    "category_wr": 0.20,
+    "price_signal": 0.15,
+    "conviction": 0.15,
+    "market_quality": 0.10,
+    "correlation": 0.10
+  },
+  "thresholds": {
+    "block": 40,
+    "queue": 60,
+    "boost": 80
+  }
+}
