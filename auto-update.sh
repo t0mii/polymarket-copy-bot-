@@ -1,50 +1,80 @@
 #!/bin/bash
-# Auto-update copybot from GitHub. Runs every 15 min via cron.
-# - Force-fetches origin/main (defends against any stale-ref glitches).
-# - Only updates if origin/main is strictly ahead of local HEAD.
-# - Stashes local working-tree edits, fast-forwards, restores them.
-# - Restarts copybot only on a successful pull.
-set -u
-cd /root/polymarket-copy-bot || exit 1
+cd /root/polymarket-copy-bot
+LOG=/root/polymarket-copy-bot/logs/auto-update.log
 
-LOG=/var/log/copybot-autoupdate.log
+# Fetch upstream (developer)
+git fetch upstream 2>/dev/null || exit 0
 
-# Force fetch — ignores any stale local refs.
-git fetch --force --prune --quiet origin main || {
-  echo "[$(date -Is)] fetch failed" >> "$LOG"
-  exit 1
-}
+# Check if upstream/main has new commits vs our branch
+NEW_COMMITS=$(git log HEAD..upstream/main --oneline 2>/dev/null)
+if [ -z "$NEW_COMMITS" ]; then
+    exit 0
+fi
 
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse origin/main)
+# Save current commit for rollback
+OLD_COMMIT=$(git rev-parse HEAD)
 
-# No change → silent exit.
-[ "$LOCAL" = "$REMOTE" ] && exit 0
+# Log what is new
+echo "" >> $LOG
+echo "========================================" >> $LOG
+echo "$(date '+%Y-%m-%d %H:%M:%S') - NEUE UPDATES VOM ENTWICKLER" >> $LOG
+echo "========================================" >> $LOG
+echo "$NEW_COMMITS" >> $LOG
+echo "" >> $LOG
+echo "Details:" >> $LOG
+git log HEAD..upstream/main --format='%h %s (%an, %ad)' --date=short >> $LOG
+echo "" >> $LOG
+echo "Geaenderte Dateien:" >> $LOG
+git diff --stat HEAD..upstream/main >> $LOG
+echo "----------------------------------------" >> $LOG
 
-# Only act if origin/main is strictly ahead (LOCAL is ancestor of REMOTE,
-# REMOTE is not ancestor of LOCAL). Anything else means local has its own
-# commits — do not touch, log it so a human can resolve.
-if git merge-base --is-ancestor "$LOCAL" "$REMOTE" && ! git merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
-  echo "[$(date -Is)] Update: $LOCAL -> $REMOTE" >> "$LOG"
+# Merge - bei Konflikten unsere Aenderungen behalten
+git merge upstream/main --no-edit -X ours 2>&1 >> $LOG
 
-  STASH_MSG="auto-update-$(date +%s)"
-  STASHED=0
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    if git stash push --quiet -m "$STASH_MSG" 2>>"$LOG"; then
-      STASHED=1
+# Syntax-Check: alle Python-Dateien pruefen die sich geaendert haben
+SYNTAX_OK=true
+for f in $(git diff --name-only $OLD_COMMIT HEAD -- '*.py'); do
+    if [ -f "$f" ]; then
+        if ! /root/polymarket-copy-bot/venv/bin/python -m py_compile "$f" 2>> $LOG; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - SYNTAX ERROR in $f" >> $LOG
+            SYNTAX_OK=false
+        fi
     fi
-  fi
+done
 
-  if git pull --ff-only --quiet >>"$LOG" 2>&1; then
-    if [ "$STASHED" = "1" ]; then
-      git stash pop --quiet 2>>"$LOG" || echo "[$(date -Is)] stash pop had conflicts — manual fix needed" >> "$LOG"
-    fi
-    systemctl restart copybot
-    echo "[$(date -Is)] Restarted to $REMOTE" >> "$LOG"
-  else
-    echo "[$(date -Is)] pull --ff-only failed, restoring stash" >> "$LOG"
-    [ "$STASHED" = "1" ] && git stash pop --quiet 2>>"$LOG"
-  fi
+if [ "$SYNTAX_OK" = false ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ROLLBACK: Syntax-Fehler gefunden, zurueck zu $OLD_COMMIT" >> $LOG
+    git reset --hard $OLD_COMMIT 2>&1 >> $LOG
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Rollback abgeschlossen, Service laeuft weiter auf alter Version" >> $LOG
+    exit 1
+fi
+
+# Push zu GitLab
+git push origin piff-custom 2>&1 >> $LOG
+
+# Restart service
+systemctl restart copybot
+
+# Health-Check: 30 Sekunden warten, dann pruefen ob Service noch laeuft
+sleep 30
+
+if systemctl is-active --quiet copybot; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Auto-update ERFOLGREICH, Service laeuft" >> $LOG
 else
-  echo "[$(date -Is)] Local has diverged from origin/main (LOCAL=$LOCAL REMOTE=$REMOTE) — manual rebase needed" >> "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - SERVICE CRASHED nach Update! Starte Rollback..." >> $LOG
+    
+    # Rollback auf alten Commit
+    git reset --hard $OLD_COMMIT 2>&1 >> $LOG
+    git push origin piff-custom --force 2>&1 >> $LOG
+    
+    # Restart mit alter Version
+    systemctl restart copybot
+    sleep 10
+    
+    if systemctl is-active --quiet copybot; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - ROLLBACK ERFOLGREICH, Service laeuft wieder auf alter Version" >> $LOG
+    else
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - KRITISCH: Auch nach Rollback crashed! Manuell pruefen!" >> $LOG
+    fi
+    exit 1
 fi
