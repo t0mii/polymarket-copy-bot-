@@ -186,7 +186,7 @@ def _check_trader_health():
         elif streak >= 5:
             should_pause = True
             reason = "%d consecutive losses" % streak
-        if should_pause and live_count > MIN_LIVE_TRADERS:
+        if should_pause and _current_live_count() > MIN_LIVE_TRADERS:
             logger.info("[BRAIN] Would pause %s: %s (DISABLED — settings managed manually)", trader, reason)
             db.log_brain_decision("PAUSE_TRADER", trader, reason,
                                   json.dumps({"pnl_7d": pnl_7d, "streak": streak}),

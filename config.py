@@ -75,6 +75,7 @@ MAX_ENTRY_PRICE_MAP = os.getenv("MAX_ENTRY_PRICE_MAP", "")
 MAX_SPREAD = float(os.getenv("MAX_SPREAD", "0.05"))
 MAX_FEE_BPS = int(os.getenv("MAX_FEE_BPS", "0"))  # Max fee in bps (0=disabled, 500=skip >5% fee). Achtung: Esports hat 10% Fee!
 MAX_COPIES_PER_MARKET = int(os.getenv("MAX_COPIES_PER_MARKET", "1"))
+MAX_COPIES_PER_MARKET_MAP = os.getenv("MAX_COPIES_PER_MARKET_MAP", "")
 # Per-trader category blacklist: "trader:cat1|cat2,trader:cat1" (categories: NBA,MLB,NHL,NFL,Tennis,Soccer,CS,LoL,Valorant,Dota,Geopolitics,Cricket)
 CATEGORY_BLACKLIST_MAP = os.getenv("CATEGORY_BLACKLIST_MAP", "")
 # Min conviction ratio: only copy trades where trader bets >= X times their average (0=disabled)

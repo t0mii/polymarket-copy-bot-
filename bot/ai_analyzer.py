@@ -92,7 +92,7 @@ def _format_blocked_summary(blocked: list) -> str:
 
     lines.append("")
     lines.append("Top geblockte Trades (mit Outcome):")
-    for bt in sorted(blocked, key=lambda x: x.get("would_have_won", -1), reverse=True)[:15]:
+    for bt in sorted(blocked, key=lambda x: x["would_have_won"] if x.get("would_have_won") is not None else -1, reverse=True)[:15]:
         outcome = "WIN" if bt.get("would_have_won") == 1 else "LOSS" if bt.get("would_have_won") == 0 else "?"
         lines.append("  [%s] %s | %s | %.0fc | %s | %s" % (
             outcome, bt["trader"], bt["market_question"][:40], bt["trader_price"] * 100,

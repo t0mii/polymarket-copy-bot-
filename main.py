@@ -794,7 +794,8 @@ def auto_tune_settings():
     """Auto-tune all per-trader settings based on performance (every 2h)."""
     from bot.auto_tuner import auto_tune
     try:
-        logger.info("[TUNER] Auto-tuner DISABLED — settings managed manually")
+        logger.info("[TUNER] Auto-tuner running (also called from brain cycle)")
+        auto_tune()
     except Exception as e:
         logger.exception('Error in auto-tuner: %s', e)
 

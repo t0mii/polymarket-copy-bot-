@@ -52,7 +52,7 @@ def init_db():
 
 @contextmanager
 def get_connection():
-    conn = sqlite3.connect(config.DB_PATH)
+    conn = sqlite3.connect(config.DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -363,11 +363,16 @@ def close_copy_trade(trade_id: int, pnl_realized: float, close_price: float = No
 
 def reopen_copy_trade(trade_id: int):
     """Re-open a copy trade that was incorrectly closed."""
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE copy_trades SET status='open', pnl_realized=NULL, closed_at=NULL WHERE id=?",
-            (trade_id,)
-        )
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE copy_trades SET status='open', pnl_realized=NULL, closed_at=NULL WHERE id=?",
+                (trade_id,)
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("[REOPEN] UNIQUE constraint on trade %s: %s", trade_id, e)
+        return None
 
 
 def get_copy_trade_stats():
@@ -681,7 +686,7 @@ def get_or_create_scan_config(wallet_address: str) -> dict:
             "INSERT INTO trader_scan_config (wallet_address, last_position_count, target_scan_count, scans_completed, last_closed_count, last_trade_timestamp) VALUES (?, 0, 100, 0, 0, 0)",
             (wallet_address,)
         )
-        conn.commit()
+        # conn.commit()  # PATCH-023: removed, context manager handles commit
         return {"last_position_count": 0, "target_scan_count": 100, "scans_completed": 0, "last_closed_count": 0, "last_trade_timestamp": 0}
 
 

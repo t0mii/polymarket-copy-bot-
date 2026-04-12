@@ -104,7 +104,7 @@ def check_trader_exits():
                         logger.debug("[SMART-SELL] Sell error: %s", e)
 
                 # DB nur schliessen wenn Sell OK oder Markt resolved (Preis nahe 0/1)
-                if sell_success or current >= 0.95 or current <= 0.05 or not config.LIVE_MODE:
+                if sell_success or current <= 0.05 or not config.LIVE_MODE:  # PATCH-023: removed current>=0.95, retry sell instead of closing orphan
                     closed = db.close_copy_trade(our_trade["id"], pnl, close_price=current)
                     if closed:
                         # Persist usdc_received so future P&L analysis has verified fill data

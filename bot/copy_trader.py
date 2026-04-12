@@ -211,6 +211,15 @@ def _get_current_balance() -> float:
 _BET_SIZE_MAP = _parse_float_map(config.BET_SIZE_MAP, "BET_SIZE_MAP")
 _TAKE_PROFIT_MAP = _parse_float_map(config.TAKE_PROFIT_MAP, "TAKE_PROFIT_MAP")
 _STOP_LOSS_MAP = _parse_float_map(config.STOP_LOSS_MAP, "STOP_LOSS_MAP")
+_MAX_COPIES_MAP = {k: int(float(v)) for k, v in _parse_float_map(config.MAX_COPIES_PER_MARKET_MAP, "MAX_COPIES_PER_MARKET_MAP").items()}
+
+def _get_max_copies(username: str) -> int:
+    """Per-trader MAX_COPIES_PER_MARKET lookup with global fallback."""
+    if username:
+        val = _MAX_COPIES_MAP.get(username.lower())
+        if val is not None:
+            return val
+    return config.MAX_COPIES_PER_MARKET
 _MIN_ENTRY_PRICE_MAP = _parse_float_map(config.MIN_ENTRY_PRICE_MAP, "MIN_ENTRY_PRICE_MAP")
 _MAX_ENTRY_PRICE_MAP = _parse_float_map(config.MAX_ENTRY_PRICE_MAP, "MAX_ENTRY_PRICE_MAP")
 _AVG_TRADER_SIZE_MAP = _parse_float_map(config.AVG_TRADER_SIZE_MAP, "AVG_TRADER_SIZE_MAP")
@@ -231,7 +240,7 @@ _last_settings_mtime = 0.0
 
 def _reload_maps():
     """Re-read per-trader maps from settings.env if file changed since last check."""
-    global _BET_SIZE_MAP, _TAKE_PROFIT_MAP, _STOP_LOSS_MAP, _MIN_ENTRY_PRICE_MAP
+    global _BET_SIZE_MAP, _TAKE_PROFIT_MAP, _STOP_LOSS_MAP, _MIN_ENTRY_PRICE_MAP, _MAX_COPIES_MAP
     global _MAX_ENTRY_PRICE_MAP, _AVG_TRADER_SIZE_MAP, _EXPOSURE_MAP, _MIN_TRADER_USD_MAP
     global _CATEGORY_BLACKLIST, _MIN_CONVICTION_MAP, _last_settings_mtime
 
@@ -251,6 +260,7 @@ def _reload_maps():
     _BET_SIZE_MAP = _parse_float_map(vals.get("BET_SIZE_MAP", ""), "BET_SIZE_MAP")
     _TAKE_PROFIT_MAP = _parse_float_map(vals.get("TAKE_PROFIT_MAP", ""), "TAKE_PROFIT_MAP")
     _STOP_LOSS_MAP = _parse_float_map(vals.get("STOP_LOSS_MAP", ""), "STOP_LOSS_MAP")
+    _MAX_COPIES_MAP = {k: int(float(v)) for k, v in _parse_float_map(vals.get("MAX_COPIES_PER_MARKET_MAP", ""), "MAX_COPIES_PER_MARKET_MAP").items()}
     _MIN_ENTRY_PRICE_MAP = _parse_float_map(vals.get("MIN_ENTRY_PRICE_MAP", ""), "MIN_ENTRY_PRICE_MAP")
     _MAX_ENTRY_PRICE_MAP = _parse_float_map(vals.get("MAX_ENTRY_PRICE_MAP", ""), "MAX_ENTRY_PRICE_MAP")
     _AVG_TRADER_SIZE_MAP = _parse_float_map(vals.get("AVG_TRADER_SIZE_MAP", ""), "AVG_TRADER_SIZE_MAP")
@@ -561,6 +571,19 @@ def _process_pending_buys(balance: float, total_invested: float) -> int:
         if cash_left < _load_dynamic_floor():
             expired_keys.append(cid)
             logger.info("[PENDING] Kein Cash mehr: %s", trade_data["market_question"][:40])
+            continue
+
+        # PATCH-023: Add missing duplicate/cross-trader checks
+        _pb_addr = trade_data.get("wallet_address", "")
+        _pb_side = trade_data.get("side", "")
+        _pb_user = trade_data.get("wallet_username", "")
+        if cid and db.count_copies_for_market(_pb_addr, cid) >= config.MAX_COPIES_PER_MARKET:
+            logger.info("[PENDING] Max copies reached, skipping: %s", trade_data["market_question"][:40])
+            expired_keys.append(cid)
+            continue
+        if cid and db.is_market_already_open(cid, from_wallet=_pb_addr, side=_pb_side):
+            logger.info("[PENDING] Market already open (same side), skipping: %s", trade_data["market_question"][:40])
+            expired_keys.append(cid)
             continue
 
         trade_data["entry_price"] = round(min(current + ENTRY_SLIPPAGE, 0.97), 4)

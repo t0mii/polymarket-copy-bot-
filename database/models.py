@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS trader_closed_positions (
     last_seen_at TEXT DEFAULT (datetime('now','localtime')),
     is_matched INTEGER DEFAULT 0,
     FOREIGN KEY (wallet_address) REFERENCES wallets(address),
-    UNIQUE(wallet_address, condition_id)
+    UNIQUE(wallet_address, condition_id, side)
 );
 
 CREATE TABLE IF NOT EXISTS trader_scan_config (
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS confirmed_new_positions (
     confirmed_at TEXT,
     is_confirmed INTEGER DEFAULT 0,
     FOREIGN KEY (wallet_address) REFERENCES wallets(address),
-    UNIQUE(wallet_address, condition_id)
+    UNIQUE(wallet_address, condition_id, side)
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (
@@ -230,7 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_trader_activity_ts ON trader_activity(timestamp);
 CREATE INDEX IF NOT EXISTS idx_trader_activity_cid ON trader_activity(condition_id);
 CREATE INDEX IF NOT EXISTS idx_copy_trades_event ON copy_trades(event_slug);
 CREATE INDEX IF NOT EXISTS idx_copy_trades_wallet_status ON copy_trades(wallet_address, status);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_copy_trades_open_dedup ON copy_trades(condition_id, wallet_address) WHERE status='open';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_copy_trades_open_dedup ON copy_trades(condition_id, wallet_address, side) WHERE status='open';
 """
 
 # --- Appended by upgrade: Performance + ML + Discovery + Autonomous ---

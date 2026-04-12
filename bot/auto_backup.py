@@ -8,7 +8,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-REPO_DIR = '/home/walter/polymarketscanner'
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REMOTE = 'piff'
 BRANCH = 'piff-custom'
 
