@@ -1524,7 +1524,7 @@ function loadReport(){
     }).join('');
   }).catch(()=>{
     // Fallback to old report-based view
-    fetch('/api/report/latest').then(r=>r.json()).then(d=>{
+    fetch('/api/report/latest',{headers:{'X-Dashboard-Key':localStorage.getItem('dashSecret')||''}}).then(r=>r.json()).then(d=>{
       if(d.report&&!d.report.startsWith('No reports')){
         const parts=d.report.split('\n---\n');
         $('reportText').innerHTML=buildPreview(parts[0]||'');
