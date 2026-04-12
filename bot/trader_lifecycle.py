@@ -24,6 +24,7 @@ KICK_30D_PNL = -30.0
 OBSERVE_HOURS = 24
 PAUSE_DURATIONS = {"streak": 24, "pnl_10": 48, "pnl_20": 72}
 REHAB_DAYS = 3
+PAPER_MAX_TRADES = 500  # Nach 500 Paper-Trades ohne Erfolg -> KICK
 
 
 def check_transitions():
@@ -108,6 +109,17 @@ def _check_paper_to_live():
                                   json.dumps({"paper_trades": paper_trades, "paper_wr": paper_wr,
                                               "paper_pnl": paper_pnl}),
                                   "New live trader added")
+        elif paper_trades >= PAPER_MAX_TRADES:
+            db.update_lifecycle_status(t["address"], "KICKED",
+                                      "Paper failed after %d trades: %.1f%% WR, $%.2f PnL" % (
+                                          paper_trades, paper_wr, paper_pnl))
+            logger.info("[LIFECYCLE] %s: KICKED (paper failed after %d trades, %.1f%% WR)",
+                        t.get("username", t["address"][:12]), paper_trades, paper_wr)
+            db.log_brain_decision("KICK_TRADER", t.get("username", t["address"][:12]),
+                                  "Paper failed after %d trades" % paper_trades,
+                                  json.dumps({"paper_trades": paper_trades, "paper_wr": paper_wr,
+                                              "paper_pnl": paper_pnl}),
+                                  "Removed: could not meet criteria in 500 trades")
 
 
 def _check_paused_to_rehab():

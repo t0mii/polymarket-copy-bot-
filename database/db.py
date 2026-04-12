@@ -1249,7 +1249,7 @@ def upsert_lifecycle_trader(address: str, username: str, status: str, source: st
             if existing["status"] == "KICKED":
                 from datetime import datetime, timedelta
                 changed = datetime.fromisoformat(existing["status_changed_at"]) if existing["status_changed_at"] else datetime.now()
-                if (datetime.now() - changed).days < 7:
+                if (datetime.now() - changed).days < 49:
                     return  # Still in cooldown, ignore
                 # Cooldown over — reset pause_count and let them back in
                 conn.execute(
