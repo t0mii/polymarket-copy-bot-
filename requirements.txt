@@ -10,3 +10,7 @@ anthropic>=0.40.0
 websocket-client>=1.6.0
 
 web3>=6.0.0
+
+# ML Scorer (RandomForest training in bot/ml_scorer.py)
+numpy>=2.0.0
+scikit-learn>=1.5.0
