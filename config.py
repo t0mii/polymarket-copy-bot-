@@ -1,3 +1,5 @@
+# Version
+BOT_VERSION = "2.0.0"
 import os
 import sys
 from dotenv import load_dotenv
@@ -194,6 +196,7 @@ TOP_N_REPORT = 10
 MIN_VOLUME = 1000
 SCAN_INTERVAL_HOURS = 24
 AI_MODEL = "llama-3.1-8b-instant"
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 ZAI_API_KEY = os.getenv("ZAI_API_KEY", "")
 ZAI_MODEL = "glm-5"

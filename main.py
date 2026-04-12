@@ -532,7 +532,7 @@ def main():
                 logger.warning("CLOB Verbindungstest fehlgeschlagen — Bot startet trotzdem.")
         except Exception as e:
             logger.warning("Wallet-Check uebersprungen: %s", e)
-    logger.info("Mode: %s | Startkapital: $%.0f", "LIVE" if LIVE_MODE else "PAPER", STARTING_BALANCE)
+    logger.info("Mode: %s | Startkapital: $%.0f | Version: %s", "LIVE" if LIVE_MODE else "PAPER", STARTING_BALANCE, config.BOT_VERSION)
 
     from database.db import log_activity
 

@@ -26,6 +26,7 @@ class PriceTracker:
         self._prices = {}         # {token_id: float}  best bid
         self._asks = {}           # {token_id: float}  best ask
         self._prices_ts = {}      # {token_id: float}  timestamp of last price update
+        self._price_history = {}  # {token_id: [(timestamp, price), ...]}  last 10min
         self._condition_map = {}  # {condition_id: {"YES": token_id, "NO": token_id, ...}}
         self._lock = threading.Lock()
         self._ws = None
@@ -86,6 +87,40 @@ class PriceTracker:
             if bid is None or ask is None or ask <= 0:
                 return None
             return round(ask - bid, 4)
+
+    def get_momentum(self, condition_id: str, side: str, window_secs: int = 300) -> float | None:
+        """Price momentum over window. Returns pct change or None if insufficient data."""
+        with self._lock:
+            tokens = self._condition_map.get(condition_id, {})
+            token_id = tokens.get(side.upper()) or tokens.get("YES")
+            if not token_id:
+                return None
+            history = list(self._price_history.get(token_id, []))
+        if len(history) < 2:
+            return None
+        now = time.time()
+        cutoff = now - window_secs
+        # Find oldest price within or near the window
+        old_entries = [(ts, p) for ts, p in history if ts <= cutoff + 30]
+        if not old_entries:
+            return None
+        old_price = old_entries[-1][1]
+        current_price = history[-1][1]
+        if old_price <= 0:
+            return None
+        return (current_price - old_price) / old_price
+
+    def _record_price_history(self, token_id: str, price: float):
+        """Append price to history, prune entries older than 10 minutes."""
+        now = time.time()
+        if token_id not in self._price_history:
+            self._price_history[token_id] = []
+        self._price_history[token_id].append((now, price))
+        # Prune old entries (>10min)
+        cutoff = now - 600
+        self._price_history[token_id] = [
+            (ts, p) for ts, p in self._price_history[token_id] if ts >= cutoff
+        ]
 
     def subscribe_condition(self, condition_id: str):
         """Non-blocking: resolve condition_id to token IDs and subscribe."""
@@ -221,8 +256,10 @@ class PriceTracker:
             with self._lock:
                 if bids:
                     try:
-                        self._prices[asset_id] = max(float(b["price"]) for b in bids)
+                        _bp = max(float(b["price"]) for b in bids)
+                        self._prices[asset_id] = _bp
                         self._prices_ts[asset_id] = _now
+                        self._record_price_history(asset_id, _bp)
                     except Exception:
                         pass
                 if asks:
@@ -238,6 +275,7 @@ class PriceTracker:
                 with self._lock:
                     self._prices[asset_id] = float(price)
                     self._prices_ts[asset_id] = _now
+                    self._record_price_history(asset_id, float(price))
             ask = ev.get("best_ask") or ev.get("ask")
             if ask is not None:
                 with self._lock:
@@ -249,6 +287,7 @@ class PriceTracker:
                 with self._lock:
                     self._prices[asset_id] = float(price)
                     self._prices_ts[asset_id] = _now
+                    self._record_price_history(asset_id, float(price))
 
         elif etype == "best_bid_ask":
             bid = ev.get("best_bid") or ev.get("bid")
@@ -256,6 +295,7 @@ class PriceTracker:
                 with self._lock:
                     self._prices[asset_id] = float(bid)
                     self._prices_ts[asset_id] = _now
+                    self._record_price_history(asset_id, float(bid))
             ask = ev.get("best_ask") or ev.get("ask")
             if ask is not None:
                 with self._lock:
