@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 SETTINGS_PATH = '/root/polymarket-copy-bot/settings.env'
 
-PAPER_MIN_TRADES = 10
-PAPER_MIN_WR = 55.0
-PAPER_REHAB_MIN_TRADES = 15
+PAPER_MIN_TRADES = 25
+PAPER_MIN_WR = 58.0
+PAPER_REHAB_MIN_TRADES = 25
 PAPER_REHAB_MIN_WR = 58.0
 MAX_PAUSE_COUNT = 2
 KICK_30D_PNL = -30.0
