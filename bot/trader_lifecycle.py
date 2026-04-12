@@ -23,7 +23,7 @@ MAX_PAUSE_COUNT = 2
 KICK_30D_PNL = -30.0
 OBSERVE_HOURS = 24
 PAUSE_DURATIONS = {"streak": 24, "pnl_10": 48, "pnl_20": 72}
-REHAB_DAYS = 7
+REHAB_DAYS = 3
 
 
 def check_transitions():
