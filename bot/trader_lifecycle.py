@@ -194,16 +194,10 @@ def _remove_followed_trader(address: str, username: str):
 
 
 def _read_settings() -> str:
-    try:
-        with open(SETTINGS_PATH) as f:
-            return f.read()
-    except Exception as e:
-        logger.error("[LIFECYCLE] Cannot read settings: %s", e)
-        return ""
+    from bot.settings_lock import read_settings
+    return read_settings()
 
 
 def _write_settings(content: str):
-    tmp = SETTINGS_PATH + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(content)
-    os.replace(tmp, SETTINGS_PATH)
+    from bot.settings_lock import write_settings
+    write_settings(content)

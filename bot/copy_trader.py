@@ -53,10 +53,8 @@ def _parse_float_map(raw: str, name: str) -> dict[str, float]:
                 logger.warning("Config parse error in %s: '%s' — skipping", name, entry)
     return result
 
-# Per-trader exposure map (parsed once at module load)
+# Per-trader maps — refreshed from settings.env on each scan via _reload_maps()
 _EXPOSURE_MAP = _parse_float_map(config.TRADER_EXPOSURE_MAP, "TRADER_EXPOSURE_MAP")
-
-# Per-trader minimum trade size (parsed once at module load)
 _MIN_TRADER_USD_MAP = _parse_float_map(config.MIN_TRADER_USD_MAP, "MIN_TRADER_USD_MAP")
 
 # Pending Buy Queue (in-memory: condition_id → {trade_data, queued_at})
@@ -204,15 +202,14 @@ def _get_current_balance() -> float:
     return STARTING_BALANCE + stats["total_pnl"]
 
 
-# Per-trader maps (parsed once at module load via safe parser)
+# Per-trader maps — initial load, refreshed by _reload_maps() on each scan
 _BET_SIZE_MAP = _parse_float_map(config.BET_SIZE_MAP, "BET_SIZE_MAP")
 _TAKE_PROFIT_MAP = _parse_float_map(config.TAKE_PROFIT_MAP, "TAKE_PROFIT_MAP")
+_STOP_LOSS_MAP = _parse_float_map(config.STOP_LOSS_MAP, "STOP_LOSS_MAP")
 _MIN_ENTRY_PRICE_MAP = _parse_float_map(config.MIN_ENTRY_PRICE_MAP, "MIN_ENTRY_PRICE_MAP")
 _MAX_ENTRY_PRICE_MAP = _parse_float_map(config.MAX_ENTRY_PRICE_MAP, "MAX_ENTRY_PRICE_MAP")
 _AVG_TRADER_SIZE_MAP = _parse_float_map(config.AVG_TRADER_SIZE_MAP, "AVG_TRADER_SIZE_MAP")
 
-
-# Per-trader category blacklist: {"tradername": {"tennis", "mlb"}}
 _CATEGORY_BLACKLIST: dict[str, set[str]] = {}
 for _cbl_entry in config.CATEGORY_BLACKLIST_MAP.split(","):
     _cbl_entry = _cbl_entry.strip()
@@ -223,6 +220,50 @@ for _cbl_entry in config.CATEGORY_BLACKLIST_MAP.split(","):
         _CATEGORY_BLACKLIST[_cbl_name] = _cbl_cats
 
 _MIN_CONVICTION_MAP = _parse_float_map(config.MIN_CONVICTION_RATIO_MAP, "MIN_CONVICTION_RATIO_MAP")
+
+# --- Hot-Reload: re-read settings.env maps on each scan cycle ---
+_last_settings_mtime = 0.0
+
+def _reload_maps():
+    """Re-read per-trader maps from settings.env if file changed since last check."""
+    global _BET_SIZE_MAP, _TAKE_PROFIT_MAP, _STOP_LOSS_MAP, _MIN_ENTRY_PRICE_MAP
+    global _MAX_ENTRY_PRICE_MAP, _AVG_TRADER_SIZE_MAP, _EXPOSURE_MAP, _MIN_TRADER_USD_MAP
+    global _CATEGORY_BLACKLIST, _MIN_CONVICTION_MAP, _last_settings_mtime
+
+    settings_path = _os.path.join(_BASE_DIR, "settings.env")
+    try:
+        mtime = _os.path.getmtime(settings_path)
+    except OSError:
+        return
+    if mtime <= _last_settings_mtime:
+        return  # file unchanged
+
+    _last_settings_mtime = mtime
+    # Re-read settings.env via dotenv
+    from dotenv import dotenv_values
+    vals = dotenv_values(settings_path)
+
+    _BET_SIZE_MAP = _parse_float_map(vals.get("BET_SIZE_MAP", ""), "BET_SIZE_MAP")
+    _TAKE_PROFIT_MAP = _parse_float_map(vals.get("TAKE_PROFIT_MAP", ""), "TAKE_PROFIT_MAP")
+    _STOP_LOSS_MAP = _parse_float_map(vals.get("STOP_LOSS_MAP", ""), "STOP_LOSS_MAP")
+    _MIN_ENTRY_PRICE_MAP = _parse_float_map(vals.get("MIN_ENTRY_PRICE_MAP", ""), "MIN_ENTRY_PRICE_MAP")
+    _MAX_ENTRY_PRICE_MAP = _parse_float_map(vals.get("MAX_ENTRY_PRICE_MAP", ""), "MAX_ENTRY_PRICE_MAP")
+    _AVG_TRADER_SIZE_MAP = _parse_float_map(vals.get("AVG_TRADER_SIZE_MAP", ""), "AVG_TRADER_SIZE_MAP")
+    _EXPOSURE_MAP = _parse_float_map(vals.get("TRADER_EXPOSURE_MAP", ""), "TRADER_EXPOSURE_MAP")
+    _MIN_TRADER_USD_MAP = _parse_float_map(vals.get("MIN_TRADER_USD_MAP", ""), "MIN_TRADER_USD_MAP")
+    _MIN_CONVICTION_MAP = _parse_float_map(vals.get("MIN_CONVICTION_RATIO_MAP", ""), "MIN_CONVICTION_RATIO_MAP")
+
+    # Reload category blacklist
+    _CATEGORY_BLACKLIST.clear()
+    for entry in (vals.get("CATEGORY_BLACKLIST_MAP", "") or "").split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            parts = entry.split(":", 1)
+            name = parts[0].strip().lower()
+            cats = {c.strip().lower() for c in parts[1].split("|") if c.strip()}
+            _CATEGORY_BLACKLIST[name] = cats
+
+    logger.info("[RELOAD] Settings maps refreshed (%d trader configs)", len(_BET_SIZE_MAP))
 
 # Category keywords for market question detection
 _CATEGORY_KEYWORDS = {
@@ -917,6 +958,7 @@ def copy_followed_wallets():
 
     Vorteil: Kein falscher Alarm durch Positions-Snapshot-Vergleich (z.B. CemeterySun).
     """
+    _reload_maps()  # Hot-reload settings if file changed
     followed = db.get_followed_wallets()
     if not followed:
         logger.info("Keine gefolgten Wallets. Erst Wallets folgen!")
@@ -2203,11 +2245,13 @@ def update_copy_positions():
                             db.update_copy_trade_price(trade["id"], effective_price, pnl)
                             logger.debug("Trade #%d: %.0f%c | P&L=$%.2f", trade["id"], effective_price * 100, 0xa2, pnl)
 
-                            # Stop-Loss: auto-sell if loss exceeds threshold
+                            # Stop-Loss: auto-sell if loss exceeds threshold (per-trader override)
                             _ep = _get_entry_price(trade)
-                            if config.STOP_LOSS_PCT > 0 and _ep > 0:
+                            _sl_trader = (trade.get("wallet_username") or "").lower()
+                            _sl_pct = _STOP_LOSS_MAP.get(_sl_trader, config.STOP_LOSS_PCT)
+                            if _sl_pct > 0 and _ep > 0:
                                 loss_pct = (_ep - effective_price) / _ep
-                                if loss_pct >= config.STOP_LOSS_PCT:
+                                if loss_pct >= _sl_pct:
                                     # Sell FIRST, then close DB (prevents orphaned positions)
                                     _sl_resp = None
                                     if LIVE_MODE and trade_cid:

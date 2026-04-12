@@ -680,6 +680,8 @@ def main():
     #                       next_run_time=datetime.now() + timedelta(seconds=150))
     scheduler.add_job(brain_engine, 'interval', hours=2, id='brain_engine',
                       next_run_time=datetime.now() + timedelta(minutes=5))
+    scheduler.add_job(ml_train_job, "interval", hours=6, id="ml_train",
+                      next_run_time=datetime.now() + timedelta(seconds=30))
     scheduler.start()
     logger.info("Scheduler started (copy scan every %ds, prices every 30s, outcome every 30min).",
                 config.COPY_SCAN_INTERVAL)
@@ -821,6 +823,14 @@ def smart_rebalance():
     except Exception as e:
         logger.exception('Error in smart rebalance: %s', e)
 
+
+def ml_train_job():
+    """Train ML model every 6 hours."""
+    from bot.ml_scorer import train_model
+    try:
+        train_model()
+    except Exception as e:
+        logger.exception("Error in ML training: %s", e)
 
 def brain_engine():
     """Brain Engine — self-diagnosis, auto-fix, lifecycle management (every 2h)."""

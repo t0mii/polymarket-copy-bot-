@@ -41,6 +41,7 @@ BUILDER_PASSPHRASE = os.getenv("BUILDER_PASSPHRASE", "")
 
 # --- Copybot Core ---
 LIVE_MODE = os.getenv("LIVE_MODE", "true").lower() in ("true", "1", "yes")
+ML_ENABLED = os.getenv("ML_ENABLED", "true").lower() in ("true", "1", "yes")
 STARTING_BALANCE = float(os.getenv("STARTING_BALANCE", "320"))
 COPY_SCAN_INTERVAL = int(os.getenv("COPY_SCAN_INTERVAL", "5"))
 
@@ -163,6 +164,7 @@ IDLE_REPLACE_COOLDOWN = int(os.getenv("IDLE_REPLACE_COOLDOWN", "1800"))
 MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", "0"))
 MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "0"))
 STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0"))
+STOP_LOSS_MAP = os.getenv("STOP_LOSS_MAP", "")
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0"))
 TAKE_PROFIT_MAP = os.getenv("TAKE_PROFIT_MAP", "")
 

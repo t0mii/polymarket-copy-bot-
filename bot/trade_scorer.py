@@ -192,6 +192,23 @@ def score(trader_name: str, condition_id: str, side: str, entry_price: float,
     for key, raw_score in components.items():
         total += raw_score * weights.get(key, 0)
     total = int(round(total))
+
+    # ML Bonus/Malus: adjust score based on ML win probability
+    try:
+        from bot.ml_scorer import predict as ml_predict
+        ml_prob = ml_predict({
+            "entry_price": entry_price, "category": category,
+            "side": side, "size": trader_size_usd,
+            "fee_bps": 0, "created_at": "",
+        })
+        if ml_prob >= 0:  # -1 = no model available
+            components["ml_prediction"] = int(ml_prob * 100)
+            if ml_prob < 0.30:
+                total = max(0, total - 15)
+            elif ml_prob > 0.70:
+                total = min(100, total + 15)
+    except Exception:
+        pass
     if total < thresholds["block"]:
         action = "BLOCK"
     elif total < thresholds["queue"]:

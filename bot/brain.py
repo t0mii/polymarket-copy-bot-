@@ -308,12 +308,8 @@ def _tighten_price_range(trader: str, reason: str):
 
 
 def _read_settings() -> str:
-    try:
-        with open(SETTINGS_PATH) as f:
-            return f.read()
-    except Exception as e:
-        logger.error("[BRAIN] Cannot read settings: %s", e)
-        return ""
+    from bot.settings_lock import read_settings
+    return read_settings()
 
 
 def _update_setting(key: str, value: str):
@@ -345,7 +341,5 @@ def _parse_map(content: str, key: str) -> dict:
 
 
 def _write_settings(content: str):
-    tmp = SETTINGS_PATH + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(content)
-    os.replace(tmp, SETTINGS_PATH)
+    from bot.settings_lock import write_settings
+    write_settings(content)
