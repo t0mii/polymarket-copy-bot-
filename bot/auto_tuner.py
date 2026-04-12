@@ -33,7 +33,7 @@ TIERS = {
         'min_entry': 0.30,
         'max_entry': 0.85,
         'min_trader_usd': 3,
-        'take_profit': 3.0, 'max_copies': 3, 'hedge_wait': 30,
+        'take_profit': 3.0, 'stop_loss': 0.60, 'max_copies': 3, 'hedge_wait': 30,
     },
     'solid': {       # 7d P&L > $0, WR > 50%
         'bet_size': 0.05,
@@ -42,17 +42,17 @@ TIERS = {
         'min_entry': 0.35,
         'max_entry': 0.80,
         'min_trader_usd': 5,
-        'take_profit': 2.5, 'max_copies': 2, 'hedge_wait': 45,
+        'take_profit': 2.5, 'stop_loss': 0.50, 'max_copies': 2, 'hedge_wait': 45,
     },
     'neutral': {
         'bet_size': 0.03, 'exposure': 0.10, 'conviction': 0,
         'min_entry': 0.38, 'max_entry': 0.75, 'min_trader_usd': 5,
-        'take_profit': 2.0, 'max_copies': 1, 'hedge_wait': 60,
+        'take_profit': 2.0, 'stop_loss': 0.40, 'max_copies': 1, 'hedge_wait': 60,
     },
     'weak': {
         'bet_size': 0.02, 'exposure': 0.03, 'conviction': 0.5,
         'min_entry': 0.42, 'max_entry': 0.70, 'min_trader_usd': 8,
-        'take_profit': 1.5, 'max_copies': 1, 'hedge_wait': 90,
+        'take_profit': 1.5, 'stop_loss': 0.30, 'max_copies': 1, 'hedge_wait': 90,
     },
     'terrible': {    # 7d P&L < -$10
         'bet_size': 0.01,
@@ -61,7 +61,7 @@ TIERS = {
         'min_entry': 0.45,
         'max_entry': 0.65,
         'min_trader_usd': 10,
-        'take_profit': 1.0, 'max_copies': 1, 'hedge_wait': 120,
+        'take_profit': 1.0, 'stop_loss': 0.20, 'max_copies': 1, 'hedge_wait': 120,
     },
 }
 
@@ -194,6 +194,7 @@ def auto_tune():
     max_entry_map = {}
     min_usd_map = {}
     tp_map = {}
+    sl_map = {}
     copies_map = {}
     hedge_map = {}
     blacklist_map = {}
@@ -209,6 +210,7 @@ def auto_tune():
         max_entry_map[name] = s["max_entry"]
         min_usd_map[name] = s["min_trader_usd"]
         tp_map[name] = s["take_profit"]
+        sl_map[name] = s["stop_loss"]
         copies_map[name] = s["max_copies"]
         hedge_map[name] = s["hedge_wait"]
         if data["blacklist"]:
@@ -231,6 +233,7 @@ def auto_tune():
     content = _update_map_setting(content, "MAX_ENTRY_PRICE_MAP", max_entry_map)
     content = _update_map_setting(content, "MIN_TRADER_USD_MAP", min_usd_map)
     content = _update_map_setting(content, "TAKE_PROFIT_MAP", tp_map)
+    content = _update_map_setting(content, "STOP_LOSS_MAP", sl_map)
     content = _update_map_setting(content, "MAX_COPIES_PER_MARKET_MAP", copies_map)
 
     # HEDGE_WAIT_TRADERS: simple line replace

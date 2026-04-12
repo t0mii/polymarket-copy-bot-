@@ -207,6 +207,7 @@ def _get_current_balance() -> float:
 # Per-trader maps (parsed once at module load via safe parser)
 _BET_SIZE_MAP = _parse_float_map(config.BET_SIZE_MAP, "BET_SIZE_MAP")
 _TAKE_PROFIT_MAP = _parse_float_map(config.TAKE_PROFIT_MAP, "TAKE_PROFIT_MAP")
+_STOP_LOSS_MAP = _parse_float_map(config.STOP_LOSS_MAP, "STOP_LOSS_MAP")
 _MIN_ENTRY_PRICE_MAP = _parse_float_map(config.MIN_ENTRY_PRICE_MAP, "MIN_ENTRY_PRICE_MAP")
 _MAX_ENTRY_PRICE_MAP = _parse_float_map(config.MAX_ENTRY_PRICE_MAP, "MAX_ENTRY_PRICE_MAP")
 _AVG_TRADER_SIZE_MAP = _parse_float_map(config.AVG_TRADER_SIZE_MAP, "AVG_TRADER_SIZE_MAP")
@@ -2203,11 +2204,13 @@ def update_copy_positions():
                             db.update_copy_trade_price(trade["id"], effective_price, pnl)
                             logger.debug("Trade #%d: %.0f%c | P&L=$%.2f", trade["id"], effective_price * 100, 0xa2, pnl)
 
-                            # Stop-Loss: auto-sell if loss exceeds threshold
+                            # Stop-Loss: auto-sell if loss exceeds threshold (per-trader override)
                             _ep = _get_entry_price(trade)
-                            if config.STOP_LOSS_PCT > 0 and _ep > 0:
+                            _sl_trader = (trade.get("wallet_username") or "").lower()
+                            _sl_pct = _STOP_LOSS_MAP.get(_sl_trader, config.STOP_LOSS_PCT)
+                            if _sl_pct > 0 and _ep > 0:
                                 loss_pct = (_ep - effective_price) / _ep
-                                if loss_pct >= config.STOP_LOSS_PCT:
+                                if loss_pct >= _sl_pct:
                                     # Sell FIRST, then close DB (prevents orphaned positions)
                                     _sl_resp = None
                                     if LIVE_MODE and trade_cid:
