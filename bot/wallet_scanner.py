@@ -146,12 +146,6 @@ def fetch_wallet_trades(address: str) -> dict:
                 break
             offset += page_size
 
-        # Also count total activity (BUY+SELL) for trade count
-        act_resp = requests.get(
-            f"{DATA_API}/activity",
-            params={"user": address, "type": "TRADE", "limit": 1},
-            timeout=10,
-        )
         # Use closed positions count as base
         closed = all_closed
         if not closed:
