@@ -1,0 +1,9 @@
+{
+  "last_iteration_ts": null,
+  "last_trade_id_seen": 0,
+  "last_brain_decision_id_seen": 0,
+  "prior_portfolio_total": null,
+  "trader_snapshots": {},
+  "iteration_count": 0,
+  "notes": "Initial state. Ralph loop will populate this on first run."
+}
