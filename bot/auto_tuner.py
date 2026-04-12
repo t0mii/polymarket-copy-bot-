@@ -24,24 +24,17 @@ logger = logging.getLogger(__name__)
 SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'settings.env')
 
 
-# Tier-Definitionen
-TIERS = {
+# Tier-Definitionen — baked-in defaults. Overridable via settings.env (TIER_* keys).
+# Classification thresholds (pnl_7d, wr_7d) stay hardcoded in _classify_trader().
+_TIER_DEFAULTS = {
     'star': {        # 7d P&L > +$5, WR > 55%
-        'bet_size': 0.07,
-        'exposure': 0.40,
-        'conviction': 0,
-        'min_entry': 0.30,
-        'max_entry': 0.85,
-        'min_trader_usd': 3,
+        'bet_size': 0.07, 'exposure': 0.40, 'conviction': 0,
+        'min_entry': 0.30, 'max_entry': 0.85, 'min_trader_usd': 3,
         'take_profit': 3.0, 'stop_loss': 0.60, 'max_copies': 3, 'hedge_wait': 30,
     },
     'solid': {       # 7d P&L > $0, WR > 50%
-        'bet_size': 0.05,
-        'exposure': 0.25,
-        'conviction': 0,
-        'min_entry': 0.35,
-        'max_entry': 0.80,
-        'min_trader_usd': 5,
+        'bet_size': 0.05, 'exposure': 0.25, 'conviction': 0,
+        'min_entry': 0.35, 'max_entry': 0.80, 'min_trader_usd': 5,
         'take_profit': 2.5, 'stop_loss': 0.50, 'max_copies': 2, 'hedge_wait': 45,
     },
     'neutral': {
@@ -55,15 +48,73 @@ TIERS = {
         'take_profit': 1.5, 'stop_loss': 0.30, 'max_copies': 1, 'hedge_wait': 90,
     },
     'terrible': {    # 7d P&L < -$10
-        'bet_size': 0.01,
-        'exposure': 0.005,
-        'conviction': 3.0,
-        'min_entry': 0.45,
-        'max_entry': 0.65,
-        'min_trader_usd': 10,
+        'bet_size': 0.01, 'exposure': 0.005, 'conviction': 3.0,
+        'min_entry': 0.45, 'max_entry': 0.65, 'min_trader_usd': 10,
         'take_profit': 1.0, 'stop_loss': 0.20, 'max_copies': 1, 'hedge_wait': 120,
     },
 }
+
+# Mapping field-name -> settings.env key. Each setting is a tier:value,tier:value string.
+_TIER_FIELD_TO_ENV = {
+    'bet_size':       'TIER_BET_SIZE',
+    'exposure':       'TIER_EXPOSURE',
+    'conviction':     'TIER_CONVICTION',
+    'min_entry':      'TIER_MIN_ENTRY',
+    'max_entry':      'TIER_MAX_ENTRY',
+    'min_trader_usd': 'TIER_MIN_TRADER_USD',
+    'take_profit':    'TIER_TAKE_PROFIT',
+    'stop_loss':      'TIER_STOP_LOSS',
+    'max_copies':     'TIER_MAX_COPIES',
+    'hedge_wait':     'TIER_HEDGE_WAIT',
+}
+
+
+def _parse_tier_map(raw: str) -> dict:
+    """Parse 'star:0.30,solid:0.35,...' into {tier_name: float}. Invalid entries skipped."""
+    result = {}
+    if not raw:
+        return result
+    for entry in raw.split(','):
+        entry = entry.strip()
+        if ':' not in entry:
+            continue
+        k, v = entry.split(':', 1)
+        try:
+            result[k.strip().lower()] = float(v.strip())
+        except ValueError:
+            logger.warning("Auto-tuner: invalid tier value in '%s' — skipping", entry)
+    return result
+
+
+def _load_tiers() -> dict:
+    """Build TIERS dict: start from _TIER_DEFAULTS, override with values from settings.env.
+
+    Re-read on every auto_tune() call so changes to settings.env take effect without restart.
+    """
+    # Read current settings file
+    try:
+        from bot.settings_lock import read_settings
+        content = read_settings()
+    except Exception as e:
+        logger.debug("auto_tuner: could not read settings (%s), using hardcoded defaults", e)
+        return {k: dict(v) for k, v in _TIER_DEFAULTS.items()}
+
+    # Extract TIER_* values from content
+    env_vals = {}
+    for line in content.split('\n'):
+        line = line.strip()
+        if '=' not in line or line.startswith('#'):
+            continue
+        k, _, v = line.partition('=')
+        env_vals[k.strip()] = v.strip()
+
+    tiers = {k: dict(v) for k, v in _TIER_DEFAULTS.items()}
+    for field, env_key in _TIER_FIELD_TO_ENV.items():
+        override_map = _parse_tier_map(env_vals.get(env_key, ''))
+        for tier_name, value in override_map.items():
+            if tier_name in tiers:
+                tiers[tier_name][field] = value
+    return tiers
 
 
 def _classify_trader(pnl_7d, winrate_7d, trades_7d, pnl_30d, winrate_30d):
@@ -182,6 +233,9 @@ def auto_tune():
             "blacklist": blacklist,
         }
 
+    # Load tier values fresh from settings.env (with hardcoded fallback)
+    tiers = _load_tiers()
+
     # Build ALL setting maps
     bet_map = {}
     exposure_map = {}
@@ -197,7 +251,7 @@ def auto_tune():
 
     for name, data in classifications.items():
         tier = data["tier"]
-        s = TIERS[tier]
+        s = tiers[tier]
         bet_map[name] = s["bet_size"]
         exposure_map[name] = s["exposure"]
         if s["conviction"] > 0:
