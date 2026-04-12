@@ -20,7 +20,7 @@ PAPER_MIN_WR = 58.0
 PAPER_REHAB_MIN_TRADES = 25
 PAPER_REHAB_MIN_WR = 58.0
 MAX_PAUSE_COUNT = 2
-KICK_30D_PNL = -30.0
+KICK_30D_PNL = -50.0
 OBSERVE_HOURS = 24
 PAUSE_DURATIONS = {"streak": 24, "pnl_10": 48, "pnl_20": 72}
 REHAB_DAYS = 3
@@ -48,9 +48,9 @@ def pause_trader(trader_name: str, reason: str):
     address = wallet["wallet_address"]
     stats = db.get_trader_rolling_pnl(trader_name, 7)
     pnl_7d = stats.get("total_pnl", 0) or 0
-    if pnl_7d < -20:
+    if pnl_7d < -30:
         hours = PAUSE_DURATIONS["pnl_20"]
-    elif pnl_7d < -10:
+    elif pnl_7d < -20:
         hours = PAUSE_DURATIONS["pnl_10"]
     else:
         hours = PAUSE_DURATIONS["streak"]
