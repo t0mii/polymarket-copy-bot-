@@ -27,11 +27,11 @@ def check_liquidity(condition_id, side, our_size):
             return True
 
         # Calculate depth on our buy side (asks = what we can buy)
-        asks = book.get("asks", [])
+        asks = book.asks or []
         total_ask_depth = 0
         for level in asks:
-            price = float(level.get("price", 0))
-            size = float(level.get("size", 0))
+            price = float(level.price or 0)
+            size = float(level.size or 0)
             total_ask_depth += price * size
 
         if total_ask_depth < MIN_BOOK_DEPTH_USD:
