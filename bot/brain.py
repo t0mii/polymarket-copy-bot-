@@ -148,9 +148,9 @@ def _check_trader_health():
                 break
         should_pause = False
         reason = ""
-        if pnl_7d < -10:
+        if pnl_7d < -20:
             should_pause = True
-            reason = "7d PnL $%.2f < -$10" % pnl_7d
+            reason = "7d PnL $%.2f < -$20" % pnl_7d
         elif streak >= 5:
             should_pause = True
             reason = "%d consecutive losses" % streak
