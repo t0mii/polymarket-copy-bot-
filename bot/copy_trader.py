@@ -724,6 +724,13 @@ def _position_diff_scan(address: str, username: str, balance: float,
             end_ts = _parse_end_ts(pos.get("end_date", ""))
             if end_ts and (_time.time() - end_ts) > 0:
                 continue
+            # Max market duration: skip if market resolves too far in future
+            if config.MAX_MARKET_HOURS > 0 and end_ts:
+                _hours_until_end = (end_ts - _time.time()) / 3600
+                if _hours_until_end > config.MAX_MARKET_HOURS:
+                    _log_block(username, _q, cid, _s, entry_price_raw, "market_too_long",
+                               "resolves in %.0fh > %.0fh max" % (_hours_until_end, config.MAX_MARKET_HOURS), "diff")
+                    continue
 
             # Event timing: skip if event > MAX_HOURS_BEFORE_EVENT away
             if config.MAX_HOURS_BEFORE_EVENT > 0:
@@ -1738,6 +1745,14 @@ def copy_followed_wallets():
                     logger.info("[SKIP] Markt schliesst in %.0fs: %s", secs_left, question[:40])
                     _log_block(username, question, cid, t.get("side", ""), trader_price,
                                "market_closing", "closes in %.0fs" % secs_left, "activity")
+                    continue
+
+            # Max market duration: skip if market resolves too far in future
+            if config.MAX_MARKET_HOURS > 0 and end_ts:
+                _hours_until_end = (end_ts - _time.time()) / 3600
+                if _hours_until_end > config.MAX_MARKET_HOURS:
+                    _log_block(username, question, cid, t.get("side", ""), trader_price, "market_too_long",
+                               "resolves in %.0fh > %.0fh max" % (_hours_until_end, config.MAX_MARKET_HOURS), "activity")
                     continue
 
 

@@ -83,6 +83,7 @@ MIN_CONVICTION_RATIO = float(os.getenv("MIN_CONVICTION_RATIO", "0"))
 MIN_CONVICTION_RATIO_MAP = os.getenv("MIN_CONVICTION_RATIO_MAP", "")
 ENTRY_TRADE_SEC = int(os.getenv("ENTRY_TRADE_SEC", "300"))
 MAX_HOURS_BEFORE_EVENT = float(os.getenv("MAX_HOURS_BEFORE_EVENT", "0"))  # Only buy X hours before event starts (0=disabled)
+MAX_MARKET_HOURS = float(os.getenv("MAX_MARKET_HOURS", "0"))  # Only buy markets resolving within X hours (0=disabled)
 EVENT_WAIT_MIN_CASH = float(os.getenv("EVENT_WAIT_MIN_CASH", "0"))  # Only queue distant events when cash below $X (0=always queue)
 # Max price drift allowed when executing queued trades (per price range)
 QUEUE_DRIFT_LOTTERY = float(os.getenv("QUEUE_DRIFT_LOTTERY", "0.30"))   # <20c: 30%
