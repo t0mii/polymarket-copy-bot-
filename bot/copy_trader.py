@@ -1438,7 +1438,7 @@ def copy_followed_wallets():
                         "category": _detect_category(td["question"]),
                     }
                     with _buy_lock:
-                        if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= _get_max_copies():
+                        if td["cid"] and db.count_copies_for_market(td["address"], td["cid"]) >= _get_max_copies(td.get("username", "") or td.get("wallet_username", "")):
                             continue
                         if LIVE_MODE and td["cid"]:
                             from bot.order_executor import get_wallet_balance as _gwb2
@@ -1475,7 +1475,7 @@ def copy_followed_wallets():
         _hq_first = list(_hq_entry["sides"].values())[0]
         _hq_addr = _hq_first.get("address", "")
         _hq_cid = _hq_first.get("cid", _hk)
-        if _hq_cid and db.count_copies_for_market(_hq_addr, _hq_cid) >= _get_max_copies():
+        if _hq_cid and db.count_copies_for_market(_hq_addr, _hq_cid) >= _get_max_copies(_hq_first.get("username", "") or _hq_first.get("wallet_username", "")):
             logger.info("[HEDGE-WAIT] Removed from queue (already copied): %s", _hq_first.get("question", "")[:40])
             del _hedge_queue[_hk]
 
