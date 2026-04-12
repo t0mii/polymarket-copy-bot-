@@ -1331,17 +1331,40 @@ def get_autonomous_performance(days: int = 14, mode: str = None) -> list:
 
 # === Equity Curve Helper ===
 
-def get_equity_curve() -> list:
+def get_equity_curve(period: str = "all") -> list:
+    """Equity curve data. Uses portfolio snapshots for short periods (4h/1d),
+    daily aggregates for longer periods (1w/1m/all)."""
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT DATE(closed_at) as date, "
-            "SUM(pnl_realized) as daily_pnl "
-            "FROM copy_trades WHERE status = 'closed' AND closed_at IS NOT NULL "
-            "GROUP BY DATE(closed_at) ORDER BY date"
-        ).fetchall()
-        result = []
-        cumulative = 0  # PnL only, no starting balance offset
-        for r in rows:
-            cumulative += (r["daily_pnl"] or 0)
-            result.append({"date": r["date"], "value": round(cumulative, 2)})
-        return result
+        if period in ("4h", "1d"):
+            # Use copy_portfolio snapshots (every ~15min) for granular data
+            if period == "4h":
+                cutoff = "-4 hours"
+            else:
+                cutoff = "-24 hours"
+            rows = conn.execute(
+                "SELECT created_at, pnl_total FROM copy_portfolio "
+                "WHERE created_at >= datetime('now', ?, 'localtime') "
+                "ORDER BY created_at",
+                (cutoff,)
+            ).fetchall()
+            return [{"date": r["created_at"], "value": round(r["pnl_total"] or 0, 2)} for r in rows]
+        else:
+            # Daily aggregates for 1w/1m/all
+            if period == "1w":
+                cutoff_sql = "AND closed_at >= datetime('now', '-7 days', 'localtime')"
+            elif period == "1m":
+                cutoff_sql = "AND closed_at >= datetime('now', '-30 days', 'localtime')"
+            else:
+                cutoff_sql = ""
+            rows = conn.execute(
+                "SELECT DATE(closed_at) as date, SUM(pnl_realized) as daily_pnl "
+                "FROM copy_trades WHERE status = 'closed' AND closed_at IS NOT NULL "
+                + cutoff_sql +
+                " GROUP BY DATE(closed_at) ORDER BY date"
+            ).fetchall()
+            result = []
+            cumulative = 0
+            for r in rows:
+                cumulative += (r["daily_pnl"] or 0)
+                result.append({"date": r["date"], "value": round(cumulative, 2)})
+            return result
