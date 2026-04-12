@@ -373,6 +373,18 @@ def check_promotions():
                     "promoted_at = datetime('now','localtime') WHERE address = ?",
                     (cand["address"],)
                 )
+            # CRITICAL: actually add them to FOLLOWED_TRADERS so the bot copies their trades.
+            # Without this, "promoted" was just a DB flag with no real effect.
+            # _add_followed_trader() also seeds NEUTRAL tier defaults in all per-trader maps
+            # via the cold-start fix, so the new trader doesn't fall through to globals.
+            try:
+                from bot.trader_lifecycle import _add_followed_trader
+                _add_followed_trader(cand["address"], cand["username"])
+                logger.info("[DISCOVERY] %s added to FOLLOWED_TRADERS — restart polybot to activate",
+                            cand["username"])
+            except Exception as _e:
+                logger.warning("[DISCOVERY] Failed to add %s to FOLLOWED_TRADERS: %s",
+                               cand["username"], _e)
             try:
                 db.log_activity("promotion", "",
                                 "Trader %s promoted" % cand["username"],
