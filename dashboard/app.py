@@ -581,9 +581,9 @@ def logs_page():
 
 @app.route("/api/logs")
 def api_logs():
-    """Return last N lines of the bot log, optionally filtered."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
+    """Return last N lines of the bot log, optionally filtered.
+    Read-only GET, no auth (matches other dashboard endpoints).
+    """
     lines = min(int(request.args.get("lines", 200)), 5000)
     filt = request.args.get("filter", "").lower()
     try:
