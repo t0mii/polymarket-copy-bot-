@@ -12,7 +12,7 @@ import config
 logger = logging.getLogger(__name__)
 
 LEADERBOARD_URL = "https://data-api.polymarket.com/v1/leaderboard"
-MAX_CANDIDATES = 50
+MAX_CANDIDATES = 100
 PROMOTE_MIN_TRADES = 50
 PROMOTE_MIN_WINRATE = 55.0
 
@@ -22,8 +22,8 @@ _followed_addresses = set()
 POLYSCAN_API = "https://gzydspfquuaudqeztorw.supabase.co/functions/v1/agent-api"
 POLYSCAN_AGENT_ID = "maryyo-copybot"
 MIN_WHALE_WIN_RATE = 55.0   # Min WR to consider a whale
-MIN_WHALE_TRADES = 30       # Min trades for whale validation
-MIN_WHALE_PNL = 500         # Min PnL in USD
+MIN_WHALE_TRADES = 20       # Min trades for whale validation
+MIN_WHALE_PNL = 200         # Min PnL in USD
 
 
 def scan_polyscan_whales():
@@ -137,21 +137,29 @@ def _load_followed():
 
 
 def scan_leaderboard():
-    """Leaderboard scannen und neue Kandidaten finden."""
+    """Leaderboard scannen — multiple Zeitraeume fuer bessere Abdeckung."""
     _load_followed()
     try:
         all_leaders = []
-        for offset in range(0, 100, 50):
-            resp = requests.get(LEADERBOARD_URL, params={
-                "limit": 50, "offset": offset,
-                "timePeriod": "ALL", "orderBy": "PNL"
-            }, timeout=15)
-            resp.raise_for_status()
-            page = resp.json()
-            if not page:
-                break
-            all_leaders.extend(page)
+        seen_addresses = set()
+        # ALL-TIME + 30d + 7d + 1d — findet etablierte UND aufsteigende Trader
+        for period in ["ALL", "30d", "7d", "1d"]:
+            for offset in range(0, 100, 50):
+                resp = requests.get(LEADERBOARD_URL, params={
+                    "limit": 50, "offset": offset,
+                    "timePeriod": period, "orderBy": "PNL"
+                }, timeout=15)
+                resp.raise_for_status()
+                page = resp.json()
+                if not page:
+                    break
+                for entry in page:
+                    addr = (entry.get("proxyWallet") or entry.get("userAddress") or "").lower()
+                    if addr and addr not in seen_addresses:
+                        seen_addresses.add(addr)
+                        all_leaders.append(entry)
         leaders = all_leaders
+        logger.info("[DISCOVERY] Scanned 4 periods (ALL/30d/7d/1d), %d unique traders", len(leaders))
     except Exception as e:
         logger.error("[DISCOVERY] Leaderboard fetch failed: %s", e)
         return
