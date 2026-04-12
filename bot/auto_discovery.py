@@ -318,10 +318,17 @@ def check_promotions():
             # Without this, "promoted" was just a DB flag with no real effect.
             # _add_followed_trader() also seeds NEUTRAL tier defaults in all per-trader maps
             # via the cold-start fix, so the new trader doesn't fall through to globals.
+            #
+            # Plus: write to wallets DB directly so the bot picks them up on the next
+            # copy_followed_wallets() scan WITHOUT needing a restart. The bot reads
+            # followed wallets from DB at runtime (db.get_followed_wallets()), so this
+            # makes promotion truly automatic.
             try:
                 from bot.trader_lifecycle import _add_followed_trader
                 _add_followed_trader(cand["address"], cand["username"])
-                logger.info("[DISCOVERY] %s added to FOLLOWED_TRADERS — restart polybot to activate",
+                # Also insert into wallets DB so the running bot sees them immediately.
+                db.add_followed_wallet(cand["address"], cand["username"])
+                logger.info("[DISCOVERY] %s now LIVE — added to settings.env + wallets DB (no restart needed)",
                             cand["username"])
             except Exception as _e:
                 logger.warning("[DISCOVERY] Failed to add %s to FOLLOWED_TRADERS: %s",
