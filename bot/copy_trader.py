@@ -282,6 +282,11 @@ def _reload_maps():
             cats = {c.strip().lower() for c in parts[1].split("|") if c.strip()}
             _CATEGORY_BLACKLIST[name] = cats
 
+    # PATCH-026: hot-reload HEDGE_WAIT_TRADERS
+    _hw_raw = vals.get("HEDGE_WAIT_TRADERS", "")
+    if _hw_raw:
+        config.HEDGE_WAIT_TRADERS = _hw_raw
+
     logger.info("[RELOAD] Settings maps refreshed (%d trader configs)", len(_BET_SIZE_MAP))
 
 # Category keywords for market question detection

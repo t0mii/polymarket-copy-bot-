@@ -29,7 +29,7 @@ MOMENTUM_MAX_PRICE = 0.85
 
 def _get_current_balance() -> float:
     stats = db.get_copy_trade_stats()
-    return config.STARTING_BALANCE + stats["total_pnl"]
+    return config.STARTING_BALANCE + stats.get("total_pnl", 0)
 
 
 def _get_autonomous_budget() -> float:

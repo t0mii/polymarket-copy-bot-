@@ -43,9 +43,11 @@ def get_kelly_multiplier(trader_name):
     wins = r["wins"] or 0
     wr = wins / cnt if cnt > 0 else 0
     avg_win = r["avg_win"] or 0
-    avg_loss = r["avg_loss"] or 0.01
+    avg_loss = r["avg_loss"]
+    if not avg_loss or avg_loss <= 0:
+        return 1.0  # Insufficient loss data
 
-    if avg_loss <= 0 or avg_win <= 0:
+    if avg_win <= 0:
         return 1.0
 
     wl_ratio = avg_win / avg_loss

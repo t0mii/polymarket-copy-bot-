@@ -185,6 +185,7 @@ def api_live_data():
 
     # Real open positions — fetch directly with currentValue/initialValue
     open_positions = []
+    all_raw = []
     try:
         all_raw = []
         _offset = 0
@@ -903,7 +904,7 @@ def api_close_trade(trade_id):
     # Get the trade from DB
     with get_connection() as conn:
         trade = conn.execute(
-            "SELECT id, condition_id, side, entry_price, size, market_question, wallet_username "
+            "SELECT id, condition_id, side, entry_price, size, market_question, wallet_username, actual_entry_price, actual_size "
             "FROM copy_trades WHERE id=? AND status='open'", (trade_id,)
         ).fetchone()
 
@@ -1405,7 +1406,7 @@ def api_trader_performance():
             ).fetchone()
             # Count total copied trades (all time from copy_trades)
             copied = conn.execute(
-                "SELECT COUNT(*) as cnt FROM copy_trades WHERE wallet_username = ? AND (actual_size > 0 OR shares_held > 0) AND created_at > '2026-04-12 16:00:00'", (name,)
+                "SELECT COUNT(*) as cnt FROM copy_trades WHERE wallet_username = ? AND (actual_size > 0 OR shares_held > 0) AND created_at > datetime('now', '-30 days', 'localtime')", (name,)
             ).fetchone()
             d["copied_trades"] = copied["cnt"] if copied else 0
             # 1d rolling stats from copy_trades directly
