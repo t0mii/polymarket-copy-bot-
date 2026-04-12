@@ -1246,10 +1246,7 @@ def _find_stream(market_question: str) -> dict:
 
 
 @app.route("/api/stream/find")
-def api_stream_find():
     """Find livestream URL for a market question."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     question = request.args.get("q", "")
     if not question:
         return jsonify({"error": "missing q parameter"}), 400
@@ -1312,20 +1309,14 @@ def api_copy_history():
 # --- AI Analysis Endpoints ---
 
 @app.route("/api/ai/blocked-stats")
-def api_blocked_stats():
     """Get blocked trade statistics."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     hours = int(request.args.get("hours", 48))
     stats = db.get_blocked_trade_stats(hours=hours)
     return jsonify(stats)
 
 
 @app.route("/api/ai/blocked-trades")
-def api_blocked_trades():
     """Get recent blocked trades."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     hours = int(request.args.get("hours", 48))
     limit = int(request.args.get("limit", 200))
     trades = db.get_blocked_trades_since(hours=hours, limit=limit)
@@ -1333,10 +1324,7 @@ def api_blocked_trades():
 
 
 @app.route("/api/ai/recommendations")
-def api_ai_recommendations():
     """Get AI recommendations."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     limit = int(request.args.get("limit", 5))
     recs = db.get_recommendations(limit=limit)
     return jsonify(recs)
@@ -1563,10 +1551,7 @@ _TRADER_SPECIALS = {
 
 
 @app.route("/api/fun/trash-talk")
-def api_trash_talk():
     """Generate AI trash talk for recent trades."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     talks = []
     with db.get_connection() as conn:
         # Last 10 closed trades
@@ -1610,10 +1595,7 @@ def api_trash_talk():
 
 
 @app.route("/api/fun/trader-cards")
-def api_trader_cards():
     """Trader trading card data with stats, titles, specials."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     cards = []
     with db.get_connection() as conn:
         traders = conn.execute(
@@ -1674,10 +1656,7 @@ def api_trader_cards():
 
 
 @app.route("/api/fun/ticker")
-def api_ticker():
     """Live ticker tape data — last 20 events."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     events = []
     with db.get_connection() as conn:
         rows = conn.execute(
@@ -1696,10 +1675,7 @@ def api_ticker():
 
 
 @app.route("/api/fun/daily-pnl")
-def api_daily_pnl():
     """Daily P&L for konfetti check + calendar heatmap."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     with db.get_connection() as conn:
         rows = conn.execute(
             "SELECT DATE(closed_at) as day, ROUND(SUM(pnl_realized), 2) as pnl, COUNT(*) as trades "
@@ -1712,10 +1688,7 @@ def api_daily_pnl():
 
 
 @app.route("/api/upgrade/clv")
-def api_clv():
     """CLV tracking stats."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     from bot.clv_tracker import get_clv_by_trader, update_clv_for_closed_trades
     try:
         overall = update_clv_for_closed_trades()
@@ -1732,10 +1705,7 @@ def reports_gazette():
 
 
 @app.route("/api/fun/daily-reports")
-def api_daily_reports():
     """Latest daily reports for gazette."""
-    if not _check_auth():
-        return jsonify({"error": "unauthorized"}), 403
     import json as _json
     with db.get_connection() as conn:
         rows = conn.execute(
