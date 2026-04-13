@@ -1774,7 +1774,9 @@ def api_paper_events():
 def api_paper_trades_list():
     """Flat list of individual paper trades (open + closed) joined with candidate
     username and lifecycle state. Used by the brain page bottom section.
-    Newest first, capped at 200 rows."""
+    Newest first, capped at 200 rows. For OPEN trades the endpoint fetches the
+    latest price from ws_price_tracker and computes live unrealized PnL so the
+    table reflects reality (the DB row itself is only updated on close)."""
     limit = min(int(request.args.get("limit", 200)), 1000)
     try:
         with db.get_connection() as conn:
@@ -1788,10 +1790,37 @@ def api_paper_trades_list():
                 "FROM paper_trades pt "
                 "LEFT JOIN trader_lifecycle tl ON tl.address = pt.candidate_address "
                 "LEFT JOIN trader_candidates tc ON tc.address = pt.candidate_address "
-                "ORDER BY COALESCE(pt.closed_at, pt.created_at) DESC "
+                # Closed trades first (they have real pnl), newest of each group first
+                "ORDER BY CASE WHEN pt.status='closed' THEN 0 ELSE 1 END, "
+                "COALESCE(pt.closed_at, pt.created_at) DESC "
                 "LIMIT ?", (limit,)
             ).fetchall()
             result = [dict(r) for r in rows]
+        # Fill in live price + unrealized PnL for open trades
+        try:
+            from bot.ws_price_tracker import price_tracker
+            for t in result:
+                if t.get("status") != "open":
+                    continue
+                cid = t.get("condition_id")
+                side = (t.get("side") or "YES").upper()
+                live = None
+                try:
+                    live = price_tracker.get_price(cid, side)
+                except Exception:
+                    live = None
+                if live is not None:
+                    t["current_price"] = round(float(live), 4)
+                    entry = float(t.get("entry_price") or 0)
+                    if entry > 0:
+                        # Paper bet sized 1-unit, PnL = side * (price - entry) * (1/entry) shares
+                        shares = 1.0 / entry
+                        if side == "NO":
+                            t["pnl"] = round(shares * (entry - live), 4)
+                        else:
+                            t["pnl"] = round(shares * (live - entry), 4)
+        except Exception:
+            pass
         return jsonify({"trades": result, "count": len(result)})
     except Exception as e:
         return jsonify({"trades": [], "count": 0, "error": str(e)})

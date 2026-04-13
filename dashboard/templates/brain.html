@@ -1726,11 +1726,17 @@ function renderPaperTrades(data){
     tr.appendChild(td(entry>0?Math.round(entry*100)+'c':'-'));
     // Current
     var cur=Number(t.current_price||0);
-    tr.appendChild(td(cur>0?Math.round(cur*100)+'c':'-'));
-    // PnL
+    var isOpen=(t.status||'')==='open';
+    var curEl=document.createElement('span');
+    if(cur>0){curEl.textContent=Math.round(cur*100)+'c'}
+    else if(isOpen){curEl.textContent='pending';curEl.style.color='var(--text-dim)';curEl.style.fontStyle='italic'}
+    else{curEl.textContent='-'}
+    tr.appendChild(td(curEl));
+    // PnL — only show for closed trades; open shows "—"
     var pnl=Number(t.pnl||0);
-    var pnlEl=document.createElement('span');pnlEl.className=pnlClass(pnl);
-    pnlEl.textContent=pnl===0?'$0.00':((pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2));
+    var pnlEl=document.createElement('span');
+    if(isOpen){pnlEl.textContent='—';pnlEl.style.color='var(--text-dim)'}
+    else{pnlEl.className=pnlClass(pnl);pnlEl.textContent=pnl===0?'$0.00':((pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2))}
     tr.appendChild(td(pnlEl));
     // Status badge
     var badge=document.createElement('span');
@@ -1980,7 +1986,18 @@ async function refresh(){
 }
 
 refresh();
-setInterval(refresh,15000);
+// Live polling — matches dashboard.html cadence (~8s). Uses a web worker so the
+// interval keeps ticking even when the tab is backgrounded and the main event
+// loop is throttled. SSE events trigger additional partial refreshes on top.
+try{
+  var _pollWorker=new Worker(URL.createObjectURL(new Blob(
+    ['setInterval(function(){postMessage(1)},8000)'],
+    {type:'application/javascript'}
+  )));
+  _pollWorker.onmessage=function(){refresh()};
+}catch(e){
+  setInterval(refresh,8000);
+}
 
 /* Listen for live events via SSE — append to merged stream + fire neural packets */
 try{
