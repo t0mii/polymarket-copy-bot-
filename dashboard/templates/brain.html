@@ -359,7 +359,7 @@ async function refresh(){
       const pnl1d=t.pnl_1d||0;const wr1d=t.winrate_1d||0;const copied=t.copied_trades||0;
       return `<tr${isOnFire?' class="on-fire"':''}>
         <td>${dot}</td>
-        <td style="color:var(--gold);font-weight:600">${t.trader_name} ${isOnFire?'&#x1F525;':''}</td>
+        <td style="font-weight:600"><a href="https://polymarket.com/profile/${t.trader_name}" target="_blank" style="color:var(--gold);text-decoration:none">${t.trader_name}</a> ${isOnFire?'&#x1F525;':''}</td>
         <td style="font-size:.7rem;font-weight:600">${copied}</td>
         <td><span class="power-level ${pl.cls}">${pl.power}</span> <span style="font-size:.55rem;color:var(--text-dim)">${pl.tier}</span></td>
         <td>${streak>0?'&#x1F525;'.repeat(Math.min(streak,5)):'--'}</td>
@@ -388,7 +388,7 @@ async function refresh(){
       const bar=Math.min(days/3*100,100);
       const ready=days>=3&&(p.paper_pnl||0)>0&&(p.paper_trades||0)>=10;
       return `<tr>
-        <td style="color:var(--gold);font-weight:600;padding:4px">${p.username||p.address.slice(0,10)}</td>
+        <td style="font-weight:600;padding:4px"><a href="https://polymarket.com/profile/${p.address}" target="_blank" style="color:var(--gold);text-decoration:none">${p.username||p.address.slice(0,10)}</a></td>
         <td style="text-align:center;font-size:.6rem">${p.status}</td>
         <td style="text-align:center"><div style="background:var(--bg-card);border-radius:4px;overflow:hidden;height:12px;width:50px;display:inline-block;position:relative"><div style="height:100%;width:${bar}%;background:${ready?'var(--green)':'var(--gold)'};border-radius:4px"></div><span style="position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:.55rem;line-height:12px">${days.toFixed(1)}d</span></div></td>
         <td style="text-align:center;font-size:.65rem">${p.paper_trades||0}</td>
@@ -444,7 +444,7 @@ async function refresh(){
   const ca=await fetchJSON('/api/upgrade/candidates');
   if(ca&&ca.candidates){
     document.getElementById('tCandidates').innerHTML=ca.candidates.filter(c=>c.status!=="inactive").slice(0,10).map(c=>`<tr>
-      <td style="color:var(--gold)">${c.username||c.address.slice(0,8)}</td>
+      <td><a href="https://polymarket.com/profile/${c.address||c.username}" target="_blank" style="color:var(--gold);text-decoration:none">${c.username||c.address.slice(0,8)}</a></td>
       <td class="${pnlClass(c.profit_total)}">$${Number(c.profit_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
       <td>$${Number(c.volume_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
       <td>${c.total||0}</td>
