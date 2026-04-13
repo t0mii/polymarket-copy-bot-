@@ -18,6 +18,7 @@ import re
 from datetime import datetime, timedelta
 
 from database import db
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -27,30 +28,30 @@ SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 # Tier-Definitionen — baked-in defaults. Overridable via settings.env (TIER_* keys).
 # Classification thresholds (pnl_7d, wr_7d) stay hardcoded in _classify_trader().
 _TIER_DEFAULTS = {
-    'star': {        # 7d P&L > +$5, WR > 55%
+    'star': {        # PnL > +10% portfolio, WR > 55%
         'bet_size': 0.07, 'exposure': 0.40, 'conviction': 0,
-        'min_entry': 0.30, 'max_entry': 0.85, 'min_trader_usd': 3,
+        'min_entry': 0.30, 'max_entry': 0.90, 'min_trader_usd': 3,
         'take_profit': 3.0, 'stop_loss': 0.60, 'max_copies': 3, 'hedge_wait': 30,
     },
-    'solid': {       # 7d P&L > $0, WR > 50%
+    'solid': {       # PnL > +2% portfolio, WR > 45%
         'bet_size': 0.05, 'exposure': 0.25, 'conviction': 0,
-        'min_entry': 0.35, 'max_entry': 0.80, 'min_trader_usd': 5,
+        'min_entry': 0.35, 'max_entry': 0.90, 'min_trader_usd': 3,
         'take_profit': 2.5, 'stop_loss': 0.50, 'max_copies': 2, 'hedge_wait': 45,
     },
-    'neutral': {
-        'bet_size': 0.03, 'exposure': 0.10, 'conviction': 0,
-        'min_entry': 0.38, 'max_entry': 0.75, 'min_trader_usd': 5,
+    'neutral': {     # PnL > -8% portfolio, WR > 35%
+        'bet_size': 0.04, 'exposure': 0.15, 'conviction': 0,
+        'min_entry': 0.35, 'max_entry': 0.90, 'min_trader_usd': 5,
         'take_profit': 2.0, 'stop_loss': 0.40, 'max_copies': 1, 'hedge_wait': 60,
     },
-    'weak': {
-        'bet_size': 0.02, 'exposure': 0.03, 'conviction': 0.5,
-        'min_entry': 0.42, 'max_entry': 0.70, 'min_trader_usd': 8,
+    'weak': {        # PnL > -15% portfolio
+        'bet_size': 0.03, 'exposure': 0.08, 'conviction': 0.3,
+        'min_entry': 0.38, 'max_entry': 0.85, 'min_trader_usd': 5,
         'take_profit': 1.5, 'stop_loss': 0.30, 'max_copies': 1, 'hedge_wait': 90,
     },
-    'terrible': {    # 7d P&L < -$10
-        'bet_size': 0.01, 'exposure': 0.005, 'conviction': 3.0,
-        'min_entry': 0.45, 'max_entry': 0.65, 'min_trader_usd': 10,
-        'take_profit': 1.0, 'stop_loss': 0.20, 'max_copies': 1, 'hedge_wait': 120,
+    'terrible': {    # PnL <= -15% portfolio
+        'bet_size': 0.015, 'exposure': 0.03, 'conviction': 1.5,
+        'min_entry': 0.42, 'max_entry': 0.75, 'min_trader_usd': 8,
+        'take_profit': 1.0, 'stop_loss': 0.25, 'max_copies': 1, 'hedge_wait': 120,
     },
 }
 
@@ -67,6 +68,47 @@ _TIER_FIELD_TO_ENV = {
     'max_copies':     'TIER_MAX_COPIES',
     'hedge_wait':     'TIER_HEDGE_WAIT',
 }
+
+# Classification thresholds — percentage of portfolio for PnL, absolute for WR.
+# All configurable via settings.env TIER_PNL_*/TIER_WR_* keys.
+_CLASSIFY_DEFAULTS = {
+    'pnl_star': 0.10,    # 7d PnL > +10% of portfolio
+    'wr_star': 55,
+    'pnl_solid': 0.02,   # 7d PnL > +2% of portfolio
+    'wr_solid': 45,
+    'pnl_neutral': -0.08, # 7d PnL > -8% of portfolio
+    'wr_neutral': 35,
+    'pnl_weak': -0.15,   # 7d PnL > -15% of portfolio
+    # TERRIBLE = everything below WEAK
+}
+
+def _load_classify_thresholds():
+    """Load classification thresholds from settings.env, fall back to _CLASSIFY_DEFAULTS."""
+    thresholds = dict(_CLASSIFY_DEFAULTS)
+    try:
+        from bot.settings_lock import read_settings
+        content = read_settings()
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            k, _, v = line.partition('=')
+            k = k.strip().upper()
+            v = v.strip()
+            mapping = {
+                'TIER_PNL_STAR': 'pnl_star', 'TIER_WR_STAR': 'wr_star',
+                'TIER_PNL_SOLID': 'pnl_solid', 'TIER_WR_SOLID': 'wr_solid',
+                'TIER_PNL_NEUTRAL': 'pnl_neutral', 'TIER_WR_NEUTRAL': 'wr_neutral',
+                'TIER_PNL_WEAK': 'pnl_weak',
+            }
+            if k in mapping:
+                try:
+                    thresholds[mapping[k]] = float(v)
+                except ValueError:
+                    pass
+    except Exception:
+        pass
+    return thresholds
 
 
 def _parse_tier_map(raw: str) -> dict:
@@ -117,23 +159,30 @@ def _load_tiers() -> dict:
     return tiers
 
 
-def _classify_trader(pnl_7d, winrate_7d, trades_7d, pnl_30d, winrate_30d):
-    """Trader in Tier einordnen basierend auf 7d + 30d Daten."""
+def _classify_trader(pnl_7d, winrate_7d, trades_7d, pnl_30d, winrate_30d, portfolio_value=100):
+    """Trader in Tier einordnen — Schwellen relativ zum Portfolio-Wert.
+
+    Alle Schwellen konfigurierbar via settings.env TIER_PNL_*/TIER_WR_* Keys.
+    PnL-Schwellen sind Prozent vom Portfolio (z.B. -0.08 = -8% = -$6.16 bei $77).
+    """
+    th = _load_classify_thresholds()
+    pv = max(portfolio_value, 10)  # floor at $10 to avoid division issues
+
     if trades_7d < 3:
-        # Wenig 7d-Daten: nutze 30d als Fallback
-        if pnl_30d > 10 and winrate_30d > 52:
+        # Wenig 7d-Daten: nutze 30d mit 2x breiteren Schwellen
+        if pnl_30d > pv * th['pnl_solid'] * 2 and winrate_30d > th['wr_solid']:
             return 'solid'
-        elif pnl_30d < -20:
+        elif pnl_30d < pv * th['pnl_weak'] * 2:
             return 'weak'
         return 'neutral'
 
-    if pnl_7d > 5 and winrate_7d > 55:
+    if pnl_7d > pv * th['pnl_star'] and winrate_7d > th['wr_star']:
         return 'star'
-    if pnl_7d > 0 and winrate_7d > 50:
+    if pnl_7d > pv * th['pnl_solid'] and winrate_7d > th['wr_solid']:
         return 'solid'
-    if pnl_7d > -5 and winrate_7d > 45:
+    if pnl_7d > pv * th['pnl_neutral'] and winrate_7d > th['wr_neutral']:
         return 'neutral'
-    if pnl_7d > -10:
+    if pnl_7d > pv * th['pnl_weak']:
         return 'weak'
     return 'terrible'
 
@@ -233,6 +282,21 @@ def auto_tune():
     if not trader_names:
         return
 
+    # PATCH-037: Get portfolio value for percentage-based tier thresholds
+    portfolio_value = config.STARTING_BALANCE  # fallback
+    try:
+        from bot.order_executor import get_wallet_balance
+        import requests
+        cash = get_wallet_balance()
+        r = requests.get("https://data-api.polymarket.com/positions", params={
+            "user": config.POLYMARKET_FUNDER, "limit": 500, "sizeThreshold": 0
+        }, timeout=15)
+        pos_val = sum(float(p.get("currentValue", 0) or 0) for p in (r.json() if r.ok else []))
+        portfolio_value = cash + pos_val
+        logger.info("[TUNER] Portfolio value: $%.2f (cash $%.2f + positions $%.2f)", portfolio_value, cash, pos_val)
+    except Exception as e:
+        logger.warning("[TUNER] Portfolio fetch failed, using STARTING_BALANCE $%.0f: %s", portfolio_value, e)
+
     classifications = {}
     for name in trader_names:
         s7 = db.get_trader_rolling_pnl(name, 7)
@@ -246,7 +310,7 @@ def auto_tune():
         pnl30 = s30.get("total_pnl", 0) or 0
         wr30 = round(wins30 / cnt30 * 100, 1) if cnt30 > 0 else 50
 
-        tier = _classify_trader(pnl7, wr7, cnt7, pnl30, wr30)
+        tier = _classify_trader(pnl7, wr7, cnt7, pnl30, wr30, portfolio_value=portfolio_value)
         blacklist = _get_category_blacklist(name)
 
         classifications[name] = {
