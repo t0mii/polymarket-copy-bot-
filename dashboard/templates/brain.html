@@ -40,6 +40,8 @@ html.wide .app{max-width:none;padding:0 10px 8px}
   color:var(--text-mid);cursor:pointer;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase}
 .stream-filter .sbtn:hover{border-color:var(--gold-dim);color:var(--gold)}
 .stream-filter .sbtn.act{color:var(--gold);border-color:var(--gold);background:rgba(201,168,76,0.06)}
+.stream-filter .sbtn.toggle{margin-left:auto;color:var(--text-dim);border-style:dashed;opacity:.6}
+.stream-filter .sbtn.toggle.act{color:var(--cyan);border-color:var(--cyan);background:rgba(34,211,238,0.06);opacity:1;border-style:solid}
 .stream-box{border:1px solid var(--border);background:var(--bg2);height:168px;overflow-y:auto;
   font-family:var(--mono);font-size:.72rem;line-height:1.5;padding:4px 0}
 .stream-box::-webkit-scrollbar{width:4px}
@@ -549,6 +551,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
           <button class="sbtn" data-act="TIGHTEN_FILTER">TIGHTEN</button>
           <button class="sbtn" data-act="BLACKLIST_CATEGORY">BLACKLIST</button>
           <button class="sbtn" data-act="PAUSE_TRADER">PAUSE</button>
+          <button class="sbtn toggle act" id="togglePaper" type="button" title="Show/hide paper events in the ALL view">&#9679; paper</button>
         </div>
       </div>
       <div class="stream-box" id="streamBox"></div>
@@ -1371,6 +1374,7 @@ function renderCategoryHeatmap(ch){
 var allDecisions=[];    // legacy — kept so other renderers still work
 var streamEvents=[];    // unified merged list
 var activeActionFilter='';
+var showPaper=true;     // toggle for paper events in non-PAPER filter views
 /* Unified event shape: {kind:'DECISION'|'BLOCKED'|'TRADE', action, target, reason, ts, cssClass} */
 
 function normDecision(d){
@@ -1463,6 +1467,8 @@ function buildStreamRow(e,fresh){
 }
 
 function matchFilter(e){
+  // "Hide paper" toggle applies to every view except the explicit PAPER filter
+  if(!showPaper&&activeActionFilter!=='PAPER'&&e.kind==='PAPER')return false;
   if(!activeActionFilter)return true;
   if(activeActionFilter==='DECISION')return e.kind==='DECISION';
   if(activeActionFilter==='BLOCKED')return e.kind==='BLOCKED';
@@ -1494,14 +1500,23 @@ function prependStreamEvent(e){
   else box.appendChild(row);
   while(box.children.length>200)box.removeChild(box.lastChild);
 }
-$$('#streamFilter .sbtn').forEach(function(b){
+$$('#streamFilter .sbtn:not(.toggle)').forEach(function(b){
   b.addEventListener('click',function(){
-    $$('#streamFilter .sbtn').forEach(function(x){x.classList.remove('act')});
+    $$('#streamFilter .sbtn:not(.toggle)').forEach(function(x){x.classList.remove('act')});
     b.classList.add('act');
     activeActionFilter=b.dataset.act||'';
     renderBrainStream();
   });
 });
+(function(){
+  var tog=$('#togglePaper');
+  if(!tog)return;
+  tog.addEventListener('click',function(){
+    showPaper=!showPaper;
+    tog.classList.toggle('act',showPaper);
+    renderBrainStream();
+  });
+})();
 
 /* (legacy no-op hook — kept for backwards callers) */
 function renderBrainLog(){
@@ -1876,10 +1891,13 @@ function renderFieldMini(traders,cats,scores,paper){
   box.appendChild(mcard('7d Win Rate',fmt(wr,1)+'%',wr>=55?'up':wr>=45?'cy':'dn','pooled'));
   box.appendChild(mcard('7d Trades',String(totalTrades),'cy','closed'));
   box.appendChild(mcard('Scored Trades',String(totScored),'cy','ML gated'));
-  box.appendChild(mcard('Best Trader',bestT?(bestT.trader_name||'').slice(0,10):'--','up',bestT?((bestT.total_pnl||0>=0?'+$':'-$')+Math.abs(bestT.total_pnl||0).toFixed(2)):''));
-  box.appendChild(mcard('Worst Trader',worstT?(worstT.trader_name||'').slice(0,10):'--','dn',worstT?((worstT.total_pnl||0>=0?'+$':'-$')+Math.abs(worstT.total_pnl||0).toFixed(2)):''));
-  box.appendChild(mcard('Best Category',bestCat?(bestCat.category||'').slice(0,10):'--','up',bestCat?((bestCat.total_pnl||0>=0?'+$':'-$')+Math.abs(bestCat.total_pnl||0).toFixed(2)):''));
-  box.appendChild(mcard('Worst Category',worstCat?(worstCat.category||'').slice(0,10):'--','dn',worstCat?((worstCat.total_pnl||0>=0?'+$':'-$')+Math.abs(worstCat.total_pnl||0).toFixed(2)):''));
+  // Signed-dollar formatter (fixes a precedence bug where `(val||0>=0?'+$':'-$')`
+  // parsed as `(val) || (0>=0 ? '+$' : '-$')` → always rendered positive regardless of value.
+  function sd(v){var n=Number(v||0);return (n>=0?'+$':'-$')+Math.abs(n).toFixed(2)}
+  box.appendChild(mcard('Best Trader',bestT?(bestT.trader_name||'').slice(0,10):'--','up',bestT?sd(bestT.total_pnl):''));
+  box.appendChild(mcard('Worst Trader',worstT?(worstT.trader_name||'').slice(0,10):'--','dn',worstT?sd(worstT.total_pnl):''));
+  box.appendChild(mcard('Best Category',bestCat?(bestCat.category||'').slice(0,10):'--','up',bestCat?sd(bestCat.total_pnl):''));
+  box.appendChild(mcard('Worst Category',worstCat?(worstCat.category||'').slice(0,10):'--','dn',worstCat?sd(worstCat.total_pnl):''));
   box.appendChild(mcard('Categories','+'+cList.filter(function(c){return (c.total_pnl||0)>0}).length+' / -'+cList.filter(function(c){return (c.total_pnl||0)<0}).length,'cy','green / red'));
   box.appendChild(mcard('Paper Traders',String(paperN.length),'cy','testing'));
   box.appendChild(mcard('Paper P&L',(paperPnl>=0?'+$':'-$')+Math.abs(paperPnl).toFixed(2),paperPnl>=0?'up':'dn','shadow trading'));
