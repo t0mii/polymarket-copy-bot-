@@ -252,3 +252,12 @@ MAX_RESOLVE_HOURS = int(os.getenv("MAX_RESOLVE_HOURS", "24"))
 # to be silently auto-followed. Now gated: default false, user must explicitly
 # enable OR add the wallet manually via dashboard/settings.
 AUTO_DISCOVERY_AUTO_PROMOTE = os.getenv('AUTO_DISCOVERY_AUTO_PROMOTE', 'false').lower() in ('true', '1', 'yes')
+
+# --- Performance Since ---
+# ISO timestamp. When set, all trader/category performance aggregations
+# (get_trader_rolling_pnl, brain._classify_losses category WR, trade_scorer
+# category WR) exclude trades with closed_at < this value. Use this to
+# reset the "performance counter" after a settings regime change so brain
+# doesn't re-apply blocks based on stale pre-regime data.
+# Empty string = no filter (backward compat).
+PERFORMANCE_SINCE = os.getenv('PERFORMANCE_SINCE', '').strip()

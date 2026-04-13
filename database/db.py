@@ -1092,6 +1092,23 @@ def update_recommendation_status(rec_id: int, status: str):
 from datetime import datetime, timedelta
 
 
+def get_performance_since() -> str:
+    """Return config.PERFORMANCE_SINCE as SQL timestamp string, or empty if unset.
+
+    Empty string means "no filter" — caller should check and skip the
+    AND-clause. This keeps backward compat when PERFORMANCE_SINCE is not
+    configured.
+    """
+    try:
+        import config
+        ps = getattr(config, "PERFORMANCE_SINCE", "") or ""
+        if ps:
+            return datetime.fromisoformat(ps).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+    return ""
+
+
 def get_trader_rolling_pnl(trader_name: str, days: int = 7, min_verified: int = 10) -> dict:
     """Rolling P&L fuer einen Trader ueber die letzten X Tage.
 
@@ -1101,14 +1118,15 @@ def get_trader_rolling_pnl(trader_name: str, days: int = 7, min_verified: int = 
     trades using pnl_realized (less accurate, includes formula-based estimates
     for old trades that lacked fill verification).
 
-    This was a critical bug: the auto_tuner was classifying KING7777777 as WEAK
-    because his 125 trades had a mix of 11 verified (+$48.62) and 114
-    unverified (-$41.27) summing to $+7.35. The 11 verified slice alone shows
-    he's a STAR (81.8% WR, +73% ROI). The 114 unverified slice has unreliable
-    pnl_realized values from before the fill-verification was working.
+    If config.PERFORMANCE_SINCE is set, the effective cutoff is
+    max(days-ago, PERFORMANCE_SINCE) — trades before the regime change are
+    excluded from both verified and fallback branches.
     """
     with get_connection() as conn:
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        performance_since = get_performance_since()
+        if performance_since and performance_since > cutoff:
+            cutoff = performance_since
         verified_count = conn.execute(
             "SELECT COUNT(*) FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
             "AND closed_at >= ? AND usdc_received IS NOT NULL AND actual_size IS NOT NULL",
