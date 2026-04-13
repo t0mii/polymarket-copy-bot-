@@ -290,22 +290,21 @@ class TestBrainOscillationMutex(unittest.TestCase):
 
     def test_revert_skips_trader_in_mutex(self):
         """_revert_obsolete_tightens must log SKIP and continue without
-        calling log_brain_decision for any trader in _tightened_this_cycle.
-        We verify by monkey-patching _classify_trader to never be reached
-        for the tightened trader."""
-        import io
-        import logging
+        calling get_trader_rolling_pnl for any trader in
+        _tightened_this_cycle. Uses assertLogs for test-isolation-safe
+        log capture (previous StreamHandler approach was flaky under
+        `unittest discover` when database.db got reloaded between tests
+        and invalidated the handler's logger binding)."""
         from unittest.mock import patch
 
-        self.brain._tightened_this_cycle.add("KING7777777")
-
-        buf = io.StringIO()
-        handler = logging.StreamHandler(buf)
-        handler.setLevel(logging.INFO)
-        brain_logger = logging.getLogger("bot.brain")
-        brain_logger.addHandler(handler)
-        old_level = brain_logger.level
-        brain_logger.setLevel(logging.INFO)
+        # Re-import brain fresh to defeat any reload pollution from
+        # prior tests in the same discover run.
+        import importlib
+        import bot.brain
+        importlib.reload(bot.brain)
+        brain = bot.brain
+        brain._tightened_this_cycle.clear()
+        brain._tightened_this_cycle.add("KING7777777")
 
         min_map_fake = {"KING7777777": 0.43, "Jargs": 0.15}
         max_map_fake = {"KING7777777": 0.70, "Jargs": 0.92}
@@ -318,19 +317,16 @@ class TestBrainOscillationMutex(unittest.TestCase):
             calls.append(trader)
             return {"total_pnl": 10.0, "cnt": 5, "wins": 4}
 
-        try:
-            with patch.object(self.brain, "_parse_map", side_effect=fake_parse_map), \
-                 patch.object(self.brain, "_read_settings", return_value="MIN_ENTRY_PRICE_MAP=\nMAX_ENTRY_PRICE_MAP=\n"), \
-                 patch.object(self.brain.db, "get_trader_rolling_pnl", side_effect=fake_get_trader_rolling_pnl):
+        with self.assertLogs("bot.brain", level="INFO") as cm:
+            with patch.object(brain, "_parse_map", side_effect=fake_parse_map), \
+                 patch.object(brain, "_read_settings", return_value="MIN_ENTRY_PRICE_MAP=\nMAX_ENTRY_PRICE_MAP=\n"), \
+                 patch.object(brain.db, "get_trader_rolling_pnl", side_effect=fake_get_trader_rolling_pnl):
                 try:
-                    self.brain._revert_obsolete_tightens()
+                    brain._revert_obsolete_tightens()
                 except Exception:
                     pass  # we only care that the mutex path was exercised
-        finally:
-            brain_logger.removeHandler(handler)
-            brain_logger.setLevel(old_level)
 
-        log_text = buf.getvalue()
+        log_text = "\n".join(cm.output)
         self.assertIn("Skipping RELAX for KING7777777", log_text)
         self.assertNotIn("KING7777777", calls,
                          "get_trader_rolling_pnl should NOT have been called for KING — mutex should have short-circuited")

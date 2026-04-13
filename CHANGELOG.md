@@ -2,6 +2,72 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-13 (Nachmittag) — Profitability round: roster cleanup + zero-risk filter + feedback-loop cleanup + ghost root cause
+
+User directive: "und gib mir zusammenfassung was wir machen sollten um profitabel zu werden" → "nutze superpowers und fixe alles". Focus shifts from bug-hunting to stopping the bleed. Portfolio $320 start → $93.15 = **-71%**. Root cause is the roster: none of the 5 followed traders are profitable on a 7d basis (combined -$182). Fixing ML / dedup / filters is valuable but doesn't change the math if the upstream signal is bad.
+
+### 1. Roster shrunk to KING + Jargs only
+
+Removed from `settings.env` `FOLLOWED_TRADERS` and from every trader-scoped `*_MAP` setting (`MIN_TRADER_USD_MAP`, `MIN_ENTRY_PRICE_MAP`, `MAX_ENTRY_PRICE_MAP`, `MAX_COPIES_PER_MARKET_MAP`, `CATEGORY_BLACKLIST_MAP`, `MIN_CONVICTION_RATIO_MAP`, `TAKE_PROFIT_MAP`):
+- xsaghav (7d -$98.25 / 42.5% WR / 186 trades)
+- sovereign2013 (7d -$40.00 / 46.2% / 173)
+- fsavhlc (7d -$21.05 / 40.0% / 20)
+- aenews2 (idle)
+- 0x3e5b23e9f7 (whale from auto_discovery — was still producing copies via FOLLOWED_TRADERS despite `AUTO_DISCOVERY_AUTO_PROMOTE=false`, exposed by #3145 Peru Keiko Fujimori this morning)
+- 0x6bab41a0dc (same pattern, idle)
+
+`UPDATE wallets SET followed=0` for all 6 (6 rows affected). Post-cleanup `followed=1`: only `Jargs` and `KING7777777`. Deployed via direct server settings rewrite. Backup at `settings.env.bak.1776075832`.
+
+### 2. Zero-risk category filter
+
+New config flags:
+```
+ZERO_RISK_CATEGORIES=cs,lol,valorant,dota
+ZERO_RISK_MIN_PRICE=0.40
+```
+
+New helper `bot/copy_trader.py _is_zero_risk_block(category, trader_price)` → returns True when category ∈ list AND trader_price < threshold. Wired into both buy paths (diff-scan at line ~696 and activity-scan at line ~1701) as an additional filter after the existing `price_range` check. Blocks are logged with `block_reason='zero_risk'` and a clear detail string.
+
+Motivation: esports map markets (CS/LoL/Valorant/Dota) are "bin-or-bust" — unlike sports spreads where losers retain residual value, a lost CS map is worth 0 cents. Concrete recent evidence: #3128 + #3129, both KING7777777 on Counter-Strike Phantom vs HEROIC Academy (Map 1 and Map 2), both bought at 0.266, both resolved to 0, combined loss -$4.62. The filter blocks this exact class of setup going forward. 12 TDD regression tests in `tests/test_zero_risk_filter.py`, including `test_reproduces_3128_and_3129` which pins the real failure.
+
+### 3. Feedback-loop cleanup: 7.2% → 96.8% coverage
+
+Context: ML and scorer diagnostics rely on `trade_scores.outcome_pnl`. Iter 26 flagged coverage at 61/845 = 7.2%. Investigation:
+- 786 NULL-outcome rows were all linked to `copy_trades` rows with `status='baseline'` (the startup-baseline snapshot rows that the bot records for existing wallet holdings but never actually buys). These scores will never have a real outcome because no trade ever happened.
+- Additional 20 rows were fully orphaned (no matching `copy_trades` at all).
+
+Fix: `DELETE FROM trade_scores WHERE outcome_pnl IS NULL AND NOT EXISTS (SELECT 1 FROM copy_trades ct WHERE ct.condition_id=trade_scores.condition_id AND ct.wallet_username=trade_scores.trader_name AND ct.status != 'baseline')`. 784 rows deleted. Post-cleanup: 63 total / 61 outcome-stamped = **96.8% coverage**. DB backup at `scanner.db.bak.1776075832`.
+
+Also revealed the real uniqueness picture of score buckets (after dedup + cleanup):
+- 40-59: 1 unique trade, 0 wins, -$13.43
+- 60-79: 9 unique trades, 2 wins, 22.2% WR, -$12.02
+- 80-100: 3 unique trades, 0 wins, -$7.78
+
+**Total: 13 unique closed trades have been scored. 2 wins.** The earlier "SCORER_INVERTED" flag from iter 25 was entirely a SCORE_SPAM artifact — the 16 rows in the 80-100 bucket were 3 unique trades duplicated 2-7 times. Real scorer performance can't be evaluated on a sample of 13; the scorer isn't broken, it just has no signal because the underlying bot has no signal. Confirmation that scorer fixes alone won't solve profitability.
+
+### 4. Ghost positions root cause (27 positions, $22.04 real chain value)
+
+Reconcile job exposed 27 on-chain positions worth $22.04 total that the DB has marked as `status='closed'`. Previously hypothesized as "legacy / auto_discovery / manual". Actual classification:
+- **15 with `usdc_received = NULL` (chain $14.24)**: close paths that mark the DB as closed without ever calling sell_shares. Top samples: #3127 Peru Keiko Fujimori ($3.34), #1248 Levica Slovenia ($2.32), #3126 Peru Lopez Aliaga ($2.15).
+- **12 with `usdc_received > 0` (chain $7.80)**: partial sells where some USDC came back but shares remained on chain. Top samples: #1669 fsavhlc Iran/Qatar ($2.40 chain, $2.18 recv), sov2013 NHL O/U cluster.
+
+**Root cause**: at least one auto-close code path marks `status=closed` in the DB while the sell order either (a) partially filled and the DB recorded the partial USDC but left the remaining shares, or (b) never fired at all. $22.04 of real money stuck in positions the DB pretends are closed. Going forward they'll resolve naturally and the payout will (or won't) land on chain, but the DB P&L numbers are structurally wrong by that amount.
+
+**NOT FIXED in this round** — fixing requires auditing every close path (AUTO-CLOSE-lost, AUTO-CLOSE-won, trailing-stop, miss-close, FAST-SELL, TAKE-PROFIT, trader-closed-it, Gamma fallback) for correct partial-fill semantics. Scope exceeds this session. Documented as a standalone finding for the next round. User action for this round: none — the money isn't lost, just mis-recorded; positions will resolve organically.
+
+### 5. Brain oscillation mutex test — fixed under `unittest discover`
+
+`test_revert_skips_trader_in_mutex` was passing in isolation but failing under `python -m unittest discover tests` because the StreamHandler capture approach didn't survive the `importlib.reload(database.db)` done by `setup_temp_db()` in other test classes. Switched to `self.assertLogs('bot.brain', level='INFO')` context manager + explicit `importlib.reload(bot.brain)` in the test to force a fresh module reference. 52/52 tests green under discover.
+
+### Summary of user-visible impact
+
+- Bot now copies **only KING + Jargs** (roster shrunk 5→2). xsaghav, sov, fsavhlc, both whales, aenews2 are `followed=0`.
+- CS/LoL/Valorant/Dota underdogs below 40¢ are **blocked automatically**.
+- Feedback metric is now meaningful (96.8% coverage on 63 scored trades).
+- Known $22.04 DB↔chain divergence documented but not fixed — not losing more money, just misrecorded.
+
+All 52/52 unit tests green. Bot restarted cleanly on server. No new errors since restart.
+
 ## 2026-04-13 (Mittag-2) — Iter 25 findings: brain mutex + trade_scores dedup
 
 First ralph iteration after the morning deploy (commit `ba70dbf`) exposed 3 new findings. 2 are real bugs, 1 was a false positive driven by the same spam pattern as the first. All fixed in one commit.

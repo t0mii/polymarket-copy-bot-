@@ -233,6 +233,16 @@ TRAILING_STOP_MARGIN = float(os.getenv('TRAILING_STOP_MARGIN', '0.10'))
 # Min peak gain before trailing activates (e.g. 0.03 = price must have been 3c above entry)
 TRAILING_STOP_ACTIVATE = float(os.getenv('TRAILING_STOP_ACTIVATE', '0.20'))
 
+# --- Zero-Risk Category Filter ---
+# Block underdog copies in esports categories where markets frequently
+# resolve to 0 (not just lose, but total stake loss). Observed 2026-04-13:
+# KING7777777 bought both maps of a CS match at 0.266 and both resolved
+# to 0 (#3128 + #3129, combined -$4.62). Esports maps are "bin-or-bust"
+# — unlike sports spreads where the loser still has meaningful residual
+# value, a lost CS map is worth 0 cents.
+ZERO_RISK_CATEGORIES = os.getenv("ZERO_RISK_CATEGORIES", "cs,lol,valorant,dota")
+ZERO_RISK_MIN_PRICE = float(os.getenv("ZERO_RISK_MIN_PRICE", "0.40"))
+
 AUTONOMOUS_PAPER_MODE = os.getenv("AUTONOMOUS_PAPER_MODE", "true").lower() in ("true", "1", "yes")
 MAX_RESOLVE_HOURS = int(os.getenv("MAX_RESOLVE_HOURS", "24"))
 
