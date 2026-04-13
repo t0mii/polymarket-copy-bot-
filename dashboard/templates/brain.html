@@ -184,6 +184,7 @@ function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').repl
     </table>
   </div>
 
+  
   <!-- Category Heatmap -->
   <div class="sec">
     <div class="sec-hd">Category Heatmap <span class="badge badge-live">LIVE</span></div>
@@ -370,6 +371,34 @@ async function refresh(){
         <td style="font-size:.65rem">${t._tuner||''} <span style="opacity:.6">${t.reason||status}</span></td>
       </tr>`;
     }).join('');
+  }
+
+  
+  // Paper Trading Pipeline
+  const paper=await fetchJSON('/api/brain/paper-traders');
+  if(paper&&paper.paper_traders&&paper.paper_traders.length>0){
+    const pe=document.getElementById('paperTraders');
+    pe.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--gold);font-size:.65rem">
+      <th style="text-align:left;padding:4px">Trader</th>
+      <th>Status</th><th>Tage</th><th>Trades</th>
+      <th>1d PnL</th><th>2d PnL</th><th>3d PnL</th><th>Total</th>
+    </tr></thead><tbody>${paper.paper_traders.map(p=>{
+      const pnlCls=(v)=>v>0?'color:var(--green)':v<0?'color:var(--red)':'color:var(--text-dim)';
+      const days=p.days_in_status||0;
+      const bar=Math.min(days/3*100,100);
+      const ready=days>=3&&(p.paper_pnl||0)>0&&(p.paper_trades||0)>=10;
+      return `<tr>
+        <td style="color:var(--gold);font-weight:600;padding:4px">${p.username||p.address.slice(0,10)}</td>
+        <td style="text-align:center;font-size:.6rem">${p.status}</td>
+        <td style="text-align:center"><div style="background:var(--bg-card);border-radius:4px;overflow:hidden;height:12px;width:50px;display:inline-block;position:relative"><div style="height:100%;width:${bar}%;background:${ready?'var(--green)':'var(--gold)'};border-radius:4px"></div><span style="position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:.55rem;line-height:12px">${days.toFixed(1)}d</span></div></td>
+        <td style="text-align:center;font-size:.65rem">${p.paper_trades||0}</td>
+        <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_1d)}">$${(p.pnl_1d||0).toFixed(2)}</td>
+        <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_2d)}">$${(p.pnl_2d||0).toFixed(2)}</td>
+        <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_3d)}">$${(p.pnl_3d||0).toFixed(2)}</td>
+        <td style="text-align:center;font-weight:700;${pnlCls(p.paper_pnl)}">$${(p.paper_pnl||0).toFixed(2)}${ready?' \u2705':''}</td>
+      </tr>`}).join('')}</tbody></table>`;
+  } else {
+    document.getElementById('paperTraders').innerHTML='<div style="text-align:center;padding:12px;color:var(--text-dim)">Keine Kandidaten im Paper-Test</div>';
   }
 
   // Category heatmap
@@ -817,5 +846,11 @@ refresh=async function(){
   loadActivity();loadTicker();loadCards();loadChat();checkKonfetti();
 };
 </script>
+
+  <!-- Paper Trading Pipeline (ganz unten) -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="sec-hd">Paper Trading Pipeline <span class="badge" style="background:var(--gold);color:#000">TEST</span></div>
+    <div id="paperTraders" style="font-size:.75rem;color:var(--text-dim);padding:8px">Loading...</div>
+  </div>
 </body>
 </html>

@@ -1532,6 +1532,50 @@ def brain_dashboard():
 
 
 
+
+@app.route("/api/brain/paper-traders")
+def api_paper_traders():
+    """Paper traders with 1d/2d/3d PnL breakdown."""
+    with db.get_connection() as conn:
+        # Get all candidates in PAPER_FOLLOW or OBSERVING status
+        candidates = conn.execute(
+            "SELECT tl.username, tl.address, tl.status, tl.status_changed_at, "
+            "tl.paper_trades, tl.paper_pnl, tl.paper_wr, tl.pause_count "
+            "FROM trader_lifecycle tl "
+            "WHERE tl.status IN ('PAPER_FOLLOW', 'OBSERVING') "
+            "ORDER BY tl.paper_pnl DESC"
+        ).fetchall()
+
+        result = []
+        for c in candidates:
+            d = dict(c)
+            addr = d["address"]
+            # 1d/2d/3d PnL from paper_trades table
+            for days, key in [(1, "pnl_1d"), (2, "pnl_2d"), (3, "pnl_3d")]:
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(pnl), 0) as pnl, COUNT(*) as cnt "
+                    "FROM paper_trades WHERE candidate_address = ? AND status = 'closed' "
+                    "AND closed_at > datetime('now', '-%d days', 'localtime')" % days,
+                    (addr,)
+                ).fetchone()
+                d[key] = round(row["pnl"], 2) if row else 0
+                d["trades_%dd" % days] = row["cnt"] if row else 0
+
+            # Days in current status
+            if d.get("status_changed_at"):
+                try:
+                    from datetime import datetime as _dt
+                    _changed = _dt.strptime(d["status_changed_at"], "%Y-%m-%d %H:%M:%S")
+                    d["days_in_status"] = round((_dt.now() - _changed).total_seconds() / 86400, 1)
+                except Exception:
+                    d["days_in_status"] = 0
+            else:
+                d["days_in_status"] = 0
+
+            result.append(d)
+
+    return jsonify({"paper_traders": result})
+
 @app.route("/api/brain/tuner-settings")
 def api_tuner_settings():
     """Auto-tuner per-trader settings — shows what brain changed vs defaults."""
