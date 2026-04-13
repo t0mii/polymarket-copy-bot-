@@ -1627,8 +1627,8 @@ def api_paper_traders():
         result = []
         for d in by_addr.values():
             addr = d["address"]
-            # 1d/2d/3d PnL from paper_trades
-            for days, key in [(1, "pnl_1d"), (2, "pnl_2d"), (3, "pnl_3d")]:
+            # Rolling-window realized PnL (closed trades only): 1d / 2d / 3d / 5d / 7d
+            for days, key in [(1, "pnl_1d"), (2, "pnl_2d"), (3, "pnl_3d"), (5, "pnl_5d"), (7, "pnl_7d")]:
                 row = conn.execute(
                     "SELECT COALESCE(SUM(pnl), 0) as pnl, COUNT(*) as cnt "
                     "FROM paper_trades WHERE candidate_address = ? AND status = 'closed' "
@@ -1637,12 +1637,24 @@ def api_paper_traders():
                 ).fetchone()
                 d[key] = round(row["pnl"], 2) if row else 0
                 d["trades_%dd" % days] = row["cnt"] if row else 0
+            # Closed count (all time)
+            closed_row = conn.execute(
+                "SELECT COUNT(*) as c, COALESCE(SUM(pnl),0) as pnl "
+                "FROM paper_trades WHERE candidate_address = ? AND status = 'closed'",
+                (addr,)
+            ).fetchone()
+            d["closed_trades"] = closed_row["c"] if closed_row else 0
+            d["realized_pnl"] = round(closed_row["pnl"], 2) if closed_row else 0
+            # Open trades + unrealized pnl (current_price - entry_price) * implied size ($1 paper unit)
             open_row = conn.execute(
-                "SELECT COUNT(*) as c FROM paper_trades WHERE candidate_address = ? AND status = 'open'",
+                "SELECT COUNT(*) as c, "
+                "COALESCE(SUM(COALESCE(current_price, entry_price) - entry_price), 0) AS unr "
+                "FROM paper_trades WHERE candidate_address = ? AND status = 'open'",
                 (addr,)
             ).fetchone()
             d["open_trades"] = open_row["c"] if open_row else 0
-            d["paper_trades"] = (d.get("paper_trades") or 0) + d["open_trades"]
+            d["unrealized_pnl"] = round(open_row["unr"], 2) if open_row else 0
+            d["paper_trades"] = d["closed_trades"] + d["open_trades"]
             # Days in status
             if d.get("status_changed_at"):
                 try:
@@ -1669,6 +1681,93 @@ def api_paper_traders():
         # Sort by paper_pnl desc
         result.sort(key=lambda x: (x.get("paper_pnl") or 0), reverse=True)
     return jsonify({"paper_traders": result})
+
+
+@app.route("/api/brain/paper-events")
+def api_paper_events():
+    """Stream of candidate + paper-trade lifecycle events for the brain log:
+    paper buys, paper closes, observe/promote/kick transitions. Newest first.
+    Safe-fallbacks to empty on dev DBs without the tables."""
+    limit = min(int(request.args.get("limit", 200)), 1000)
+    events = []
+    try:
+        with db.get_connection() as conn:
+            # Paper trade opens + closes (limit to recent half of limit each)
+            pt_open = conn.execute(
+                "SELECT pt.created_at AS ts, pt.market_question, pt.side, pt.entry_price, "
+                "pt.condition_id, pt.candidate_address, "
+                "COALESCE(tc.username, SUBSTR(pt.candidate_address,1,10)) AS username "
+                "FROM paper_trades pt "
+                "LEFT JOIN trader_candidates tc ON tc.address = pt.candidate_address "
+                "WHERE pt.status = 'open' "
+                "ORDER BY pt.created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+            for r in pt_open:
+                entry = r["entry_price"] or 0
+                events.append({
+                    "ts": r["ts"],
+                    "kind": "paper_buy",
+                    "action": "PAPER BUY",
+                    "target": r["username"],
+                    "reason": (r["side"] or "") + " @ " + str(int(round(entry * 100))) + "c  " + (r["market_question"] or "")[:44],
+                })
+            pt_close = conn.execute(
+                "SELECT pt.closed_at AS ts, pt.market_question, pt.side, pt.pnl, "
+                "pt.candidate_address, "
+                "COALESCE(tc.username, SUBSTR(pt.candidate_address,1,10)) AS username "
+                "FROM paper_trades pt "
+                "LEFT JOIN trader_candidates tc ON tc.address = pt.candidate_address "
+                "WHERE pt.status = 'closed' AND pt.closed_at IS NOT NULL "
+                "ORDER BY pt.closed_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+            for r in pt_close:
+                pnl = r["pnl"] or 0
+                events.append({
+                    "ts": r["ts"],
+                    "kind": "paper_win" if pnl >= 0 else "paper_loss",
+                    "action": "PAPER WIN" if pnl >= 0 else "PAPER LOSS",
+                    "target": r["username"],
+                    "reason": ("+$" if pnl >= 0 else "-$") + ("%.2f" % abs(pnl)) + "  " + (r["market_question"] or "")[:48],
+                })
+            # Lifecycle transitions: observe / promote / kick
+            cands = conn.execute(
+                "SELECT address, username, status, discovered_at, promoted_at, demoted_at, "
+                "paper_trades, paper_pnl "
+                "FROM trader_candidates "
+                "WHERE discovered_at IS NOT NULL OR promoted_at IS NOT NULL OR demoted_at IS NOT NULL "
+                "ORDER BY COALESCE(demoted_at, promoted_at, discovered_at) DESC LIMIT ?", (limit,)
+            ).fetchall()
+            for c in cands:
+                name = c["username"] or (c["address"][:10] if c["address"] else "-")
+                if c["demoted_at"]:
+                    events.append({
+                        "ts": c["demoted_at"],
+                        "kind": "kick",
+                        "action": "KICK",
+                        "target": name,
+                        "reason": "kicked from paper proving  papers=%d  ppnl=$%.2f" % (c["paper_trades"] or 0, c["paper_pnl"] or 0),
+                    })
+                if c["promoted_at"]:
+                    events.append({
+                        "ts": c["promoted_at"],
+                        "kind": "promote",
+                        "action": "PROMOTE",
+                        "target": name,
+                        "reason": "promoted to live-follow  papers=%d  ppnl=$%.2f" % (c["paper_trades"] or 0, c["paper_pnl"] or 0),
+                    })
+                if c["discovered_at"]:
+                    events.append({
+                        "ts": c["discovered_at"],
+                        "kind": "observe",
+                        "action": "OBSERVE",
+                        "target": name,
+                        "reason": "discovered & observing  status=%s" % (c["status"] or ""),
+                    })
+        events.sort(key=lambda e: e.get("ts") or "", reverse=True)
+        events = events[:limit]
+        return jsonify({"events": events, "count": len(events)})
+    except Exception as e:
+        return jsonify({"events": [], "count": 0, "error": str(e)})
 
 
 @app.route("/api/brain/paper-trades-list")

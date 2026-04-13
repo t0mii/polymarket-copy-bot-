@@ -2,6 +2,28 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (latest) — Paper summary with 1-7d windows + paper events in the stream
+
+### Paper summary table expanded per piff's spec
+
+`/api/brain/paper-traders` now returns rolling windows `pnl_1d`, `pnl_2d`, `pnl_3d`, `pnl_5d`, `pnl_7d`, plus separate `open_trades` / `closed_trades` counts, `realized_pnl` (sum of closed), and `unrealized_pnl` (sum of `current_price - entry_price` across open positions). The frontend `paperSummaryTable` is now a 14-column table: Trader · State · Days · Open · Closed · WR · 1d · 2d · 3d · 5d · 7d · Unreal · Realized · Verdict. Verdict logic unchanged (PROMOTE at 3d positive with ≥10 closed, KICK at 7d flat/negative, HOLD / OBSERV otherwise).
+
+### Brain Stream now includes paper events + lifecycle transitions
+
+New endpoint `dashboard/app.py::api_paper_events` (`/api/brain/paper-events?limit=300`) returns a unified timeline of:
+
+- `paper_buy` — each open `paper_trades` row (side, entry price, market question)
+- `paper_win` / `paper_loss` — each closed `paper_trades` row (+/-$pnl, market)
+- `observe` — `trader_candidates.discovered_at`
+- `promote` — `trader_candidates.promoted_at`
+- `kick` — `trader_candidates.demoted_at`
+
+All sorted newest-first, capped at 300. Graceful fallback when the tables don't exist locally.
+
+Frontend `refresh()` fetches `/api/brain/paper-events` and merges through new `normPaperEvent()` into `streamEvents`. A new **PAPER** filter button and matching matchFilter branch isolate the paper lifecycle events. CSS adds border-left + action-color rules for `paper_buy` (cyan), `paper_win` (green), `paper_loss` (red), `observe` (yellow), `promote` (green), `kick` (red) so they're visually distinct from the existing brain decisions / trade events.
+
+Live server verification: the endpoint returns real rows like `PAPER BUY ScottyNooo NO @ 65c "Will the U.S. invade Iran before 2027?"`, `PAPER BUY 0x2a2C53... Atlanta Braves @ 56c "Miami Marlins vs. Atlanta Braves"`, etc. — these now flow into the brain stream alongside the existing decision / block / trade events.
+
 ## 2026-04-14 (even later) — Brain paper/candidates visibility fix
 
 Diagnosis: `/api/brain/paper-traders` only queried `trader_lifecycle WHERE status='PAPER_FOLLOW'`, which had **0 rows** on the live server because piff's PATCH-038c runs auto-discovery through `trader_candidates` (status `observing`/`promoted`), not through the lifecycle table. Meanwhile `/api/upgrade/candidates` filtered only by `status='observing'`, hiding the 3 actively paper-trading `promoted` candidates (0x3e5b23e9f7 +$20.61, Dropper +$8.80, aenews2 +$0.41). And the brain frontend capped the top-candidates render at 12 rows. Net effect: the user saw an almost-empty Paper Trading panel even though the bot had already generated 5456 paper trades across 39 candidates.

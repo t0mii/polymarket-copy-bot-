@@ -53,13 +53,14 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .sline .sact{flex:0 0 88px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.66rem}
 .sline .stgt{flex:0 1 auto;max-width:42%;color:var(--cyan);font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .sline .srsn{flex:1 1 auto;min-width:0;color:var(--text-mid);overflow:hidden;text-overflow:ellipsis;font-size:.66rem}
-.sline.tighten_filter,.sline.blacklist_category,.sline.pause_trader,.sline.kick_trader,.sline.trade_loss{border-left-color:var(--red)}
-.sline.relax_filter,.sline.boost_trader,.sline.promote_recommended,.sline.unblacklist_category,.sline.unpause_trader,.sline.trade_win,.sline.trade_buy{border-left-color:var(--green)}
-.sline.blocked{border-left-color:var(--yellow)}
-.sline.tighten_filter .sact,.sline.blacklist_category .sact,.sline.pause_trader .sact,.sline.kick_trader .sact,.sline.trade_loss .sact{color:var(--red)}
-.sline.relax_filter .sact,.sline.boost_trader .sact,.sline.promote_recommended .sact,.sline.unblacklist_category .sact,.sline.unpause_trader .sact,.sline.trade_win .sact{color:var(--green)}
-.sline.blocked .sact{color:var(--yellow)}
-.sline.trade_buy .sact{color:var(--cyan)}
+.sline.tighten_filter,.sline.blacklist_category,.sline.pause_trader,.sline.kick_trader,.sline.kick,.sline.trade_loss,.sline.paper_loss{border-left-color:var(--red)}
+.sline.relax_filter,.sline.boost_trader,.sline.promote_recommended,.sline.promote,.sline.unblacklist_category,.sline.unpause_trader,.sline.trade_win,.sline.trade_buy,.sline.paper_win{border-left-color:var(--green)}
+.sline.blocked,.sline.observe{border-left-color:var(--yellow)}
+.sline.paper_buy{border-left-color:var(--cyan)}
+.sline.tighten_filter .sact,.sline.blacklist_category .sact,.sline.pause_trader .sact,.sline.kick_trader .sact,.sline.kick .sact,.sline.trade_loss .sact,.sline.paper_loss .sact{color:var(--red)}
+.sline.relax_filter .sact,.sline.boost_trader .sact,.sline.promote_recommended .sact,.sline.promote .sact,.sline.unblacklist_category .sact,.sline.unpause_trader .sact,.sline.trade_win .sact,.sline.paper_win .sact{color:var(--green)}
+.sline.blocked .sact,.sline.observe .sact{color:var(--yellow)}
+.sline.trade_buy .sact,.sline.paper_buy .sact{color:var(--cyan)}
 
 /* Section divider — centred gold label with fading lines (as before) */
 .section-divider{margin:20px 0 12px;display:flex;align-items:center;gap:14px;position:relative}
@@ -544,8 +545,8 @@ html.wide .app{max-width:none;padding:0 10px 8px}
           <button class="sbtn" data-act="DECISION">DECISIONS</button>
           <button class="sbtn" data-act="BLOCKED">BLOCKED</button>
           <button class="sbtn" data-act="TRADE">TRADES</button>
+          <button class="sbtn" data-act="PAPER">PAPER</button>
           <button class="sbtn" data-act="TIGHTEN_FILTER">TIGHTEN</button>
-          <button class="sbtn" data-act="RELAX_FILTER">RELAX</button>
           <button class="sbtn" data-act="BLACKLIST_CATEGORY">BLACKLIST</button>
           <button class="sbtn" data-act="PAUSE_TRADER">PAUSE</button>
         </div>
@@ -658,8 +659,9 @@ html.wide .app{max-width:none;padding:0 10px 8px}
     </div>
     <div class="tw"><table class="trader-table" id="paperSummaryTable">
       <thead><tr>
-        <th>Trader</th><th>State</th><th>Days</th><th>Trades</th><th>WR</th>
-        <th>1d P&amp;L</th><th>2d P&amp;L</th><th>3d P&amp;L</th><th>Total P&amp;L</th><th>Verdict</th>
+        <th>Trader</th><th>State</th><th>Days</th><th>Open</th><th>Closed</th><th>WR</th>
+        <th>1d</th><th>2d</th><th>3d</th><th>5d</th><th>7d</th>
+        <th>Unreal.</th><th>Realized</th><th>Verdict</th>
       </tr></thead>
       <tbody></tbody>
     </table></div>
@@ -1397,6 +1399,21 @@ function normBlocked(b){
     cssClass:'blocked'
   };
 }
+function normPaperEvent(e){
+  // e: {ts, kind, action, target, reason} from /api/brain/paper-events
+  var kind=String(e.kind||'').toLowerCase();
+  // Map kind to CSS class for border-left + action color
+  var cls=kind;  // paper_buy, paper_win, paper_loss, observe, promote, kick
+  return {
+    kind:'PAPER',
+    action:e.action||'',
+    actionShort:(e.action||'').toUpperCase().slice(0,14),
+    target:e.target||'-',
+    reason:e.reason||'',
+    ts:e.ts||'',
+    cssClass:cls
+  };
+}
 function normTickerEvent(e){
   // /api/fun/ticker events: {type, title, detail, pnl, time, trader, market}
   var type=(e.type||'').toLowerCase();
@@ -1450,6 +1467,7 @@ function matchFilter(e){
   if(activeActionFilter==='DECISION')return e.kind==='DECISION';
   if(activeActionFilter==='BLOCKED')return e.kind==='BLOCKED';
   if(activeActionFilter==='TRADE')return e.kind==='TRADE';
+  if(activeActionFilter==='PAPER')return e.kind==='PAPER';
   return e.action===activeActionFilter;
 }
 
@@ -1558,7 +1576,7 @@ function renderPaperSummary(data){
   if(countEl)countEl.textContent=list.length+' traders';
   if(list.length===0){
     var tr=document.createElement('tr');
-    var td=document.createElement('td');td.colSpan=10;
+    var td=document.createElement('td');td.colSpan=14;
     td.style.color='var(--text-dim)';td.style.textAlign='center';td.style.padding='14px';
     td.textContent='no traders in paper trading';
     tr.appendChild(td);tbody.appendChild(tr);return;
@@ -1589,27 +1607,26 @@ function renderPaperSummary(data){
     var days=Number(p.days_in_status||0);
     var daysEl=document.createElement('span');
     daysEl.textContent=days.toFixed(1)+'d';
-    daysEl.style.color=days>=3?'var(--green)':days>=7?'var(--red)':'var(--yellow)';
+    daysEl.style.color=days>=7?'var(--red)':days>=3?'var(--green)':'var(--yellow)';
     daysEl.style.fontWeight='600';
     tr.appendChild(td(daysEl));
-    // Paper trades count (open + closed)
-    var ptCount=p.paper_trades||0;
-    var openN=p.open_trades||0;
-    var closedN=Math.max(0,ptCount-openN);
-    var countWrap=document.createElement('span');
-    countWrap.textContent=closedN+' cl';
-    if(openN>0){
-      countWrap.textContent+=' / '+openN+' op';
-    }
-    countWrap.style.color='var(--text-mid)';
-    tr.appendChild(td(countWrap));
+    // Open count
+    var openN=Number(p.open_trades||0);
+    var openEl=document.createElement('span');openEl.textContent=String(openN);
+    openEl.style.color=openN>0?'var(--cyan)':'var(--text-dim)';openEl.style.fontWeight='600';
+    tr.appendChild(td(openEl));
+    // Closed count
+    var closedN=Number(p.closed_trades||0);
+    var closedEl=document.createElement('span');closedEl.textContent=String(closedN);
+    closedEl.style.color=closedN>0?'var(--text)':'var(--text-dim)';
+    tr.appendChild(td(closedEl));
     // Paper WR
     var wr=Number(p.paper_wr||0);
     var wrEl=document.createElement('span');
     wrEl.textContent=wr>0?wr.toFixed(0)+'%':'-';
     wrEl.style.color=wr>=55?'var(--green)':wr>=45?'var(--yellow)':wr>0?'var(--red)':'var(--text-dim)';
     tr.appendChild(td(wrEl));
-    // 1d / 2d / 3d P&L
+    // Rolling-window PnL cells: 1d / 2d / 3d / 5d / 7d
     function pnlCell(v){
       var el=document.createElement('span');
       var n=Number(v||0);
@@ -1620,20 +1637,23 @@ function renderPaperSummary(data){
     tr.appendChild(td(pnlCell(p.pnl_1d)));
     tr.appendChild(td(pnlCell(p.pnl_2d)));
     tr.appendChild(td(pnlCell(p.pnl_3d)));
-    // Total paper P&L
-    tr.appendChild(td(pnlCell(p.paper_pnl)));
+    tr.appendChild(td(pnlCell(p.pnl_5d)));
+    tr.appendChild(td(pnlCell(p.pnl_7d)));
+    // Unrealized PnL (from open positions)
+    tr.appendChild(td(pnlCell(p.unrealized_pnl)));
+    // Realized (closed-trade total, authoritative)
+    var realized=Number(p.realized_pnl!=null?p.realized_pnl:p.paper_pnl||0);
+    tr.appendChild(td(pnlCell(realized)));
     // Verdict: promotes at 3d positive, kicks at 7d no progress
     var verdict=document.createElement('span');
-    var totalPnl=Number(p.paper_pnl||0);
-    var trades=ptCount;
-    if(days>=7&&totalPnl<=0){
-      verdict.textContent='KICK';verdict.style.color='var(--red)';verdict.className='tier terrible';
-    }else if(days>=3&&totalPnl>0&&trades>=10){
-      verdict.textContent='PROMOTE';verdict.style.color='var(--green)';verdict.className='tier solid';
+    if(days>=7&&realized<=0){
+      verdict.textContent='KICK';verdict.className='tier terrible';
+    }else if(days>=3&&realized>0&&closedN>=10){
+      verdict.textContent='PROMOTE';verdict.className='tier solid';
     }else if(days>=3){
-      verdict.textContent='HOLD';verdict.style.color='var(--yellow)';verdict.className='tier neutral';
+      verdict.textContent='HOLD';verdict.className='tier neutral';
     }else{
-      verdict.textContent='OBSERVING';verdict.style.color='var(--text-mid)';verdict.className='tier neutral';
+      verdict.textContent='OBSERV';verdict.className='tier neutral';
     }
     tr.appendChild(td(verdict));
     tbody.appendChild(tr);
@@ -1882,6 +1902,7 @@ async function refresh(){
   var paper=await fetchJSON('/api/brain/paper-traders');
   var candidates=await fetchJSON('/api/upgrade/candidates');
   var paperTradesList=await fetchJSON('/api/brain/paper-trades-list?limit=200');
+  var paperEvents=await fetchJSON('/api/brain/paper-events?limit=300');
   var blocked=await fetchJSON('/api/ai/blocked-trades?hours=72&limit=500');
   var tickerEvents=await fetchJSON('/api/fun/ticker');
 
@@ -1892,6 +1913,7 @@ async function refresh(){
   else if(blocked&&blocked.blocked_trades)blocked.blocked_trades.forEach(function(b){merged.push(normBlocked(b))});
   else if(blocked&&blocked.trades)blocked.trades.forEach(function(b){merged.push(normBlocked(b))});
   if(tickerEvents&&tickerEvents.events)tickerEvents.events.forEach(function(e){merged.push(normTickerEvent(e))});
+  if(paperEvents&&paperEvents.events)paperEvents.events.forEach(function(e){merged.push(normPaperEvent(e))});
   // Sort newest first
   merged.sort(function(a,b){return (b.ts||'').localeCompare(a.ts||'')});
   streamEvents=merged.slice(0,800);
