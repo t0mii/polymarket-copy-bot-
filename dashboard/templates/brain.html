@@ -380,7 +380,7 @@ async function refresh(){
     const pe=document.getElementById('paperTraders');
     pe.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--gold);font-size:.65rem">
       <th style="text-align:left;padding:4px">Trader</th>
-      <th>Status</th><th>Tage</th><th>Trades</th>
+      <th>Status</th><th>Tage</th><th>Open</th><th>Closed</th>
       <th>1d PnL</th><th>2d PnL</th><th>3d PnL</th><th>Total</th>
     </tr></thead><tbody>${paper.paper_traders.map(p=>{
       const pnlCls=(v)=>v>0?'color:var(--green)':v<0?'color:var(--red)':'color:var(--text-dim)';
@@ -391,7 +391,8 @@ async function refresh(){
         <td style="font-weight:600;padding:4px"><a href="https://polymarket.com/profile/${p.address}" target="_blank" style="color:var(--gold);text-decoration:none">${p.username||p.address.slice(0,10)}</a></td>
         <td style="text-align:center;font-size:.6rem">${p.status}</td>
         <td style="text-align:center"><div style="background:var(--bg-card);border-radius:4px;overflow:hidden;height:12px;width:50px;display:inline-block;position:relative"><div style="height:100%;width:${bar}%;background:${ready?'var(--green)':'var(--gold)'};border-radius:4px"></div><span style="position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:.55rem;line-height:12px">${days.toFixed(1)}d</span></div></td>
-        <td style="text-align:center;font-size:.65rem">${p.paper_trades||0}</td>
+        <td style="text-align:center;font-size:.65rem;color:var(--gold)">${p.open_trades||0}</td>
+        <td style="text-align:center;font-size:.65rem">${(p.paper_trades||0)-(p.open_trades||0)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_1d)}">$${(p.pnl_1d||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_2d)}">$${(p.pnl_2d||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_3d)}">$${(p.pnl_3d||0).toFixed(2)}</td>
