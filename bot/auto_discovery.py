@@ -240,6 +240,18 @@ def paper_follow_candidates():
     except Exception as e:
         logger.debug("[DISCOVERY] Paper close error: %s", e)
 
+    # PATCH-038c: Auto-kick candidates with paper_pnl < -0 or 200+ trades negative
+    try:
+        with db.get_connection() as conn:
+            kicked = conn.execute(
+                "UPDATE trader_candidates SET status='inactive' "
+                "WHERE status='observing' AND (paper_pnl < -10 OR (paper_trades > 200 AND paper_pnl < 0))"
+            ).rowcount
+            if kicked:
+                logger.info("[DISCOVERY] Auto-kicked %d bad candidates (paper PnL < -0)", kicked)
+    except Exception:
+        pass
+
     filters = _load_settings_filters()
     candidates = db.get_all_candidates("observing")
     for cand in candidates[:20]:
