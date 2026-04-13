@@ -39,10 +39,19 @@ class TestLifecyclePromoteGate(unittest.TestCase):
         self.db_path = setup_temp_db()
         from database import db
         self.db = db
-        # Seed a PAPER_FOLLOW trader whose stats already meet paper criteria:
-        # PAPER_MIN_TRADES=25, PAPER_MIN_WR=58.0, paper_pnl > 0
+        # Seed a PAPER_FOLLOW trader whose stats meet PATCH-038 criteria:
+        # paper_trades >= 10, paper_pnl > 0, days_in_paper >= PAPER_MIN_DAYS (default 3)
         db.upsert_lifecycle_trader("0xsov", "sovereign2013", "PAPER_FOLLOW", "rehab")
         db.update_lifecycle_paper_stats("0xsov", 30, 10.0, 65.0)
+        # Backdate status_changed_at to 5 days ago so PATCH-038's
+        # _days_in_paper >= PAPER_MIN_DAYS (3) check passes
+        from datetime import datetime, timedelta
+        _old_ts = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M:%S")
+        with db.get_connection() as conn:
+            conn.execute(
+                "UPDATE trader_lifecycle SET status_changed_at=? WHERE address=?",
+                (_old_ts, "0xsov")
+            )
 
     def tearDown(self):
         teardown_temp_db(self.db_path)
