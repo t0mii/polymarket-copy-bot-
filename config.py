@@ -42,22 +42,22 @@ BUILDER_PASSPHRASE = os.getenv("BUILDER_PASSPHRASE", "")
 # --- Copybot Core ---
 LIVE_MODE = os.getenv("LIVE_MODE", "true").lower() in ("true", "1", "yes")
 ML_ENABLED = os.getenv("ML_ENABLED", "true").lower() in ("true", "1", "yes")
-STARTING_BALANCE = float(os.getenv("STARTING_BALANCE", "320"))
+STARTING_BALANCE = float(os.getenv("STARTING_BALANCE", "100"))
 COPY_SCAN_INTERVAL = int(os.getenv("COPY_SCAN_INTERVAL", "5"))
 
 # --- Position Sizing ---
 BET_SIZE_PCT = float(os.getenv("BET_SIZE_PCT", "0.05"))
-MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "30"))
+MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "4"))
 MIN_TRADE_SIZE = float(os.getenv("MIN_TRADE_SIZE", "1.0"))
 RATIO_MIN = float(os.getenv("RATIO_MIN", "0.2"))
-RATIO_MAX = float(os.getenv("RATIO_MAX", "3.0"))
+RATIO_MAX = float(os.getenv("RATIO_MAX", "1.0"))
 # Sizing basis: "cash" = wallet balance only, "portfolio" = wallet + active positions
 BET_SIZE_BASIS = os.getenv("BET_SIZE_BASIS", "cash").lower()
 # Per-trader bet size override: "name:pct,name:pct" (overrides BET_SIZE_PCT per trader)
 BET_SIZE_MAP = os.getenv("BET_SIZE_MAP", "")
 
 # --- Cash Management ---
-CASH_FLOOR = float(os.getenv("CASH_FLOOR", "0"))
+CASH_FLOOR = float(os.getenv("CASH_FLOOR", "10"))
 CASH_RECOVERY = float(os.getenv("CASH_RECOVERY", "6"))
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "100"))
 MAX_EXPOSURE_PER_TRADER = float(os.getenv("MAX_EXPOSURE_PER_TRADER", "0.33"))  # Default max % per trader
@@ -68,7 +68,7 @@ TRADER_EXPOSURE_MAP = os.getenv("TRADER_EXPOSURE_MAP", "")
 MIN_TRADER_USD = float(os.getenv("MIN_TRADER_USD", "3"))
 # Per-trader override: "name:amount,name:amount" (overrides MIN_TRADER_USD per trader)
 MIN_TRADER_USD_MAP = os.getenv("MIN_TRADER_USD_MAP", "")
-MIN_ENTRY_PRICE = float(os.getenv("MIN_ENTRY_PRICE", "0.15"))
+MIN_ENTRY_PRICE = float(os.getenv("MIN_ENTRY_PRICE", "0.42"))
 MIN_ENTRY_PRICE_MAP = os.getenv("MIN_ENTRY_PRICE_MAP", "")
 MAX_ENTRY_PRICE = float(os.getenv("MAX_ENTRY_PRICE", "0.92"))
 MAX_ENTRY_PRICE_MAP = os.getenv("MAX_ENTRY_PRICE_MAP", "")
@@ -165,9 +165,9 @@ IDLE_REPLACE_COOLDOWN = int(os.getenv("IDLE_REPLACE_COOLDOWN", "1800"))
 # --- Risk Management ---
 MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", "0"))
 MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "0"))
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0"))
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.25"))
 STOP_LOSS_MAP = os.getenv("STOP_LOSS_MAP", "")
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0"))
+TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "2.0"))
 TAKE_PROFIT_MAP = os.getenv("TAKE_PROFIT_MAP", "")
 
 # --- Auto-Sell / Auto-Close Thresholds ---

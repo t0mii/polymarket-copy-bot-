@@ -24,6 +24,7 @@ KICK_30D_PNL = -50.0
 OBSERVE_HOURS = 24
 PAUSE_DURATIONS = {"streak": 24, "pnl_10": 48, "pnl_20": 72}
 REHAB_DAYS = 3
+PAUSE_COOLDOWN_HOURS = 48  # After pause expires, cooldown before re-pause allowed
 PAPER_MAX_TRADES = 500  # Nach 500 Paper-Trades ohne Erfolg -> KICK
 
 
@@ -46,6 +47,22 @@ def pause_trader(trader_name: str, reason: str):
         logger.warning("[LIFECYCLE] Cannot find address for trader %s", trader_name)
         return
     address = wallet["wallet_address"]
+    # Guard: skip if trader is already PAUSED (prevents pause_until overwrite loop)
+    existing_lc = db.get_lifecycle_trader(address)
+    if existing_lc and existing_lc.get("status") == "PAUSED":
+        logger.debug("[LIFECYCLE] %s already PAUSED, skipping re-pause", trader_name)
+        return
+    # Guard: skip if trader was recently unpaused (cooldown prevents ping-pong)
+    if existing_lc and existing_lc.get("pause_until"):
+        try:
+            _last_pause_end = datetime.fromisoformat(existing_lc["pause_until"])
+            _hours_since = (datetime.now() - _last_pause_end).total_seconds() / 3600
+            if 0 < _hours_since < PAUSE_COOLDOWN_HOURS:
+                logger.info("[LIFECYCLE] %s in post-pause cooldown (%.0fh left), skipping",
+                            trader_name, PAUSE_COOLDOWN_HOURS - _hours_since)
+                return
+        except (ValueError, TypeError):
+            pass
     stats = db.get_trader_rolling_pnl(trader_name, 7)
     pnl_7d = stats.get("total_pnl", 0) or 0
     if pnl_7d < -30:

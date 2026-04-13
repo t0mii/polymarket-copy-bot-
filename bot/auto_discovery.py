@@ -143,11 +143,11 @@ def scan_leaderboard():
         all_leaders = []
         seen_addresses = set()
         # ALL-TIME + 30d + 7d + 1d — findet etablierte UND aufsteigende Trader
-        for period in ["ALL", "30d", "7d", "1d"]:
+        for period in ["ALL"]:  # API only supports ALL now (30d/7d/1d return 400)
             for offset in range(0, 100, 50):
                 resp = requests.get(LEADERBOARD_URL, params={
                     "limit": 50, "offset": offset,
-                    "timePeriod": period, "orderBy": "PNL"
+                    "timePeriod": period,
                 }, timeout=15)
                 resp.raise_for_status()
                 page = resp.json()
@@ -159,7 +159,7 @@ def scan_leaderboard():
                         seen_addresses.add(addr)
                         all_leaders.append(entry)
         leaders = all_leaders
-        logger.info("[DISCOVERY] Scanned 4 periods (ALL/30d/7d/1d), %d unique traders", len(leaders))
+        logger.info("[DISCOVERY] Scanned ALL period, %d unique traders", len(leaders))
     except Exception as e:
         logger.error("[DISCOVERY] Leaderboard fetch failed: %s", e)
         return

@@ -362,7 +362,7 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
         _sell_slips = [float(x) for x in config.SELL_SLIPPAGE_LEVELS.split(",")]
         for slippage in _sell_slips:
             sell_price = round(min(max(price - slippage, 0.01), 0.99), 2)
-            sell_amount = round(shares * sell_price, 2)
+            sell_amount = round(shares, 6)  # PATCH-028: SELL amount = shares, not USDC value
             order_args = MarketOrderArgs(
                 token_id=token_id,
                 amount=sell_amount,

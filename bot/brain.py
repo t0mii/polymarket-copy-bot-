@@ -334,6 +334,8 @@ def _tighten_price_range(trader: str, reason: str):
         return
     min_map[trader] = new_min
     max_map[trader] = new_max
+    # PATCH: Re-read settings fresh before writing to avoid overwriting mid-cycle changes
+    content = _read_settings()
     map_str = ",".join("%s:%s" % (k, v) for k, v in sorted(min_map.items()))
     pattern = r'^(MIN_ENTRY_PRICE_MAP=).*$'
     if re.search(pattern, content, re.MULTILINE):

@@ -11,6 +11,8 @@ from database import db
 from bot.wallet_scanner import fetch_wallet_positions
 import config
 
+_sell_fail_count = {}  # PATCH-029: consecutive sell failure counter
+
 logger = logging.getLogger(__name__)
 
 # Cooldown: cid -> timestamp, verhindert doppelte Sells
@@ -122,9 +124,24 @@ def check_trader_exits():
                         except Exception:
                             pass
                 else:
-                    logger.warning("[SMART-SELL] Sell failed, keeping DB open (shares still in wallet): %s",
-                                   our_trade["market_question"][:40])
-                    closed = False
+                    _fid = our_trade["id"]
+                    _sell_fail_count[_fid] = _sell_fail_count.get(_fid, 0) + 1
+                    if _sell_fail_count[_fid] >= 5 and current >= 0.90:
+                        # PATCH-031: force-close after 5 consecutive sell failures at high price
+                        closed = db.close_copy_trade(_fid, pnl, close_price=current)
+                        logger.info("[SMART-SELL] Force-closed after %d fails at %.0fc: %s",
+                                    _sell_fail_count[_fid], current*100, our_trade["market_question"][:40])
+                        _sell_fail_count.pop(_fid, None)
+                    elif _sell_fail_count[_fid] >= 10:
+                        # PATCH-032: force-close after 10 fails at ANY price (prevents stuck positions)
+                        closed = db.close_copy_trade(_fid, pnl, close_price=current)
+                        logger.info("[SMART-SELL] Force-closed after %d fails (any price) at %.0fc: %s",
+                                    _sell_fail_count[_fid], current*100, our_trade["market_question"][:40])
+                        _sell_fail_count.pop(_fid, None)
+                    else:
+                        logger.warning("[SMART-SELL] Sell failed (%d/10), keeping open: %s",
+                                       _sell_fail_count[_fid], our_trade["market_question"][:40])
+                        closed = False
                 if closed:
                     logger.info("[SMART-SELL] #%d CLOSED: %s exited %s — P&L $%.2f%s",
                                 our_trade["id"], username,

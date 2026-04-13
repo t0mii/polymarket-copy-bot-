@@ -188,9 +188,31 @@ def _update_map_setting(content, key, new_map):
 
 
 def _update_blacklist_setting(content, new_map):
-    """CATEGORY_BLACKLIST_MAP updaten."""
+    """CATEGORY_BLACKLIST_MAP updaten — merge with existing entries."""
+    # Parse existing blacklist from content
+    existing_map = {}
+    for line in content.split("\n"):
+        if line.startswith("CATEGORY_BLACKLIST_MAP="):
+            val = line.split("=", 1)[1].strip()
+            if val:
+                for part in val.split(","):
+                    part = part.strip()
+                    if ":" in part:
+                        trader, cats_str = part.split(":", 1)
+                        existing_map[trader.strip()] = set(c.strip() for c in cats_str.split("|") if c.strip())
+            break
+    # Merge: keep existing entries, add/extend with new_map
+    merged = {}
+    for trader in set(list(existing_map.keys()) + list(new_map.keys())):
+        cats = set()
+        if trader in existing_map:
+            cats.update(existing_map[trader])
+        if trader in new_map and new_map[trader]:
+            cats.update(new_map[trader])
+        if cats:
+            merged[trader] = cats
     parts = []
-    for trader, cats in sorted(new_map.items()):
+    for trader, cats in sorted(merged.items()):
         if cats:
             parts.append('%s:%s' % (trader, '|'.join(sorted(cats))))
     map_str = ','.join(parts)

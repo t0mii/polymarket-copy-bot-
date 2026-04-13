@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def generate_daily_report():
     """Tages-Report aus Bot-Daten generieren."""
     today = datetime.now().strftime("%Y-%m-%d")
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
 
     with db.get_connection() as conn:
         # Heutige geschlossene Trades

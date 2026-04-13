@@ -76,7 +76,7 @@ def scan_momentum_signals():
                     })
                 elif momentum < 0 and side == "NO":
                     # Negative momentum on NO = price dropping = good for NO
-                    no_price = 1.0 - price if price < 1 else 0.05
+                    no_price = price  # PATCH-028: use actual NO token price, not 1-price
                     if no_price >= MOMENTUM_MIN_PRICE and no_price <= MOMENTUM_MAX_PRICE:
                         signals.append({
                             "type": "momentum",
@@ -175,7 +175,7 @@ def update_autonomous_positions():
         if pnl_pct <= -AUTONOMOUS_SL_PCT:
             size = trade["size"] or 0
             if side.upper() == "NO":
-                pnl = round((entry - price) * (size / entry), 2) if entry > 0 else 0
+                pnl = round((price - entry) * (size / entry), 2) if entry > 0 else 0  # PATCH-028: same formula as YES
             else:
                 pnl = round((price - entry) * (size / entry), 2) if entry > 0 else 0
             with db.get_connection() as conn:

@@ -67,7 +67,7 @@ class PriceTracker:
         """Return cached WebSocket price for a condition+side, or None if unknown/stale."""
         with self._lock:
             tokens = self._condition_map.get(condition_id, {})
-            token_id = tokens.get(side.upper()) or tokens.get("YES")
+            token_id = tokens.get(side.upper())
             if token_id:
                 price = self._prices.get(token_id)
                 if price is not None:
@@ -81,7 +81,7 @@ class PriceTracker:
         """Return bid/ask spread as fraction (e.g. 0.03 = 3%), or None if unknown."""
         with self._lock:
             tokens = self._condition_map.get(condition_id, {})
-            token_id = tokens.get(side.upper()) or tokens.get("YES")
+            token_id = tokens.get(side.upper())
             if not token_id:
                 return None
             bid = self._prices.get(token_id)
@@ -94,7 +94,7 @@ class PriceTracker:
         """Price momentum over window. Returns pct change or None if insufficient data."""
         with self._lock:
             tokens = self._condition_map.get(condition_id, {})
-            token_id = tokens.get(side.upper()) or tokens.get("YES")
+            token_id = tokens.get(side.upper())
             if not token_id:
                 return None
             history = list(self._price_history.get(token_id, []))

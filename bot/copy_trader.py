@@ -115,12 +115,14 @@ def _is_zero_risk_block(category: str, trader_price: float) -> bool:
 # --- P&L helpers: use actual fill data when available, fallback to planned ---
 
 def _get_entry_price(trade: dict) -> float:
-    """Best available entry price (actual > planned)."""
-    return trade.get("actual_entry_price") or trade.get("entry_price") or 0
+    """Best available entry price (actual > planned). PATCH-031: explicit None check."""
+    v = trade.get("actual_entry_price")
+    return v if v is not None and v > 0 else (trade.get("entry_price") or 0)
 
 def _get_size(trade: dict) -> float:
-    """Best available investment size (actual > planned)."""
-    return trade.get("actual_size") or trade.get("size") or 0
+    """Best available investment size (actual > planned). PATCH-031: explicit None check."""
+    v = trade.get("actual_size")
+    return v if v is not None and v > 0 else (trade.get("size") or 0)
 
 def _calc_pnl(trade: dict, close_price: float) -> tuple:
     """Calculate P&L using best available entry price. Returns (pnl, shares)."""
@@ -301,9 +303,8 @@ def _reload_maps():
             _CATEGORY_BLACKLIST[name] = cats
 
     # PATCH-026: hot-reload HEDGE_WAIT_TRADERS
-    _hw_raw = vals.get("HEDGE_WAIT_TRADERS", "")
-    if _hw_raw:
-        config.HEDGE_WAIT_TRADERS = _hw_raw
+    # PATCH-029: unconditional reload
+    config.HEDGE_WAIT_TRADERS = vals.get("HEDGE_WAIT_TRADERS", config.HEDGE_WAIT_TRADERS)
 
     logger.info("[RELOAD] Settings maps refreshed (%d trader configs)", len(_BET_SIZE_MAP))
 
@@ -328,7 +329,7 @@ _CATEGORY_KEYWORDS = {
             "lions", "packers", "texans", "bengals", "steelers", "broncos", "chargers", "rams",
             "seahawks", "bears", "vikings", "saints", "falcons", "buccaneers", "commanders",
             "cardinals", "colts", "jaguars", "titans", "raiders", "jets", "patriots", "panthers", "giants"],
-    "tennis": ["tennis", "atp", "wta", "roland garros", "wimbledon", "us open tennis",
+    "tennis": ["tennis", "atp", "wta", "roland garros", "wimbledon", "us open tennis", "barcelona open",
                "australian open", "monte carlo", "madrid open", "rome open", "indian wells",
                "miami open", "campinas", "sarasota", "monza", "challenger",
                "upper austria", "linz",  # WTA Linz tournament
@@ -347,7 +348,7 @@ _CATEGORY_KEYWORDS = {
                "basavareddy", "draxl", "moutet", "atmane", "popyrin", "cilic"],
     "soccer": ["soccer", "football", "premier league", "la liga", "bundesliga", "serie a",
                "ligue 1", "champions league", "ucl", "europa league", "mls",
-               "bayern", "barcelona", "madrid", "arsenal", "liverpool", "manchester",
+               "bayern", "fc barcelona", "barcelona fc", "barca", "madrid", "arsenal", "liverpool", "manchester",
                "chelsea", "tottenham", "juventus", "inter milan", "ac milan", "psg",
                "freiburg", "dortmund", "southampton", "liga mx", "copa",
                "calcio", "genoa", "sassuolo", "napoli", "lazio", "roma", "fiorentina",
@@ -432,7 +433,10 @@ def _calculate_position_size(entry_price: float, cash: float, trader_ratio: floa
 
     size = base * price_mult * clamped_ratio
     size = min(size, MAX_POSITION_SIZE, available)  # never exceed cash
-    return round(max(MIN_TRADE_SIZE, size), 2)
+    # PATCH-030: if available < MIN_TRADE_SIZE, return 0 to block the trade
+    if available < MIN_TRADE_SIZE:
+        return 0
+    return round(max(MIN_TRADE_SIZE, min(size, available)), 2)
 
 
 CASH_FLOOR = config.CASH_FLOOR
@@ -931,11 +935,11 @@ def _position_diff_scan(address: str, username: str, balance: float,
                     _apply_fill_details(trade, order_resp, size, entry_price)
                     size = trade["size"]
 
-            try:
-                trade_id = db.create_copy_trade(trade)
-            except Exception as _ie:
-                logger.warning("[DIFF] DB insert failed (duplicate?): %s", _ie)
-                continue
+                try:
+                    trade_id = db.create_copy_trade(trade)
+                except Exception as _ie:
+                    logger.warning("[DIFF] DB insert failed (duplicate?): %s", _ie)
+                    continue
             if trade_id:
                 new_trades += 1
                 total_invested += size
@@ -1026,6 +1030,10 @@ def _run_idle_check(followed: list):
                 db.toggle_follow(addr, 0)
                 _idle_replaced_at[addr] = now
             # Alle jemals ersetzten Adressen ausschliessen — verhindert Rotation der gleichen 3
+            # PATCH-031: evict stale entries from _idle_replaced_at
+            _now_clean = _time.time()
+            for _addr_clean in [a for a, ts in list(_idle_replaced_at.items()) if _now_clean - ts > config.IDLE_REPLACE_COOLDOWN]:
+                del _idle_replaced_at[_addr_clean]
             all_excluded = idle_addresses | set(_idle_replaced_at.keys())
             auto_follow_top_traders(count=config.AUTO_FOLLOW_COUNT, exclude=all_excluded, require_recent=True)
             # Neu-gefollte Wallets ebenfalls mit Cooldown markieren (verhindert sofortigen Re-Replace)
@@ -1125,6 +1133,11 @@ def copy_followed_wallets():
     portfolio_value = cash + _open_value
     logger.info("PORTFOLIO: Wallet=$%.2f | Positions=$%.2f | Total=$%.2f", cash, _open_value, portfolio_value)
 
+    # PATCH-031: drain stale entries even if feature disabled
+    if _event_wait_queue and config.MAX_HOURS_BEFORE_EVENT <= 0:
+        _ew_cutoff = _time.time() - config.EVENT_WAIT_MAX_SECS
+        for _ek in [k for k, v in list(_event_wait_queue.items()) if v["queued_at"] < _ew_cutoff]:
+            _event_wait_queue.pop(_ek, None)
     # Event-Wait-Queue: fire trades whose events are now within the time window
     if _event_wait_queue and config.MAX_HOURS_BEFORE_EVENT > 0:
         _ew_now = _time.time()
@@ -1576,9 +1589,10 @@ def copy_followed_wallets():
         if new_sells:
             open_by_cid = {t["condition_id"]: t for t in _cached_open_trades if t["condition_id"] and t["wallet_address"] == address}
             for sell in new_sells:
-                _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                 sell_cid = sell.get("condition_id", "")
                 if not sell_cid or sell_cid in _already_sold_cids:
+                    # Safe to bump ts for skipped/duplicate sells
+                    _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                     continue
                 if sell_cid in open_by_cid:
                     our_trade = open_by_cid[sell_cid]
@@ -1591,8 +1605,9 @@ def copy_followed_wallets():
                     if LIVE_MODE and sell_cid:
                         sell_resp = sell_shares(sell_cid, our_trade["side"], sell_price)
                         if not sell_resp:
-                            logger.warning("[FAST-SELL] Sell failed, keeping position open: %s", our_trade["market_question"][:40])
-                            _already_sold_cids.add(sell_cid)
+                            logger.warning("[FAST-SELL] Sell failed, will RETRY next scan: %s", our_trade["market_question"][:40])
+                            # Do NOT bump _last_processed_ts — event stays unconsumed for retry
+                            # Do NOT add to _already_sold_cids — allow retry within same scan
                             continue
                     # Atomic DB close — only if WE are the one closing (prevents double close)
                     if not db.close_copy_trade(our_trade["id"], pnl, close_price=sell_price):
@@ -1611,6 +1626,7 @@ def copy_followed_wallets():
                     except Exception as _score_e:
                         logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                     _already_sold_cids.add(sell_cid)
+                    _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
                     # Close ALL other open trades on same condition_id — sell each one too
                     _other_on_cid = [t for t in _cached_open_trades if t.get("condition_id") == sell_cid and t.get("id") != our_trade["id"]]
                     for _ot in _other_on_cid:
@@ -1632,6 +1648,9 @@ def copy_followed_wallets():
                         })
                     except Exception:
                         pass
+                else:
+                    # No matching open trade — safe to consume this sell event
+                    _last_processed_ts = max(_last_processed_ts, sell.get("timestamp", 0))
 
         # Position-Diff: Fallback für Trades die der Activity-Feed verpasst hat
         if config.POSITION_DIFF_ENABLED:
@@ -2482,6 +2501,42 @@ def update_copy_positions():
 
 
                     else:
+                        # --- STOP-LOSS CHECK (even when trader closed / position not in open) ---
+                        _sl_ep = _get_entry_price(trade)
+                        _sl_cur = trade.get("current_price") or _sl_ep
+                        try:
+                            from bot import ws_price_tracker as _ws_pt
+                            _sl_live = _ws_pt.price_tracker.get_price(trade_cid, trade.get("side", "YES"))
+                            if _sl_live and _sl_live > 0:
+                                _sl_cur = _sl_live
+                        except Exception:
+                            pass
+                        _sl_trader2 = (trade.get("wallet_username") or "").lower()
+                        _sl_pct2 = _STOP_LOSS_MAP.get(_sl_trader2, config.STOP_LOSS_PCT)
+                        if _sl_pct2 > 0 and _sl_ep > 0 and _sl_cur > 0:
+                            _sl_loss = (_sl_ep - _sl_cur) / _sl_ep
+                            if _sl_loss >= _sl_pct2:
+                                _sl_pnl2, _ = _calc_pnl(trade, _sl_cur)
+                                _sl_resp2 = None
+                                if LIVE_MODE and trade_cid:
+                                    _sl_resp2 = sell_shares(trade_cid, trade["side"], _sl_cur)
+                                    if not _sl_resp2:
+                                        logger.warning("[STOP-LOSS] Sell failed (trader closed path), keeping open: %s", trade["market_question"][:40])
+                                        continue
+                                if not db.close_copy_trade(trade["id"], _sl_pnl2):
+                                    continue
+                                if _sl_resp2:
+                                    _correct_sell_pnl(trade, _sl_resp2, trade["id"])
+                                logger.info("[STOP-LOSS] #%d closed at %.0f%% loss (trader closed, price dropped): $%.2f | %s",
+                                            trade["id"], _sl_loss * 100, _sl_pnl2, trade["market_question"][:40])
+                                db.log_activity("sell", "LOSS", "Stop-loss triggered (trader closed path)",
+                                                "#%d %s | P&L $%+.2f" % (trade["id"], trade["market_question"][:35], _sl_pnl2), round(_sl_pnl2, 2))
+                                try:
+                                    db.update_trade_score_outcome(trade_cid, trade.get("wallet_username","") or "", _sl_pnl2)
+                                except Exception:
+                                    pass
+                                continue
+
                         # --- NOT IN OPEN: Check if trader closed it ---
                         if trade_cid and trade_cid in closed_cids:
                             closed_pos = next((p for p in closed_positions if p.get("condition_id") == trade_cid), None)
@@ -2610,6 +2665,9 @@ def update_copy_positions():
                             _miss_resp = None
                             if LIVE_MODE and trade_cid:
                                 _miss_resp = sell_shares(trade_cid, trade["side"], _close_price)
+                                if not _miss_resp:
+                                    logger.warning("[MISS-CLOSE] Sell failed, keeping open: %s", trade["market_question"][:40])
+                                    continue  # PATCH-030: dont close DB if sell failed
                             if db.close_copy_trade(trade["id"], _pnl, close_price=_close_price):
                                 if _miss_resp:
                                     _correct_sell_pnl(trade, _miss_resp, trade["id"])
