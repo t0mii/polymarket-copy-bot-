@@ -75,13 +75,25 @@ def _score_trader_edge(trader_name: str) -> int:
 def _score_category_wr(trader_name: str, category: str) -> int:
     if not category:
         return 50
+    # PERFORMANCE_SINCE gate: exclude pre-regime trades so the category score
+    # reflects the current setting regime, not stale historical data.
+    performance_since = db.get_performance_since()
     with db.get_connection() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) as cnt, "
-            "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
-            "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed'",
-            (trader_name, category)
-        ).fetchone()
+        if performance_since:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt, "
+                "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
+                "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed' "
+                "AND closed_at >= ?",
+                (trader_name, category, performance_since)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt, "
+                "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
+                "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed'",
+                (trader_name, category)
+            ).fetchone()
     cnt = row["cnt"] or 0
     if cnt < 3:
         return 50

@@ -56,11 +56,23 @@ def run_brain():
 
 
 def _classify_losses():
+    # PERFORMANCE_SINCE gate: never classify losses from before the regime
+    # change. Without this, brain re-applies old BAD_CATEGORY / BAD_PRICE
+    # blocks every cycle based on stale pre-regime trades.
+    performance_since = db.get_performance_since()
     with db.get_connection() as conn:
-        losses = conn.execute(
-            "SELECT * FROM copy_trades WHERE status = 'closed' AND pnl_realized < 0 "
-            "AND closed_at >= datetime('now', '-7 days', 'localtime')"
-        ).fetchall()
+        if performance_since:
+            losses = conn.execute(
+                "SELECT * FROM copy_trades WHERE status = 'closed' AND pnl_realized < 0 "
+                "AND closed_at >= datetime('now', '-7 days', 'localtime') "
+                "AND closed_at >= ?",
+                (performance_since,)
+            ).fetchall()
+        else:
+            losses = conn.execute(
+                "SELECT * FROM copy_trades WHERE status = 'closed' AND pnl_realized < 0 "
+                "AND closed_at >= datetime('now', '-7 days', 'localtime')"
+            ).fetchall()
     if not losses:
         logger.info("[BRAIN] No losses in last 7d")
         return
@@ -78,12 +90,21 @@ def _classify_losses():
             continue
         if category:
             with db.get_connection() as conn:
-                cat_row = conn.execute(
-                    "SELECT COUNT(*) as cnt, "
-                    "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
-                    "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed'",
-                    (trader, category)
-                ).fetchone()
+                if performance_since:
+                    cat_row = conn.execute(
+                        "SELECT COUNT(*) as cnt, "
+                        "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
+                        "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed' "
+                        "AND closed_at >= ?",
+                        (trader, category, performance_since)
+                    ).fetchone()
+                else:
+                    cat_row = conn.execute(
+                        "SELECT COUNT(*) as cnt, "
+                        "SUM(CASE WHEN pnl_realized > 0 THEN 1 ELSE 0 END) as wins "
+                        "FROM copy_trades WHERE wallet_username = ? AND category = ? AND status = 'closed'",
+                        (trader, category)
+                    ).fetchone()
             cat_cnt = cat_row["cnt"] or 0
             cat_wins = cat_row["wins"] or 0
             if cat_cnt >= 5 and (cat_wins / cat_cnt * 100) < 40:
