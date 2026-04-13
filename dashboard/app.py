@@ -1542,7 +1542,7 @@ def api_paper_traders():
             "SELECT tl.username, tl.address, tl.status, tl.status_changed_at, "
             "tl.paper_trades, tl.paper_pnl, tl.paper_wr, tl.pause_count "
             "FROM trader_lifecycle tl "
-            "WHERE tl.status IN ('PAPER_FOLLOW', 'OBSERVING') "
+            "WHERE tl.status IN ('PAPER_FOLLOW') "
             "ORDER BY tl.paper_pnl DESC"
         ).fetchall()
 
