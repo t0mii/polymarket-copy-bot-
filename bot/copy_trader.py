@@ -94,6 +94,24 @@ def _log_block(trader: str, question: str, cid: str, side: str,
         pass  # never let logging break the bot
 
 
+def _is_zero_risk_block(category: str, trader_price: float) -> bool:
+    """Return True if this (category, price) should be blocked because
+    the category is in ZERO_RISK_CATEGORIES and trader_price is below
+    ZERO_RISK_MIN_PRICE. These are the esports map markets where losing
+    means a 0-cent resolution, not just a drawdown."""
+    raw = config.ZERO_RISK_CATEGORIES or ""
+    cats = {c.strip().lower() for c in raw.split(",") if c.strip()}
+    if not cats:
+        return False
+    cat = (category or "").lower()
+    if cat not in cats:
+        return False
+    try:
+        return float(trader_price) < float(config.ZERO_RISK_MIN_PRICE)
+    except (TypeError, ValueError):
+        return False
+
+
 # --- P&L helpers: use actual fill data when available, fallback to planned ---
 
 def _get_entry_price(trade: dict) -> float:
@@ -693,6 +711,15 @@ def _position_diff_scan(address: str, username: str, balance: float,
             if entry_price_raw < _min_price or entry_price_raw > _max_price:
                 _log_block(username, _q, cid, _s, entry_price_raw, "price_range",
                            "%.0fc outside %.0f-%.0fc" % (entry_price_raw*100, _min_price*100, _max_price*100), "diff")
+                continue
+            # Zero-risk category filter (esports underdogs resolve to 0)
+            _cat_detect = _detect_category(_q)
+            if _is_zero_risk_block(_cat_detect, entry_price_raw):
+                _log_block(username, _q, cid, _s, entry_price_raw, "zero_risk",
+                           "%s underdog at %.0fc < %.0fc threshold" % (
+                               _cat_detect, entry_price_raw*100,
+                               config.ZERO_RISK_MIN_PRICE*100),
+                           "diff", category=_cat_detect)
                 continue
 
             # Max copies per market
@@ -1697,6 +1724,19 @@ def copy_followed_wallets():
                             _max_price * 100, question[:40])
                 _log_block(username, question, cid, t.get("side", ""), trader_price,
                            "price_range", "%.0fc outside %.0f-%.0fc" % (trader_price*100, _min_price*100, _max_price*100), "activity")
+                continue
+            # Zero-risk category filter (esports underdogs resolve to 0)
+            _cat_detect_act = _detect_category(question)
+            if _is_zero_risk_block(_cat_detect_act, trader_price):
+                logger.info("[FILTER] zero_risk %s at %.0fc < %.0fc: %s",
+                            _cat_detect_act, trader_price*100,
+                            config.ZERO_RISK_MIN_PRICE*100, question[:40])
+                _log_block(username, question, cid, t.get("side", ""), trader_price,
+                           "zero_risk",
+                           "%s underdog at %.0fc < %.0fc threshold" % (
+                               _cat_detect_act, trader_price*100,
+                               config.ZERO_RISK_MIN_PRICE*100),
+                           "activity", category=_cat_detect_act)
                 continue
 
             # 3) Max Kopien pro Markt: nicht X-mal denselben Markt kopieren
