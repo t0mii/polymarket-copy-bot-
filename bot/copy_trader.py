@@ -2397,10 +2397,14 @@ def update_copy_positions():
                             logger.debug("Trade #%d: %.0f%c | P&L=$%.2f", trade["id"], effective_price * 100, 0xa2, pnl)
 
                             # Stop-Loss: auto-sell if loss exceeds threshold (per-trader override)
+                            # PATCH-039: Skip stop-loss for esports — maps resolve in 30-60min,
+                            # price drops at 4:6 rounds are temporary. Hold until resolution.
+                            _sl_category = (trade.get("category") or "").lower()
+                            _sl_skip_cats = ("cs", "lol", "valorant", "dota")
                             _ep = _get_entry_price(trade)
                             _sl_trader = (trade.get("wallet_username") or "").lower()
                             _sl_pct = _STOP_LOSS_MAP.get(_sl_trader, config.STOP_LOSS_PCT)
-                            if _sl_pct > 0 and _ep > 0:
+                            if _sl_pct > 0 and _ep > 0 and _sl_category not in _sl_skip_cats:
                                 loss_pct = (_ep - effective_price) / _ep
                                 if loss_pct >= _sl_pct:
                                     # Sell FIRST, then close DB (prevents orphaned positions)
