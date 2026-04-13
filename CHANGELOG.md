@@ -2,6 +2,40 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-13 (Mittag-2) — Iter 25 findings: brain mutex + trade_scores dedup
+
+First ralph iteration after the morning deploy (commit `ba70dbf`) exposed 3 new findings. 2 are real bugs, 1 was a false positive driven by the same spam pattern as the first. All fixed in one commit.
+
+### 1. BRAIN_OSCILLATION intra-cycle — `_tightened_this_cycle` mutex
+
+Observed brain cycle at 2026-04-13 09:28:57: decisions 481 (`TIGHTEN_FILTER KING7777777` from 12 BAD_PRICE losses) and 485 (`RELAX_FILTER KING7777777` from 7d pnl=+$29 tier=neutral) fired 1 second apart in the same brain run. The cross-cycle dedup I added this morning is keyed on `(action, target)`, so TIGHTEN_FILTER and RELAX_FILTER with the same target don't collide. And investigation confirmed the RELAX branch in `_revert_obsolete_tightens` actually writes settings.env AFTER the TIGHTEN branch, clobbering it (both `_tighten_price_range` and `_revert_obsolete_tightens` rewrite MIN/MAX_ENTRY_PRICE_MAP in the same cycle). That's why piff's PATCH-025 note "Auto-tuner AFTER reverts" didn't save us — the revert itself was the last writer.
+
+Fix: module-level set `_tightened_this_cycle` in `bot/brain.py`. Cleared at the top of every `run_brain()` call. Populated in `_classify_losses()` immediately after each `_tighten_price_range()` call. Checked at the top of the `_revert_obsolete_tightens()` loop — skip + log if trader is already in the set. This is an intra-cycle guard, not a cross-cycle one: the next cycle 2h later can still relax the trader if conditions justify it, but the revert can't undo a decision from the same run.
+
+### 2. SCORE_SPAM — `_score_dedup_cache` on `log_trade_score`
+
+Observed: 86 `trade_scores` rows in 14 minutes for a single (sovereign2013, `0x5042fda9...` Barcelona Open Buse vs Moutet, QUEUE, score 53) triple. Root cause: `bot/trade_scorer.py:score()` is called from `bot/copy_trader.py` inside the scan loop (every 5-10s) and unconditionally calls `db.log_trade_score()` → INSERT. Same pattern as the `log_blocked_trade` spam fixed this morning.
+
+Fix: `_score_dedup_cache` in `database/db.py` mirroring `_blocked_dedup_cache`. TTL 60s, max size 20000, key `(trader_name, condition_id, action)`. **Important exception**: `trade_id != None` bypasses the dedup — when a real buy lands and the scorer wants to stamp the row with its trade_id, we always write. This preserves the `update_trade_score_outcome()` feedback-loop linkage (it matches on newest-NULL-outcome row per `(cid, trader)`, which still works because the first dedup-write is the only NULL row within the TTL window).
+
+### 3. SCORER_INVERTED — **not a real bug**, artifact of SCORE_SPAM
+
+Ralph iter 25 flagged score bucket 80-100 as "0/16 WR" vs 60-79 at "32/38 WR (84%)" — apparent anti-discrimination. Before writing a fix, I queried the actual 16 rows: they are only **4 unique trades** duplicated 2-7 times each (KING Fukuoka SoftBank × 7, Ground Zero Gaming × 6, Wolves Esports × 3 across two entry prices). The 60-79 "84% WR" bucket is inflated the same way (Gen.G Esports × 8 rows for one +$1.00 win). Once SCORE_SPAM is fixed, each unique trade counts once and bucket stats become meaningful. Resolved by the fix above.
+
+The lesson: before trusting any aggregate over the feedback cohort, check unique-trade count, not row count. Noted in `docs/trade_analysis/state.json` iter 25 summary.
+
+### Tests
+
+Extended `tests/test_log_dedup.py` with 2 new classes, +10 tests (30 → 40 total):
+- `TestTradeScoreDedup` — 8 tests including `test_simulated_86_scan_cycles_collapse_to_one` (reproduces the production symptom), `test_trade_id_bypasses_dedup` (verifies buys always stamp), `test_outcome_lookup_still_finds_newest_null` (verifies feedback-loop linkage survives dedup).
+- `TestBrainOscillationMutex` — 2 tests including `test_revert_skips_trader_in_mutex` (patches `_parse_map` + `_read_settings` + `get_trader_rolling_pnl`, asserts `get_trader_rolling_pnl` is **never called** for a trader in the mutex set, proving short-circuit).
+
+All 40/40 pass. Deployed via `scp bot/brain.py + database/db.py` (tests dir doesn't exist on prod). Smoke-verified 5/5 on live server: `_score_dedup_cache` loaded, `_tightened_this_cycle` present as set, `log_trade_score` source contains `trade_id is None` gate + cache ref, `_revert_obsolete_tightens` logs "Skipping RELAX", `run_brain` clears mutex.
+
+### Production smoke verification
+
+Bot running at $73.73 wallet / $93.23 total, 0 errors post-restart. Blocks at 9/5min with 4 unique keys (dedup still effective from morning commit). Score dedup can't be fully verified until scorer fires again (next scan cycle picks up active markets).
+
 ## 2026-04-13 (Mittag) — All 6 open ralph-loop findings fixed
 
 Ralph-loop ran 24 iterations overnight + morning, surfacing 6 open findings carried over from the previous session. All fixed, tested (30/30 unit tests green), deployed to prod, and smoke-verified on the live server.

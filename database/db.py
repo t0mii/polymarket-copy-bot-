@@ -862,6 +862,17 @@ _blocked_dedup_cache: dict = {}
 _BLOCKED_DEDUP_TTL_SEC = 60
 _BLOCKED_DEDUP_MAX_SIZE = 20000
 
+# Same-pattern dedup for log_trade_score. Found 2026-04-13 iter 25: scorer
+# runs every scan tick and writes one trade_scores row per call. Observed:
+# 86 rows for a single (sovereign2013, Barcelona Open Buse vs Moutet, QUEUE)
+# triple across 14 minutes, and score-range buckets were inflated to the
+# point of looking "inverted" (80-100 bucket had 16 rows that were really
+# only 4 unique trades duplicated 2-7 times each). Dedup makes the feedback
+# cohort meaningful again.
+_score_dedup_cache: dict = {}
+_SCORE_DEDUP_TTL_SEC = 60
+_SCORE_DEDUP_MAX_SIZE = 20000
+
 
 def log_blocked_trade(trader: str, market_question: str, condition_id: str,
                       side: str, trader_price: float, block_reason: str,
@@ -1300,6 +1311,26 @@ def get_brain_decisions(limit: int = 50) -> list:
 def log_trade_score(condition_id: str, trader_name: str, side: str, entry_price: float,
                     market_question: str, score_total: int, components: dict,
                     action: str, trade_id: int = None):
+    """Write one trade_scores row. Deduped in-memory on (trader_name,
+    condition_id, action) within _SCORE_DEDUP_TTL_SEC. NO_REBUY_MINUTES
+    already guarantees at most one active NULL-outcome row per
+    (trader, cid) pair, so skipping intermediate writes is safe —
+    update_trade_score_outcome() resolves by newest NULL row.
+
+    trade_id != None bypasses the dedup: when a buy actually lands and
+    we want to stamp the score with its trade_id, always write.
+    """
+    if trade_id is None:
+        now = _time_mod.time()
+        key = (trader_name or "", condition_id or "", action or "")
+        last_ts = _score_dedup_cache.get(key, 0)
+        if last_ts and (now - last_ts) < _SCORE_DEDUP_TTL_SEC:
+            return  # recently logged — skip
+        _score_dedup_cache[key] = now
+        if len(_score_dedup_cache) > _SCORE_DEDUP_MAX_SIZE:
+            _score_dedup_cache.clear()
+            _score_dedup_cache[key] = now
+
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO trade_scores (condition_id, trader_name, side, entry_price, "

@@ -18,9 +18,17 @@ logger = logging.getLogger(__name__)
 SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'settings.env')
 MIN_LIVE_TRADERS = 2
 
+# Per-cycle mutex: traders that got TIGHTEN_FILTER this cycle cannot also
+# receive RELAX_FILTER from _revert_obsolete_tightens. Reset at the top of
+# every run_brain() call. Prevents the intra-cycle oscillation observed on
+# 2026-04-13 09:28:57 where KING7777777 was simultaneously tightened (12
+# BAD_PRICE losses) and relaxed (tier=neutral) 1 second apart.
+_tightened_this_cycle: set = set()
+
 
 def run_brain():
     logger.info("[BRAIN] === Brain Engine starting ===")
+    _tightened_this_cycle.clear()
     try:
         _classify_losses()
         _check_trader_health()
@@ -129,6 +137,7 @@ def _execute_loss_actions(classifications: dict, impacts: dict):
             _tighten_price_range(trader,
                                 "Brain: %d BAD_PRICE losses for %s" % (len(trader_losses), trader))
             tightened.add(trader)
+            _tightened_this_cycle.add(trader)
 
 
 def _check_trader_health():
@@ -425,6 +434,9 @@ def _revert_obsolete_tightens():
 
     relaxes = 0
     for trader in set(list(min_map.keys()) + list(max_map.keys())):
+        if trader in _tightened_this_cycle:
+            logger.info("[BRAIN] Skipping RELAX for %s — was TIGHTENED this cycle", trader)
+            continue
         stats_7d = db.get_trader_rolling_pnl(trader, 7)
         pnl_7d = stats_7d.get("total_pnl", 0) or 0
         cnt_7d = stats_7d.get("cnt", 0) or 0
