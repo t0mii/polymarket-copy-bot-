@@ -118,7 +118,17 @@ const cats={
   'HEDGE_WAIT_SECS':'hedge','HEDGE_WAIT_TRADERS':'hedge',
   'BUY_SLIPPAGE_LEVELS':'exec','SELL_SLIPPAGE_LEVELS':'exec','SELL_VERIFY_THRESHOLD':'exec',
   'COPY_SELLS':'exec','POSITION_DIFF_ENABLED':'exec',
-  'AI_ANALYZER':'ai','BLOCKED_TRADE_LOGGING':'ai','OUTCOME_TRACKER':'ai'
+  'AI_ANALYZER':'ai','BLOCKED_TRADE_LOGGING':'ai','OUTCOME_TRACKER':'ai',
+  // Added 2026-04-14: previously fell through to the "core" fallback
+  'MAX_FEE_BPS':'filter','MAX_ENTRY_PRICE_CAP':'filter','MIN_FILL_AMOUNT':'filter',
+  'QUEUE_DRIFT':'filter','EVENT_WAIT_MAX_SECS':'filter','TRADE_SEC_FROM_RESOLVE':'filter',
+  'PRICE_MULT_HIGH':'filter','PRICE_MULT_MED':'filter','PRICE_MULT_LOW':'filter',
+  'AVG_TRADER_SIZE_MAP':'size',
+  'MAX_DAILY_LOSS':'risk','MAX_DAILY_TRADES':'risk','MISS_COUNT_TO_CLOSE':'risk',
+  'CB_PAUSE_SECS':'risk','CB_THRESHOLD':'risk',
+  'CASH_RECOVERY':'risk','CASH_RESERVE':'risk','SAVE_POINT_STEP':'risk',
+  'ENTRY_SLIPPAGE':'exec','DELAYED_BUY_VERIFY_SECS':'exec','DELAYED_SELL_VERIFY_SECS':'exec',
+  'FILL_VERIFY_DELAY_SECS':'exec'
 };
 const catLabels={core:'Core',size:'Position Sizing',filter:'Trade Filters',risk:'Risk Management',hedge:'Hedge Detection',exec:'Order Execution',ai:'AI Analysis'};
 const catCls={core:'cat-core',size:'cat-size',filter:'cat-filter',risk:'cat-risk',hedge:'cat-hedge',exec:'cat-hedge',ai:'cat-core'};

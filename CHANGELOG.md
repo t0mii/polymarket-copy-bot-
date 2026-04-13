@@ -2,6 +2,41 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (later) — Logs server-side filter + settings page completeness
+
+Two small but high-impact fixes on the secondary dashboard pages.
+
+### `/logs` — sparse filter buttons now work
+
+Before: `logs.html` polled `/api/logs?lines=500` every 3s and filtered client-side. When the user clicked FILTERED / ERRORS / HEDGE / CLOSES, the browser scanned the 500-line tail — and since > 98% of those lines are `[INFO]` spam from `apscheduler` / `werkzeug` / scan loops, the sparse event was usually nowhere in the window. Zero matches displayed, for events that had definitely happened.
+
+Fix is split across backend and frontend:
+
+- **`dashboard/app.py::api_logs`**: the old `lines * 3` heuristic is replaced by a real reverse scan. Query params are `lines` (default 500, cap 5000), `filter` (comma-separated, case-insensitive substring match), `scan` (default 20k, cap 200k). Without a filter the endpoint tails the last `lines` rows. With a filter it walks back across up to `scan` recent rows and returns the last `lines` that matched. Response now includes `{total, scanned, matched}` so the UI can show "N matched of M scanned".
+- **`dashboard/templates/logs.html`**: `fetchLogs()` builds its URL dynamically and appends `&filter=...&scan=100000` whenever a button is active. `setFilter()` now clears the stale buffer and triggers an immediate refetch instead of only re-rendering. `render()` no longer re-filters client-side — the free-text search box stays client-side so it keeps reacting without a round trip. Line-count display now reads `42 / 42 lines · 8180 matched of 100000 scanned` when a filter is active.
+
+Server verification against live `scanner.log` (≈100k lines, ~98% INFO): `filter=filter,skip&scan=100000` returned 500 filtered rows out of 8180 real matches (vs. 0 before). `filter=error,warning` returned 241 rows. Free-text search on top of the filtered view still narrows further.
+
+### `/wallets` Settings page — 3 missing keys, 22 mis-categorised
+
+Audit found three keys that the bot actually honours but which the `/api/settings` endpoint was not returning:
+
+- `HEDGE_WAIT_SECS` — default wait before copying (hedge detection, 60s default)
+- `HEDGE_WAIT_TRADERS` — per-trader override map
+- `MAX_FEE_BPS` — max market fee in bps (0 = disabled; 500 caps at 5% so esports at 1000 bps get skipped)
+
+These now appear in the appropriate sections. Additionally, 22 keys that the API already returned were falling into the `cats` map's "core" fallback in `index.html` (e.g. `MAX_DAILY_LOSS` under Core instead of Risk, `PRICE_MULT_*` under Core instead of Filter, `CB_THRESHOLD` under Core instead of Risk). The cats map now covers: `MAX_FEE_BPS`, `MAX_ENTRY_PRICE_CAP`, `MIN_FILL_AMOUNT`, `QUEUE_DRIFT`, `EVENT_WAIT_MAX_SECS`, `TRADE_SEC_FROM_RESOLVE`, `PRICE_MULT_HIGH/MED/LOW` → filter; `AVG_TRADER_SIZE_MAP` → size; `MAX_DAILY_LOSS`, `MAX_DAILY_TRADES`, `MISS_COUNT_TO_CLOSE`, `CB_PAUSE_SECS`, `CB_THRESHOLD`, `CASH_RECOVERY`, `CASH_RESERVE`, `SAVE_POINT_STEP` → risk; `ENTRY_SLIPPAGE`, `DELAYED_BUY_VERIFY_SECS`, `DELAYED_SELL_VERIFY_SECS`, `FILL_VERIFY_DELAY_SECS` → exec.
+
+Server now returns 72 settings (was 69). Trader list still sources from `db.get_followed_wallets()` which is the same source `bot/copy_trader.py` uses at runtime, so no trader mismatch.
+
+### Files touched
+
+- `dashboard/app.py` — `api_logs` rewritten, 3 entries added to `api_settings`
+- `dashboard/templates/logs.html` — fetchLogs/setFilter/render filter flow rewired
+- `dashboard/templates/index.html` — `cats` mapping expanded by 22 entries
+
+Tier-based settings (`TIER_*`) remain intentionally hidden on this page — they live in the Brain panel's auto-tuner view.
+
 ## 2026-04-14 — Dashboard unification + Brain console rewrite
 
 All dashboard pages now share a terminal-styled chrome, and the Brain page has been rebuilt from scratch around a live decision/event stream and an event-driven neural-network visualization.

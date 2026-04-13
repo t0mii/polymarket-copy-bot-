@@ -101,13 +101,16 @@
 <div class="popup-slot"></div>
 <script src="/static/terminal.js"></script>
 <script>
-let lines=[], filter='', paused=false, autoScroll=true, searchTxt='';
+let lines=[], filter='', paused=false, autoScroll=true, searchTxt='', lastMeta=null;
 
 function setFilter(btn, f){
   filter=f;
   document.querySelectorAll('.toolbar .btn:not(.btn-pause)').forEach(b=>b.classList.remove('act'));
   btn.classList.add('act');
+  lines=[];
+  lastMeta=null;
   render();
+  fetchLogs();
 }
 function togglePause(){
   paused=!paused;
@@ -165,15 +168,16 @@ function classify(line){
 
 function render(){
   let box=document.getElementById('logBox');
+  // Button-level filter is now server-side; only the free-text search still runs here.
   let filtered=lines;
-  if(filter){
-    let fs=filter.split(',').map(f=>f.trim().toLowerCase());
-    filtered=lines.filter(l=>{let lo=l.toLowerCase();return fs.some(f=>lo.includes(f))});
-  }
   if(searchTxt){
     filtered=filtered.filter(l=>l.toLowerCase().includes(searchTxt));
   }
-  document.getElementById('lineCount').textContent=filtered.length+' / '+lines.length+' lines';
+  let metaTxt=filtered.length+' / '+lines.length+' lines';
+  if(lastMeta&&filter){
+    metaTxt+=' · '+lastMeta.matched+' matched of '+lastMeta.scanned+' scanned';
+  }
+  document.getElementById('lineCount').textContent=metaTxt;
   box.innerHTML=filtered.map(l=>`<div class="ll ${classify(l)}">${colorize(l)}</div>`).join('');
   if(autoScroll)box.scrollTop=box.scrollHeight;
 }
@@ -190,9 +194,14 @@ document.addEventListener('DOMContentLoaded',()=>{
 async function fetchLogs(){
   if(paused)return;
   try{
-    let r=await fetch('/api/logs?lines=500');
+    let url='/api/logs?lines=500';
+    if(filter){
+      url+='&filter='+encodeURIComponent(filter)+'&scan=100000';
+    }
+    let r=await fetch(url);
     let d=await r.json();
     lines=d.lines||[];
+    lastMeta=d;
     render();
   }catch(e){console.error('Log fetch error:',e)}
 }

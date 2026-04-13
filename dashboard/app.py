@@ -582,21 +582,43 @@ def logs_page():
 
 @app.route("/api/logs")
 def api_logs():
-    """Return last N lines of the bot log, optionally filtered.
-    Read-only GET, no auth (matches other dashboard endpoints).
+    """Return last N log lines, optionally filtered.
+
+    Without `filter`: returns the last `lines` raw lines.
+    With `filter=a,b,c`: reverse-scans up to the last `scan` lines and returns
+    the last `lines` MATCHING entries (substring match, case-insensitive).
+    Without the scan-cap, sparse filters (FILTERED, ERRORS, HEDGE) return zero
+    rows even when the event did happen — they just fall outside a fixed tail.
     """
-    lines = min(int(request.args.get("lines", 200)), 5000)
+    lines_req = min(int(request.args.get("lines", 500)), 5000)
+    scan_cap = min(int(request.args.get("scan", 20000)), 200000)
     filt = request.args.get("filter", "").lower()
     try:
         with open(config.LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
             all_lines = f.readlines()
-        tail = all_lines[-min(lines * 3, len(all_lines)):]  # read extra to compensate for filtering
-        if filt:
-            filters = filt.split(",")
-            tail = [l for l in tail if any(f in l.lower() for f in filters)]
-        return jsonify({"lines": [l.rstrip() for l in tail[-lines:]]})
+        total = len(all_lines)
+        if not filt:
+            result = all_lines[-lines_req:]
+            return jsonify({
+                "lines": [l.rstrip() for l in result],
+                "total": total,
+                "scanned": len(result),
+                "matched": len(result),
+            })
+        filters = [f.strip() for f in filt.split(",") if f.strip()]
+        scan_start = max(0, total - scan_cap)
+        scanned_slice = all_lines[scan_start:]
+        matched_lines = [l for l in scanned_slice
+                         if any(f in l.lower() for f in filters)]
+        result = matched_lines[-lines_req:]
+        return jsonify({
+            "lines": [l.rstrip() for l in result],
+            "total": total,
+            "scanned": len(scanned_slice),
+            "matched": len(matched_lines),
+        })
     except Exception as e:
-        return jsonify({"lines": [f"Error reading log: {e}"]})
+        return jsonify({"lines": [f"Error reading log: {e}"], "total": 0, "scanned": 0, "matched": 0})
 
 
 @app.route("/api/settings")
@@ -645,11 +667,14 @@ def api_settings():
         {"key": "MAX_HOURS_BEFORE_EVENT", "value": str(config.MAX_HOURS_BEFORE_EVENT) + "h", "desc": "Queue if event > Xh away (0=off)"},
         {"key": "EVENT_WAIT_MIN_CASH", "value": _dlr(config.EVENT_WAIT_MIN_CASH) if config.EVENT_WAIT_MIN_CASH > 0 else "always queue", "desc": "Only queue when cash < $X (0=always)"},
         {"key": "QUEUE_DRIFT", "value": "<20c:%d%% 20-40c:%d%% 40-60c:%d%% 60c+:%d%%" % (config.QUEUE_DRIFT_LOTTERY*100, config.QUEUE_DRIFT_UNDERDOG*100, config.QUEUE_DRIFT_COINFLIP*100, config.QUEUE_DRIFT_FAVORITE*100), "desc": "Max price drift for queued trades (per range)"},
+        {"key": "MAX_FEE_BPS", "value": (str(config.MAX_FEE_BPS) + " bps") if config.MAX_FEE_BPS > 0 else "OFF", "desc": "Max market fee in bps (0=disabled, 500=skip >5% fee — esports are 1000)"},
         # --- Entry Mechanics ---
         {"key": "ENTRY_SLIPPAGE", "value": str(config.ENTRY_SLIPPAGE), "desc": "Added to entry price"},
         {"key": "MAX_ENTRY_PRICE_CAP", "value": str(int(config.MAX_ENTRY_PRICE_CAP * 100)) + "c", "desc": "Hard ceiling after slippage"},
         {"key": "TRADE_SEC_FROM_RESOLVE", "value": _sec(config.TRADE_SEC_FROM_RESOLVE), "desc": "Stop buying before market close"},
         # --- Hedge Detection ---
+        {"key": "HEDGE_WAIT_SECS", "value": _sec(config.HEDGE_WAIT_SECS) if config.HEDGE_WAIT_SECS > 0 else "OFF", "desc": "Default wait before copying (detects hedge trades)"},
+        {"key": "HEDGE_WAIT_TRADERS", "value": config.HEDGE_WAIT_TRADERS or "default", "desc": "Per-trader hedge wait override (e.g. sovereign2013:30)"},
         # --- Cash Management ---
         {"key": "CASH_FLOOR", "value": _dlr(config.CASH_FLOOR), "desc": "Stop buying below this"},
         {"key": "CASH_RECOVERY", "value": _dlr(config.CASH_RECOVERY), "desc": "Recovery threshold above floor"},
