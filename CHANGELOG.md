@@ -2,6 +2,21 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (still later) — Logs filter precision + brain paper-trades list
+
+### `/logs` — bracket-tagged filter patterns + stable scroll
+
+Two follow-ups to the earlier server-side filter work:
+
+- **Filter patterns now use bracket tags** so `[INFO]` lines that happen to contain the word "filter" as a substring no longer sneak in. FILTERED passes `[filter],[skip]`; BUYS passes `copy trade,order buy:,[new]`; SELLS passes `order sell:,[fast-sell],[auto-sell],[stop-loss],[take-profit]`; HEDGE passes `[hedge-wait]`; EVENT-WAIT passes `[event-wait]`; CLOSES passes `[auto-close],[miss-close],closed (,resolved`; ERRORS passes `[error],[warning],fehler`; PORTFOLIO passes `[snapshot],portfolio value,starting balance`. On live server with the old substring match FILTERED matched 8180 rows (lots of INFO false positives); with bracketed tags it matches 2146 true filter/skip events.
+- **Scroll no longer jumps** during the 3s re-render. `render()` now saves `scrollTop` and a "was-at-bottom" flag before replacing the log box contents, then restores the saved position (or scrolls to bottom if the user was already there). An `_ignoreScroll` guard prevents the scroll event listener from flipping `autoScroll` during programmatic scroll.
+
+### `/brain` — paper trading list at the bottom
+
+New panel under Top Candidates: a flat per-trade table of the `paper_trades` DB rows joined with `trader_lifecycle` + `trader_candidates` for username and lifecycle state. Shows time (Vienna), trader (linked to polymarket profile), lifecycle state, market question, side, entry price, current price, PnL, and open/closed status. This is the proving-ground phase — promoted candidates start at PnL 0 and have to prove themselves under live settings. 3 days positive → LIVE_FOLLOW, 7 days without progress → KICKED.
+
+New endpoint `dashboard/app.py::api_paper_trades_list` returns the joined list with graceful fallback when the table doesn't exist (local dev DBs). Wired into `brain.html::refresh` + new `renderPaperTrades()`. Live verification showed 10+ paper trades on the server (e.g. DISCOVERED candidate on "Miami Marlins vs. Atlanta Braves @ 56c").
+
 ## 2026-04-14 (later) — Logs server-side filter + settings page completeness
 
 Two small but high-impact fixes on the secondary dashboard pages.

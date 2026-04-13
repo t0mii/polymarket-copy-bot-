@@ -82,14 +82,14 @@
 
   <div class="toolbar">
     <button class="btn act" data-f="" onclick="setFilter(this,'')">ALL</button>
-    <button class="btn" data-f="filter,skip" onclick="setFilter(this,'filter,skip')">FILTERED</button>
-    <button class="btn" data-f="copy trade,buy,order buy" onclick="setFilter(this,'copy trade,buy,order buy')">BUYS</button>
-    <button class="btn" data-f="sell,fast-sell,auto-sell" onclick="setFilter(this,'sell,fast-sell,auto-sell')">SELLS</button>
-    <button class="btn" data-f="hedge" onclick="setFilter(this,'hedge')">HEDGE</button>
-    <button class="btn" data-f="event-wait" onclick="setFilter(this,'event-wait')">EVENT-WAIT</button>
-    <button class="btn" data-f="closed,close,resolved" onclick="setFilter(this,'closed,close,resolved')">CLOSES</button>
-    <button class="btn" data-f="error,fehler,warning" onclick="setFilter(this,'error,fehler,warning')">ERRORS</button>
-    <button class="btn" data-f="portfolio,snapshot" onclick="setFilter(this,'portfolio,snapshot')">PORTFOLIO</button>
+    <button class="btn" data-f="[filter],[skip]" onclick="setFilter(this,'[filter],[skip]')">FILTERED</button>
+    <button class="btn" data-f="copy trade,order buy:,[new]" onclick="setFilter(this,'copy trade,order buy:,[new]')">BUYS</button>
+    <button class="btn" data-f="order sell:,[fast-sell],[auto-sell],[stop-loss],[take-profit]" onclick="setFilter(this,'order sell:,[fast-sell],[auto-sell],[stop-loss],[take-profit]')">SELLS</button>
+    <button class="btn" data-f="[hedge-wait]" onclick="setFilter(this,'[hedge-wait]')">HEDGE</button>
+    <button class="btn" data-f="[event-wait]" onclick="setFilter(this,'[event-wait]')">EVENT-WAIT</button>
+    <button class="btn" data-f="[auto-close],[miss-close],closed (,resolved" onclick="setFilter(this,'[auto-close],[miss-close],closed (,resolved')">CLOSES</button>
+    <button class="btn" data-f="[error],[warning],fehler" onclick="setFilter(this,'[error],[warning],fehler')">ERRORS</button>
+    <button class="btn" data-f="[snapshot],portfolio value,starting balance" onclick="setFilter(this,'[snapshot],portfolio value,starting balance')">PORTFOLIO</button>
     <input class="search" id="search" placeholder="Freitext-Suche..." oninput="applySearch()">
     <button class="btn btn-pause" id="pauseBtn" onclick="togglePause()">PAUSE</button>
     <span class="count" id="lineCount">0 lines</span>
@@ -101,7 +101,7 @@
 <div class="popup-slot"></div>
 <script src="/static/terminal.js"></script>
 <script>
-let lines=[], filter='', paused=false, autoScroll=true, searchTxt='', lastMeta=null;
+let lines=[], filter='', paused=false, autoScroll=true, searchTxt='', lastMeta=null, _ignoreScroll=false;
 
 function setFilter(btn, f){
   filter=f;
@@ -178,14 +178,23 @@ function render(){
     metaTxt+=' · '+lastMeta.matched+' matched of '+lastMeta.scanned+' scanned';
   }
   document.getElementById('lineCount').textContent=metaTxt;
+  // Preserve scroll position across re-renders unless the user was at the bottom
+  let wasAtBottom=autoScroll||(box.scrollHeight-box.scrollTop-box.clientHeight<50);
+  let savedScroll=box.scrollTop;
+  _ignoreScroll=true;
   box.innerHTML=filtered.map(l=>`<div class="ll ${classify(l)}">${colorize(l)}</div>`).join('');
-  if(autoScroll)box.scrollTop=box.scrollHeight;
+  if(wasAtBottom)box.scrollTop=box.scrollHeight;
+  else box.scrollTop=savedScroll;
+  setTimeout(()=>{_ignoreScroll=false},60);
 }
 
-// Detect manual scroll (user scrolled up = pause auto-scroll)
+// Detect manual scroll (user scrolled up = pause auto-scroll).
+// Programmatic scroll in render() sets _ignoreScroll briefly so the
+// save-and-restore doesn't ping-pong autoScroll on its own updates.
 document.addEventListener('DOMContentLoaded',()=>{
   let box=document.getElementById('logBox');
   box.addEventListener('scroll',()=>{
+    if(_ignoreScroll)return;
     let atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<50;
     autoScroll=atBottom;
   });

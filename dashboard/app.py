@@ -1627,6 +1627,34 @@ def api_paper_traders():
 
     return jsonify({"paper_traders": result})
 
+
+@app.route("/api/brain/paper-trades-list")
+def api_paper_trades_list():
+    """Flat list of individual paper trades (open + closed) joined with candidate
+    username and lifecycle state. Used by the brain page bottom section.
+    Newest first, capped at 200 rows."""
+    limit = min(int(request.args.get("limit", 200)), 1000)
+    try:
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT pt.id, pt.candidate_address, pt.condition_id, pt.market_question, "
+                "pt.side, pt.entry_price, pt.current_price, pt.status, pt.pnl, "
+                "pt.created_at, pt.closed_at, "
+                "COALESCE(tl.username, tc.username, SUBSTR(pt.candidate_address,1,10)) AS username, "
+                "COALESCE(tl.status, tc.status, '-') AS lifecycle_status, "
+                "tl.status_changed_at "
+                "FROM paper_trades pt "
+                "LEFT JOIN trader_lifecycle tl ON tl.address = pt.candidate_address "
+                "LEFT JOIN trader_candidates tc ON tc.address = pt.candidate_address "
+                "ORDER BY COALESCE(pt.closed_at, pt.created_at) DESC "
+                "LIMIT ?", (limit,)
+            ).fetchall()
+            result = [dict(r) for r in rows]
+        return jsonify({"trades": result, "count": len(result)})
+    except Exception as e:
+        return jsonify({"trades": [], "count": 0, "error": str(e)})
+
+
 @app.route("/api/brain/tuner-settings")
 def api_tuner_settings():
     """Auto-tuner per-trader settings — shows what brain changed vs defaults."""

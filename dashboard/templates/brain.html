@@ -649,6 +649,25 @@ html.wide .app{max-width:none;padding:0 10px 8px}
       <tbody></tbody>
     </table></div>
   </div>
+
+  <!-- PAPER TRADING — individual trades (promoted candidates proving themselves) -->
+  <div class="panel" style="margin-top:12px">
+    <div class="panel-title">
+      <span>Paper Trading &mdash; Live Proving Ground</span>
+      <span class="pill" id="paperTradesCount">0 trades</span>
+    </div>
+    <div style="font-size:.62rem;color:var(--text-dim);padding:0 0 8px;font-family:var(--mono);line-height:1.5">
+      Promoted candidates start here with PnL 0 and prove themselves under our live settings.
+      3 days positive &rarr; LIVE_FOLLOW. 7 days without progress &rarr; KICKED.
+    </div>
+    <div class="tw"><table class="trader-table" id="paperTradesTable">
+      <thead><tr>
+        <th>Time</th><th>Trader</th><th>State</th><th>Market</th>
+        <th>Side</th><th>Entry</th><th>Now</th><th>P&amp;L</th><th>Status</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
   </div><!-- /sec-field -->
 
 </div>
@@ -1514,6 +1533,73 @@ function renderPipeline(lc){
   });
 }
 
+/* Paper trades list — individual trades from promoted candidates */
+function renderPaperTrades(data){
+  var tbl=$('#paperTradesTable');if(!tbl)return;
+  var tbody=tbl.querySelector('tbody');
+  var countEl=$('#paperTradesCount');
+  while(tbody.firstChild)tbody.removeChild(tbody.firstChild);
+  var trades=(data&&data.trades)||[];
+  if(countEl)countEl.textContent=trades.length+' trades';
+  if(trades.length===0){
+    var tr=document.createElement('tr');
+    var td=document.createElement('td');td.colSpan=9;
+    td.style.color='var(--text-dim)';td.style.textAlign='center';td.style.padding='14px';
+    td.textContent='no paper trades yet';
+    tr.appendChild(td);tbody.appendChild(tr);return;
+  }
+  trades.forEach(function(t){
+    var tr=document.createElement('tr');
+    function td(content,cls){var el=document.createElement('td');if(cls)el.className=cls;if(typeof content==='string')el.textContent=content;else if(content)el.appendChild(content);return el}
+    // Time (Vienna)
+    var ts=t.closed_at||t.created_at||'';
+    tr.appendChild(td(viennaTime(ts)));
+    // Trader (link to polymarket profile)
+    var name=document.createElement('a');
+    name.href='https://polymarket.com/profile/'+(t.candidate_address||'');
+    name.target='_blank';name.rel='noopener';
+    name.style.color='var(--cyan)';name.style.textDecoration='none';name.style.fontWeight='600';
+    name.textContent=(t.username||'').slice(0,14);
+    tr.appendChild(td(name));
+    // Lifecycle state
+    var state=document.createElement('span');
+    var st=t.lifecycle_status||'-';
+    state.textContent=st.replace('_FOLLOW','').replace('PAPER','PAPER');
+    state.style.fontSize='.56rem';state.style.letterSpacing='.08em';
+    state.style.color=st==='PAPER_FOLLOW'?'var(--yellow)':st==='LIVE_FOLLOW'?'var(--green)':st==='KICKED'?'var(--red)':'var(--text-dim)';
+    tr.appendChild(td(state));
+    // Market question
+    var mq=document.createElement('span');
+    mq.textContent=String(t.market_question||'').slice(0,42);
+    mq.style.color='var(--text-mid)';mq.style.fontSize='.64rem';
+    tr.appendChild(td(mq));
+    // Side
+    var side=document.createElement('span');
+    side.textContent=(t.side||'').toUpperCase();
+    side.style.color=(t.side||'').toUpperCase()==='YES'?'var(--green)':(t.side||'').toUpperCase()==='NO'?'var(--red)':'var(--gold)';
+    side.style.fontWeight='600';side.style.fontSize='.64rem';
+    tr.appendChild(td(side));
+    // Entry
+    var entry=Number(t.entry_price||0);
+    tr.appendChild(td(entry>0?Math.round(entry*100)+'c':'-'));
+    // Current
+    var cur=Number(t.current_price||0);
+    tr.appendChild(td(cur>0?Math.round(cur*100)+'c':'-'));
+    // PnL
+    var pnl=Number(t.pnl||0);
+    var pnlEl=document.createElement('span');pnlEl.className=pnlClass(pnl);
+    pnlEl.textContent=pnl===0?'$0.00':((pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2));
+    tr.appendChild(td(pnlEl));
+    // Status badge
+    var badge=document.createElement('span');
+    var tStatus=t.status||'open';
+    badge.className='tier '+(tStatus==='closed'?(pnl>=0?'solid':'weak'):'neutral');
+    badge.textContent=tStatus.toUpperCase();
+    tr.appendChild(td(badge));
+    tbody.appendChild(tr);
+  });
+}
+
 /* Top candidates table */
 function renderCandidates(data){
   var tbl=$('#candTable');if(!tbl)return;
@@ -1684,6 +1770,7 @@ async function refresh(){
   var cats=await fetchJSON('/api/upgrade/category-heatmap');
   var paper=await fetchJSON('/api/brain/paper-traders');
   var candidates=await fetchJSON('/api/upgrade/candidates');
+  var paperTradesList=await fetchJSON('/api/brain/paper-trades-list?limit=200');
   var blocked=await fetchJSON('/api/ai/blocked-trades?hours=72&limit=500');
   var tickerEvents=await fetchJSON('/api/fun/ticker');
 
@@ -1701,6 +1788,7 @@ async function refresh(){
 
   renderCoreMini(status,mlInfo,decisions);
   renderCandidates(candidates);
+  renderPaperTrades(paperTradesList);
   renderFieldMini(traders,cats,scores,paper);
 
   // Counters
