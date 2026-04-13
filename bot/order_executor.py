@@ -227,7 +227,7 @@ def buy_shares(condition_id: str, side: str, amount_usd: float, price: float) ->
             )
 
             signed_order = client.create_market_order(order_args)
-            response = client.post_order(signed_order, OrderType.FOK)
+            response = client.post_order(signed_order, OrderType.FAK)  # PATCH-035: FAK fills partial, FOK was rejecting thin markets
 
             # Check ob Order tatsaechlich gefuellt wurde
             success = False
@@ -372,7 +372,7 @@ def sell_shares(condition_id: str, side: str, price: float) -> dict | None:
             )
 
             signed_order = client.create_market_order(order_args)
-            response = client.post_order(signed_order, OrderType.FOK)
+            response = client.post_order(signed_order, OrderType.FAK)  # PATCH-035: FAK fills partial, FOK was rejecting thin markets
 
             success = False
             if isinstance(response, dict):
