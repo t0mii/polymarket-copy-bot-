@@ -211,12 +211,12 @@ def _get_category_blacklist(trader_name):
         if (t["pnl_realized"] or 0) > 0:
             by_cat[cat]["wins"] += 1
 
-    # PATCH-037b: Blacklist wenn Trader in Kategorie PnL < -$20 hat (keine WR/Trade-Anzahl Bedingung)
+    # PATCH-037b: Blacklist wenn Trader in Kategorie PnL < -$10 hat (keine WR/Trade-Anzahl Bedingung)
     blacklist = []
     for cat, data in by_cat.items():
         if data["cnt"] >= 1:
             wr = data["wins"] / data["cnt"] * 100
-            if data["pnl"] < -20:
+            if data["pnl"] < -10:
                 blacklist.append(cat)
 
     return blacklist
