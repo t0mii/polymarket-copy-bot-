@@ -1530,6 +1530,149 @@ def brain_dashboard():
     return render_template("brain.html")
 
 
+
+
+
+@app.route("/api/brain/paper-traders")
+def api_paper_traders():
+    """Paper traders with 1d/2d/3d PnL breakdown."""
+    with db.get_connection() as conn:
+        # Get all candidates in PAPER_FOLLOW or OBSERVING status
+        candidates = conn.execute(
+            "SELECT tl.username, tl.address, tl.status, tl.status_changed_at, "
+            "tl.paper_trades, tl.paper_pnl, tl.paper_wr, tl.pause_count "
+            "FROM trader_lifecycle tl "
+            "WHERE tl.status IN ('PAPER_FOLLOW') "
+            "ORDER BY tl.paper_pnl DESC"
+        ).fetchall()
+
+        result = []
+        for c in candidates:
+            d = dict(c)
+            addr = d["address"]
+            # 1d/2d/3d PnL from paper_trades table
+            for days, key in [(1, "pnl_1d"), (2, "pnl_2d"), (3, "pnl_3d")]:
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(pnl), 0) as pnl, COUNT(*) as cnt "
+                    "FROM paper_trades WHERE candidate_address = ? AND status = 'closed' "
+                    "AND closed_at > datetime('now', '-%d days', 'localtime')" % days,
+                    (addr,)
+                ).fetchone()
+                d[key] = round(row["pnl"], 2) if row else 0
+                d["trades_%dd" % days] = row["cnt"] if row else 0
+
+            # Days in current status
+            if d.get("status_changed_at"):
+                try:
+                    from datetime import datetime as _dt
+                    _changed = _dt.strptime(d["status_changed_at"], "%Y-%m-%d %H:%M:%S")
+                    d["days_in_status"] = round((_dt.now() - _changed).total_seconds() / 86400, 1)
+                except Exception:
+                    d["days_in_status"] = 0
+            else:
+                d["days_in_status"] = 0
+
+            result.append(d)
+
+    return jsonify({"paper_traders": result})
+
+@app.route("/api/brain/tuner-settings")
+def api_tuner_settings():
+    """Auto-tuner per-trader settings — shows what brain changed vs defaults."""
+    from dotenv import dotenv_values
+    import config as _cfg
+    settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.env")
+    vals = dotenv_values(settings_path)
+
+    def _parse_map(raw):
+        result = {}
+        for entry in (raw or "").split(","):
+            entry = entry.strip()
+            if ":" in entry:
+                parts = entry.split(":", 1)
+                try:
+                    result[parts[0].strip().lower()] = parts[1].strip()
+                except (ValueError, IndexError):
+                    pass
+        return result
+
+    bet_map = _parse_map(vals.get("BET_SIZE_MAP", ""))
+    exp_map = _parse_map(vals.get("TRADER_EXPOSURE_MAP", ""))
+    min_usd_map = _parse_map(vals.get("MIN_TRADER_USD_MAP", ""))
+    min_price_map = _parse_map(vals.get("MIN_ENTRY_PRICE_MAP", ""))
+    max_price_map = _parse_map(vals.get("MAX_ENTRY_PRICE_MAP", ""))
+    sl_map = _parse_map(vals.get("STOP_LOSS_MAP", ""))
+    tp_map = _parse_map(vals.get("TAKE_PROFIT_MAP", ""))
+    conv_map = _parse_map(vals.get("MIN_CONVICTION_RATIO_MAP", ""))
+    bl_raw = vals.get("CATEGORY_BLACKLIST_MAP", "")
+
+    # Parse blacklist
+    bl_map = {}
+    for entry in bl_raw.split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            parts = entry.split(":", 1)
+            bl_map[parts[0].strip().lower()] = parts[1].strip()
+
+    # Defaults
+    defaults = {
+        "bet_size": str(_cfg.BET_SIZE_PCT),
+        "exposure": str(_cfg.MAX_EXPOSURE_PER_TRADER),
+        "min_usd": str(_cfg.MIN_TRADER_USD),
+        "min_price": str(_cfg.MIN_ENTRY_PRICE),
+        "max_price": str(_cfg.MAX_ENTRY_PRICE),
+        "stop_loss": str(_cfg.STOP_LOSS_PCT),
+        "take_profit": str(_cfg.TAKE_PROFIT_PCT),
+        "conviction": str(_cfg.MIN_CONVICTION_RATIO),
+    }
+
+    # Build per-trader settings
+    all_traders = set()
+    for m in [bet_map, exp_map, min_usd_map, min_price_map, max_price_map, sl_map, tp_map, conv_map, bl_map]:
+        all_traders.update(m.keys())
+
+    traders = {}
+    for name in sorted(all_traders):
+        changes = []
+        s = {}
+        if name in bet_map:
+            s["bet_size"] = bet_map[name]
+            if bet_map[name] != defaults["bet_size"]:
+                changes.append("Bet " + str(round(float(bet_map[name])*100)) + "%")
+        if name in exp_map:
+            s["exposure"] = exp_map[name]
+            if exp_map[name] != defaults["exposure"]:
+                changes.append("Exp " + str(round(float(exp_map[name])*100)) + "%")
+        if name in min_usd_map:
+            s["min_usd"] = min_usd_map[name]
+            if min_usd_map[name] != defaults["min_usd"]:
+                changes.append("Min$" + min_usd_map[name])
+        if name in min_price_map:
+            s["min_price"] = min_price_map[name]
+        if name in max_price_map:
+            s["max_price"] = max_price_map[name]
+        if name in min_price_map or name in max_price_map:
+            mp1 = min_price_map.get(name, defaults["min_price"])
+            mp2 = max_price_map.get(name, defaults["max_price"])
+            changes.append(str(round(float(mp1)*100)) + "-" + str(round(float(mp2)*100)) + "c")
+        if name in sl_map:
+            s["stop_loss"] = sl_map[name]
+            if sl_map[name] != defaults["stop_loss"]:
+                changes.append("SL " + str(round(float(sl_map[name])*100)) + "%")
+        if name in tp_map:
+            s["take_profit"] = tp_map[name]
+        if name in conv_map:
+            s["conviction"] = conv_map[name]
+            if conv_map[name] != defaults["conviction"]:
+                changes.append("Conv " + conv_map[name] + "x")
+        if name in bl_map:
+            s["blacklist"] = bl_map[name]
+            changes.append("BL:" + bl_map[name])
+        s["changes_summary"] = " | ".join(changes) if changes else ""
+        traders[name] = s
+
+    return jsonify({"traders": traders, "defaults": defaults})
+
 # =====================================================================
 # FUN FEATURES: Trash Talk, Trader Cards, Ticker, Konfetti
 # =====================================================================

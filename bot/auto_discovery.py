@@ -255,8 +255,6 @@ def paper_follow_candidates():
 
                 # Filter 1: Price range (same as copy_trader)
                 if not _paper_price_ok(price, filters):
-                    logger.debug("[PAPER] SKIP %s: price %.2f outside %.2f-%.2f",
-                                 address[:10], price, filters["min_entry_price"], filters["max_entry_price"])
                     continue
 
                 # Filter 2: Category blacklist (global)
@@ -264,8 +262,44 @@ def paper_follow_candidates():
                     cat = filters["detect_category"](question)
                     global_bl = getattr(config, "GLOBAL_CATEGORY_BLACKLIST", "")
                     if global_bl and cat and cat.lower() in global_bl.lower():
-                        logger.debug("[PAPER] SKIP %s: category %s blacklisted", address[:10], cat)
                         continue
+
+                # PATCH-038: Additional filters for paper-trade realism
+                # Filter 3: Min Trader USD
+                usdc_size = t.get("usdc_size", 0) or 0
+                if usdc_size < config.MIN_TRADER_USD:
+                    continue
+
+                # Filter 4: Conviction ratio
+                if config.MIN_CONVICTION_RATIO > 0:
+                    buy_sizes = [x.get("usdc_size", 0) for x in trades if x.get("trade_type", "").upper() == "BUY" and x.get("usdc_size", 0) > 0]
+                    avg_size = (sum(buy_sizes) / len(buy_sizes)) if buy_sizes else config.DEFAULT_AVG_TRADER_SIZE
+                    if avg_size > 0 and (usdc_size / avg_size) < config.MIN_CONVICTION_RATIO:
+                        continue
+
+                # Filter 5: Zero-risk block (esports underdogs)
+                try:
+                    from bot.copy_trader import _is_zero_risk_block, _detect_category
+                    _paper_cat = _detect_category(question)
+                    if _is_zero_risk_block(_paper_cat, price):
+                        continue
+                except Exception:
+                    pass
+
+                # Filter 6: Trade staleness
+                trade_age = int(time.time()) - (t.get("timestamp", 0) or 0)
+                if trade_age > config.ENTRY_TRADE_SEC:
+                    continue
+
+                # Filter 7: Fee check
+                if config.MAX_FEE_BPS > 0:
+                    try:
+                        from bot.order_executor import get_fee_rate
+                        _fee = get_fee_rate(t["condition_id"], t.get("side", ""))
+                        if _fee > config.MAX_FEE_BPS:
+                            continue
+                    except Exception:
+                        pass
 
                 bet_size = _paper_bet_size(price, filters)
                 shares = bet_size / price if price > 0 else 0
@@ -306,7 +340,12 @@ def close_paper_trades():
         side = (p["side"] or "YES").upper()
 
         price = price_tracker.get_price(cid, side)
-        if price is None:
+        # PATCH-038: close resolved markets instantly
+        if price is not None and price >= 0.99:
+            price = 1.0
+        elif price is not None and price <= 0.01:
+            price = 0.0
+        elif price is None:
             price = entry * 0.95
 
         # Realistic PnL: shares * price_change

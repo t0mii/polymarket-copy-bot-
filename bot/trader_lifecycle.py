@@ -113,13 +113,19 @@ def _check_paper_to_live():
         paper_wr = t.get("paper_wr", 0) or 0
         paper_pnl = t.get("paper_pnl", 0) or 0
         pause_count = t.get("pause_count", 0) or 0
-        if pause_count > 0:
-            min_trades = PAPER_REHAB_MIN_TRADES
-            min_wr = PAPER_REHAB_MIN_WR
-        else:
-            min_trades = PAPER_MIN_TRADES
-            min_wr = PAPER_MIN_WR
-        if paper_trades >= min_trades and paper_wr >= min_wr and paper_pnl > 0:
+        # PATCH-038: 3 days in paper + PnL > 0 + 10 trades (configurable via PAPER_MIN_DAYS)
+        _paper_min_days = float(getattr(config, "PAPER_MIN_DAYS", 3))
+        _paper_min_trades = 10
+        _status_changed = t.get("status_changed_at", "")
+        _days_in_paper = 0
+        if _status_changed:
+            try:
+                from datetime import datetime as _dt
+                _changed_dt = _dt.strptime(_status_changed, "%Y-%m-%d %H:%M:%S")
+                _days_in_paper = (_dt.now() - _changed_dt).total_seconds() / 86400
+            except Exception:
+                _days_in_paper = 0
+        if _days_in_paper >= _paper_min_days and paper_trades >= _paper_min_trades and paper_pnl > 0:
             if not _auto_promote:
                 # Mirror the pause_trader policy at line 63-64: settings.env is
                 # managed manually. Skip both the status flip and the
@@ -147,12 +153,14 @@ def _check_paper_to_live():
                                   json.dumps({"paper_trades": paper_trades, "paper_wr": paper_wr,
                                               "paper_pnl": paper_pnl}),
                                   "New live trader added")
-        elif paper_trades >= PAPER_MAX_TRADES:
+        # PATCH-038b: Kick after 7 days with negative PnL (configurable via PAPER_MAX_DAYS)
+        _paper_max_days = float(getattr(config, "PAPER_MAX_DAYS", 7))
+        if _days_in_paper >= _paper_max_days and paper_pnl <= 0:
             db.update_lifecycle_status(t["address"], "KICKED",
-                                      "Paper failed after %d trades: %.1f%% WR, $%.2f PnL" % (
-                                          paper_trades, paper_wr, paper_pnl))
-            logger.info("[LIFECYCLE] %s: KICKED (paper failed after %d trades, %.1f%% WR)",
-                        t.get("username", t["address"][:12]), paper_trades, paper_wr)
+                                      "Paper failed after %.0f days: %d trades, $%.2f PnL" % (
+                                          _days_in_paper, paper_trades, paper_pnl))
+            logger.info("[LIFECYCLE] %s: KICKED (paper negative after %.0fd, $%.2f PnL)",
+                        t.get("username", t["address"][:12]), _days_in_paper, paper_pnl)
             db.log_brain_decision("KICK_TRADER", t.get("username", t["address"][:12]),
                                   "Paper failed after %d trades" % paper_trades,
                                   json.dumps({"paper_trades": paper_trades, "paper_wr": paper_wr,
