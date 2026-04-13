@@ -18,6 +18,10 @@
       cvs.id='matrixRain';
       document.body.insertBefore(cvs,document.body.firstChild);
     }
+    // Belt-and-suspenders: enforce fixed-position layout even if the page did
+    // not link terminal.css (e.g. dashboard.html which has its own inline CSS).
+    cvs.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;'+
+      'z-index:0;opacity:0.11;pointer-events:none;display:block';
     var ctx=cvs.getContext('2d');
     function resize(){cvs.width=window.innerWidth;cvs.height=window.innerHeight}
     resize();window.addEventListener('resize',resize);
