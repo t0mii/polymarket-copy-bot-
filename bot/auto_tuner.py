@@ -331,6 +331,8 @@ def auto_tune():
     min_usd_map = {}
     tp_map = {}
     sl_map = {}
+    # If global STOP_LOSS_PCT is 0, user disabled stop-loss entirely — don't override per-trader
+    _global_sl_off = config.STOP_LOSS_PCT <= 0
     copies_map = {}
     hedge_map = {}
     blacklist_map = {}

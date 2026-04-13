@@ -351,18 +351,20 @@ async function refresh(){
       totalWins+=(t.wins||0);totalTrades+=cnt;
       if(pnl>bestPnl) bestPnl=pnl;
       const pl=getPowerLevel(wr,pnl,cnt);
-      // Streak (approximate from last trades)
-      const streak=pnl>0&&wr>55?Math.floor((wr-50)/5):0;
-      if(streak>maxStreak) maxStreak=streak;
-      const isOnFire=streak>=3;
+      // Real streak from API
+      const wStreak=t.win_streak||0;
+      const lStreak=t.loss_streak||0;
+      const streak=wStreak>0?wStreak:-lStreak;
+      if(wStreak>maxStreak) maxStreak=wStreak;
+      const isOnFire=wStreak>=3;
       const kelly=pnl>0?fmt(0.063*wr/50,2)+'x':'0.5x';
       const pnl1d=t.pnl_1d||0;const wr1d=t.winrate_1d||0;const copied=t.copied_trades||0;
       return `<tr${isOnFire?' class="on-fire"':''}>
         <td>${dot}</td>
-        <td style="color:var(--gold);font-weight:600">${t.trader_name} ${isOnFire?'&#x1F525;':''}</td>
+        <td style="font-weight:600"><a href="https://polymarket.com/profile/${t.trader_name}" target="_blank" style="color:var(--gold);text-decoration:none">${t.trader_name}</a> ${isOnFire?'&#x1F525;':''}</td>
         <td style="font-size:.7rem;font-weight:600">${copied}</td>
         <td><span class="power-level ${pl.cls}">${pl.power}</span> <span style="font-size:.55rem;color:var(--text-dim)">${pl.tier}</span></td>
-        <td>${streak>0?'&#x1F525;'.repeat(Math.min(streak,5)):'--'}</td>
+        <td>${wStreak>=3?'&#x1F525;'.repeat(Math.min(wStreak,5)):lStreak>=3?'&#x1F480;'.repeat(Math.min(lStreak,5)):wStreak>0?'&#x2B50;'.repeat(wStreak):lStreak>0?'&#x274C;'.repeat(lStreak):'--'}</td>
         <td style="color:${wr1d>=60?'var(--green)':wr1d>=40?'var(--gold)':'var(--red)'}">${t.trades_1d>0?fmt(wr1d,1)+'%':'--'}</td>
         <td class="${pnlClass(pnl1d)}">$${fmt(pnl1d)}</td>
         <td>${fmt(wr,1)}%</td>
@@ -380,7 +382,7 @@ async function refresh(){
     const pe=document.getElementById('paperTraders');
     pe.innerHTML=`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--gold);font-size:.65rem">
       <th style="text-align:left;padding:4px">Trader</th>
-      <th>Status</th><th>Tage</th><th>Trades</th>
+      <th>Status</th><th>Tage</th><th>Open</th><th>Closed</th>
       <th>1d PnL</th><th>2d PnL</th><th>3d PnL</th><th>Total</th>
     </tr></thead><tbody>${paper.paper_traders.map(p=>{
       const pnlCls=(v)=>v>0?'color:var(--green)':v<0?'color:var(--red)':'color:var(--text-dim)';
@@ -388,10 +390,11 @@ async function refresh(){
       const bar=Math.min(days/3*100,100);
       const ready=days>=3&&(p.paper_pnl||0)>0&&(p.paper_trades||0)>=10;
       return `<tr>
-        <td style="color:var(--gold);font-weight:600;padding:4px">${p.username||p.address.slice(0,10)}</td>
+        <td style="font-weight:600;padding:4px"><a href="https://polymarket.com/profile/${p.address}" target="_blank" style="color:var(--gold);text-decoration:none">${p.username||p.address.slice(0,10)}</a></td>
         <td style="text-align:center;font-size:.6rem">${p.status}</td>
         <td style="text-align:center"><div style="background:var(--bg-card);border-radius:4px;overflow:hidden;height:12px;width:50px;display:inline-block;position:relative"><div style="height:100%;width:${bar}%;background:${ready?'var(--green)':'var(--gold)'};border-radius:4px"></div><span style="position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:.55rem;line-height:12px">${days.toFixed(1)}d</span></div></td>
-        <td style="text-align:center;font-size:.65rem">${p.paper_trades||0}</td>
+        <td style="text-align:center;font-size:.65rem;color:var(--gold)">${p.open_trades||0}</td>
+        <td style="text-align:center;font-size:.65rem">${(p.paper_trades||0)-(p.open_trades||0)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_1d)}">$${(p.pnl_1d||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_2d)}">$${(p.pnl_2d||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:.65rem;${pnlCls(p.pnl_3d)}">$${(p.pnl_3d||0).toFixed(2)}</td>
@@ -444,7 +447,7 @@ async function refresh(){
   const ca=await fetchJSON('/api/upgrade/candidates');
   if(ca&&ca.candidates){
     document.getElementById('tCandidates').innerHTML=ca.candidates.filter(c=>c.status!=="inactive").slice(0,10).map(c=>`<tr>
-      <td style="color:var(--gold)">${c.username||c.address.slice(0,8)}</td>
+      <td><a href="https://polymarket.com/profile/${c.address||c.username}" target="_blank" style="color:var(--gold);text-decoration:none">${c.username||c.address.slice(0,8)}</a></td>
       <td class="${pnlClass(c.profit_total)}">$${Number(c.profit_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
       <td>$${Number(c.volume_total||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
       <td>${c.total||0}</td>

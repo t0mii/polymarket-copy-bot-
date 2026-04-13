@@ -240,6 +240,18 @@ def paper_follow_candidates():
     except Exception as e:
         logger.debug("[DISCOVERY] Paper close error: %s", e)
 
+    # PATCH-038c: Auto-kick candidates with paper_pnl < -100 or 200+ trades negative
+    try:
+        with db.get_connection() as conn:
+            kicked = conn.execute(
+                "UPDATE trader_candidates SET status='inactive' "
+                "WHERE status='observing' AND (paper_pnl < -100)"
+            ).rowcount
+            if kicked:
+                logger.info("[DISCOVERY] Auto-kicked %d bad candidates (paper PnL < -$100)", kicked)
+    except Exception:
+        pass
+
     filters = _load_settings_filters()
     candidates = db.get_all_candidates("observing")
     for cand in candidates[:20]:
@@ -414,12 +426,28 @@ def check_promotions():
         if winrate >= PROMOTE_MIN_WINRATE and total_pnl > 0:
             logger.info("[DISCOVERY] PROMOTE candidate: %s (wr=%.1f%%, pnl=$%.2f, trades=%d)",
                         cand["username"], winrate, total_pnl, total)
+            # PATCH-038c: promoted -> PAPER_FOLLOW (reset stats, start fresh paper test)
             with db.get_connection() as conn:
                 conn.execute(
-                    "UPDATE trader_candidates SET status = 'promoted', "
+                    "UPDATE trader_candidates SET status = 'promoted', paper_trades=0, paper_pnl=0, paper_wins=0, "
                     "promoted_at = datetime('now','localtime') WHERE address = ?",
                     (cand["address"],)
                 )
+                # Move to PAPER_FOLLOW in lifecycle
+                _lc = conn.execute("SELECT id FROM trader_lifecycle WHERE address=?", (cand["address"],)).fetchone()
+                if _lc:
+                    conn.execute(
+                        "UPDATE trader_lifecycle SET status='PAPER_FOLLOW', paper_trades=0, paper_pnl=0, paper_wr=0, "
+                        "status_changed_at=datetime('now','localtime') WHERE address=?",
+                        (cand["address"],))
+                else:
+                    conn.execute(
+                        "INSERT INTO trader_lifecycle (address, username, status, status_changed_at, paper_trades, paper_pnl, paper_wr) "
+                        "VALUES (?, ?, 'PAPER_FOLLOW', datetime('now','localtime'), 0, 0, 0)",
+                        (cand["address"], cand["username"]))
+                # Delete old paper trades for fresh start
+                conn.execute("DELETE FROM paper_trades WHERE candidate_address=?", (cand["address"],))
+            logger.info("[DISCOVERY] %s -> PAPER_FOLLOW (fresh paper test)", cand["username"])
             # Previously: promoted candidates were automatically added to
             # FOLLOWED_TRADERS and wallets table via _add_followed_trader +
             # add_followed_wallet. That caused WHALE_AUTO_COPY_PATH: overnight

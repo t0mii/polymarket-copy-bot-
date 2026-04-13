@@ -1423,6 +1423,25 @@ def api_trader_performance():
             d["wins_1d"] = day_stats["wins"] or 0 if day_stats else 0
             d["losses_1d"] = day_stats["losses"] or 0 if day_stats else 0
             d["winrate_1d"] = round(d["wins_1d"] / d["trades_1d"] * 100, 1) if d["trades_1d"] > 0 else 0
+            # Real streak: count consecutive wins/losses from last trades
+            streak_rows = conn.execute(
+                "SELECT pnl_realized FROM copy_trades WHERE wallet_username = ? AND status = 'closed' "
+                "AND pnl_realized IS NOT NULL AND (actual_size > 0 OR shares_held > 0) "
+                "ORDER BY closed_at DESC LIMIT 10", (name,)
+            ).fetchall()
+            win_streak = 0
+            loss_streak = 0
+            for sr in streak_rows:
+                if sr["pnl_realized"] > 0:
+                    if loss_streak > 0:
+                        break
+                    win_streak += 1
+                elif sr["pnl_realized"] < 0:
+                    if win_streak > 0:
+                        break
+                    loss_streak += 1
+            d["win_streak"] = win_streak
+            d["loss_streak"] = loss_streak
             result.append(d)
     return jsonify({"traders": result})
 
@@ -1460,8 +1479,8 @@ def api_ml_info():
 
 @app.route("/api/upgrade/candidates")
 def api_candidates():
-    """Trader-Kandidaten mit Paper-Stats."""
-    candidates = db.get_all_candidates()
+    """Trader-Kandidaten mit Paper-Stats (nur observing, nicht promoted/inactive/kicked)."""
+    candidates = db.get_all_candidates('observing')
     for c in candidates:
         stats = db.get_candidate_stats(c["address"])
         c.update(stats)
@@ -1560,6 +1579,13 @@ def api_paper_traders():
                 ).fetchone()
                 d[key] = round(row["pnl"], 2) if row else 0
                 d["trades_%dd" % days] = row["cnt"] if row else 0
+            # Also count open paper trades
+            open_row = conn.execute(
+                "SELECT COUNT(*) as c FROM paper_trades WHERE candidate_address = ? AND status = 'open'",
+                (addr,)
+            ).fetchone()
+            d["open_trades"] = open_row["c"] if open_row else 0
+            d["paper_trades"] = (d.get("paper_trades") or 0) + d["open_trades"]
 
             # Days in current status
             if d.get("status_changed_at"):
