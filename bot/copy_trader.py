@@ -115,12 +115,14 @@ def _is_zero_risk_block(category: str, trader_price: float) -> bool:
 # --- P&L helpers: use actual fill data when available, fallback to planned ---
 
 def _get_entry_price(trade: dict) -> float:
-    """Best available entry price (actual > planned)."""
-    return trade.get("actual_entry_price") or trade.get("entry_price") or 0
+    """Best available entry price (actual > planned). PATCH-031: explicit None check."""
+    v = trade.get("actual_entry_price")
+    return v if v is not None and v > 0 else (trade.get("entry_price") or 0)
 
 def _get_size(trade: dict) -> float:
-    """Best available investment size (actual > planned)."""
-    return trade.get("actual_size") or trade.get("size") or 0
+    """Best available investment size (actual > planned). PATCH-031: explicit None check."""
+    v = trade.get("actual_size")
+    return v if v is not None and v > 0 else (trade.get("size") or 0)
 
 def _calc_pnl(trade: dict, close_price: float) -> tuple:
     """Calculate P&L using best available entry price. Returns (pnl, shares)."""
@@ -1028,6 +1030,10 @@ def _run_idle_check(followed: list):
                 db.toggle_follow(addr, 0)
                 _idle_replaced_at[addr] = now
             # Alle jemals ersetzten Adressen ausschliessen — verhindert Rotation der gleichen 3
+            # PATCH-031: evict stale entries from _idle_replaced_at
+            _now_clean = _time.time()
+            for _addr_clean in [a for a, ts in list(_idle_replaced_at.items()) if _now_clean - ts > config.IDLE_REPLACE_COOLDOWN]:
+                del _idle_replaced_at[_addr_clean]
             all_excluded = idle_addresses | set(_idle_replaced_at.keys())
             auto_follow_top_traders(count=config.AUTO_FOLLOW_COUNT, exclude=all_excluded, require_recent=True)
             # Neu-gefollte Wallets ebenfalls mit Cooldown markieren (verhindert sofortigen Re-Replace)
@@ -1127,6 +1133,11 @@ def copy_followed_wallets():
     portfolio_value = cash + _open_value
     logger.info("PORTFOLIO: Wallet=$%.2f | Positions=$%.2f | Total=$%.2f", cash, _open_value, portfolio_value)
 
+    # PATCH-031: drain stale entries even if feature disabled
+    if _event_wait_queue and config.MAX_HOURS_BEFORE_EVENT <= 0:
+        _ew_cutoff = _time.time() - config.EVENT_WAIT_MAX_SECS
+        for _ek in [k for k, v in list(_event_wait_queue.items()) if v["queued_at"] < _ew_cutoff]:
+            _event_wait_queue.pop(_ek, None)
     # Event-Wait-Queue: fire trades whose events are now within the time window
     if _event_wait_queue and config.MAX_HOURS_BEFORE_EVENT > 0:
         _ew_now = _time.time()
