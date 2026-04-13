@@ -87,6 +87,10 @@ def _check_observing_to_paper():
 
 def _check_paper_to_live():
     traders = db.get_lifecycle_traders_by_status("PAPER_FOLLOW")
+    try:
+        _auto_promote = getattr(config, "AUTO_DISCOVERY_AUTO_PROMOTE", False)
+    except Exception:
+        _auto_promote = False
     for t in traders:
         paper_trades = t.get("paper_trades", 0) or 0
         paper_wr = t.get("paper_wr", 0) or 0
@@ -99,6 +103,23 @@ def _check_paper_to_live():
             min_trades = PAPER_MIN_TRADES
             min_wr = PAPER_MIN_WR
         if paper_trades >= min_trades and paper_wr >= min_wr and paper_pnl > 0:
+            if not _auto_promote:
+                # Mirror the pause_trader policy at line 63-64: settings.env is
+                # managed manually. Skip both the status flip and the
+                # settings.env mutation. Log a recommendation so the user can
+                # review manually (dashboard/logs).
+                logger.info(
+                    "[LIFECYCLE] %s meets paper criteria (%d trades, %.1f%% WR, $%.2f PnL) "
+                    "but AUTO_DISCOVERY_AUTO_PROMOTE=false — review manually",
+                    t.get("username", t["address"][:12]),
+                    paper_trades, paper_wr, paper_pnl)
+                db.log_brain_decision(
+                    "PROMOTE_RECOMMENDED", t.get("username", t["address"][:12]),
+                    "Paper criteria met but auto-promote disabled",
+                    json.dumps({"paper_trades": paper_trades, "paper_wr": paper_wr,
+                                "paper_pnl": paper_pnl}),
+                    "Manual review required — set AUTO_DISCOVERY_AUTO_PROMOTE=true to enable")
+                continue
             db.update_lifecycle_status(t["address"], "LIVE_FOLLOW",
                                       "Paper criteria met: %d trades, %.1f%% WR, $%.2f PnL" % (
                                           paper_trades, paper_wr, paper_pnl))
@@ -216,6 +237,19 @@ def _seed_tier_defaults(content: str, name: str) -> str:
 
 
 def _add_followed_trader(address: str, username: str):
+    # Defense-in-depth gate: respect AUTO_DISCOVERY_AUTO_PROMOTE at the
+    # function level so ANY call site is covered, not just the ones we
+    # remember to gate. Mirrors pause_trader's "settings managed manually"
+    # policy (line 63-64) from the opposite direction — brain may not
+    # auto-add to FOLLOWED_TRADERS either.
+    try:
+        if not getattr(config, "AUTO_DISCOVERY_AUTO_PROMOTE", False):
+            logger.info(
+                "[LIFECYCLE] Auto-add blocked — AUTO_DISCOVERY_AUTO_PROMOTE=false: %s",
+                username or address[:12])
+            return
+    except Exception:
+        return
     content = _read_settings()
     match = re.search(r'^FOLLOWED_TRADERS=(.*)$', content, re.MULTILINE)
     current = match.group(1).strip() if match else ""

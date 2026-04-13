@@ -2,6 +2,40 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-13 (Abend) — Code-review finding: lifecycle auto-promote bypass
+
+Self-review of commits `ba70dbf..e2c6129` via `code-review` skill surfaced one real bypass that the earlier `AUTO_DISCOVERY_AUTO_PROMOTE` gate missed.
+
+### The bypass
+
+`AUTO_DISCOVERY_AUTO_PROMOTE=false` was introduced in `e2c6129` and gates the auto_discovery candidate promotion path at `bot/auto_discovery.py:400-406`. But `bot/trader_lifecycle.py::_check_paper_to_live()` at line 105 also calls `_add_followed_trader()` — unconditionally, no flag check. The function target `_add_followed_trader()` at line 218 also had no internal gate.
+
+**Effective chain** (verified against `database/scanner.db` on server): `fsavhlc`, `xsaghav`, `sovereign2013`, plus 4 DISCOVERED whales (`0x161eb16874`, `0x3e5b23e9f7`, `0x6bab41a0dc`, `0x7d0a771ddd`) still exist in `trader_lifecycle` with `status=PAUSED`/`DISCOVERED`. `_check_paused_to_rehab()` transitions PAUSED → PAPER_FOLLOW after `REHAB_DAYS=3`. If `pause_count < MAX_PAUSE_COUNT=2`, `_start_rehab` runs. Then `_check_paper_to_live()` runs paper criteria and, on success, calls `_add_followed_trader()` — which writes the trader back into `settings.env::FOLLOWED_TRADERS`, reversing the roster cleanup from `e2c6129` without user consent.
+
+Acute risk at detection time: `sovereign2013` (pause_count=1, pause_until `2026-04-14`) was 24h away from entering rehab and could have been auto-re-added within days. `fsavhlc`/`xsaghav` have pause_count=17 so `_start_rehab` would KICK them — no risk there.
+
+### The fix
+
+**Logic-level gate in `_check_paper_to_live()`**: When `AUTO_DISCOVERY_AUTO_PROMOTE=false`, a trader meeting paper criteria gets logged as `PROMOTE_RECOMMENDED` via `log_brain_decision` (so the dashboard shows it) and the loop `continue`s. Status stays `PAPER_FOLLOW`, `settings.env` stays untouched.
+
+**Function-level gate in `_add_followed_trader()` (defense-in-depth)**: Early return when flag is false. Covers any future or overlooked call site. Matches the pattern at `pause_trader()` line 63-64 where `_remove_followed_trader` is already disabled because "settings managed manually" — this closes the same door from the opposite side.
+
+Both changes are controlled by the single existing `AUTO_DISCOVERY_AUTO_PROMOTE` flag. User can flip it back to `true` to restore the old behavior. No new config keys.
+
+### Tests
+
+New `tests/test_lifecycle_gate.py` with 4 TDD tests:
+- `test_paper_to_live_blocks_when_auto_promote_false` — reproduces the bypass
+- `test_paper_to_live_promotes_when_auto_promote_true` — locks in the enable path
+- `test_add_followed_trader_direct_call_blocked_when_false` — function-level gate
+- `test_add_followed_trader_direct_call_allowed_when_true` — direct call enable path
+
+All 4 RED without the fix, GREEN with. Full suite 56/56.
+
+### Zombie rows left intact
+
+Not cleaned up as part of this fix — the gate makes them inert (no settings.env mutation regardless of status transitions). Data-maintenance separate from bug fix.
+
 ## 2026-04-13 (Nachmittag) — Profitability round: roster cleanup + zero-risk filter + feedback-loop cleanup + ghost root cause
 
 User directive: "und gib mir zusammenfassung was wir machen sollten um profitabel zu werden" → "nutze superpowers und fixe alles". Focus shifts from bug-hunting to stopping the bleed. Portfolio $320 start → $93.15 = **-71%**. Root cause is the roster: none of the 5 followed traders are profitable on a 7d basis (combined -$182). Fixing ML / dedup / filters is valuable but doesn't change the math if the upstream signal is bad.
