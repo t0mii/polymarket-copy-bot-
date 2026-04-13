@@ -650,6 +650,21 @@ html.wide .app{max-width:none;padding:0 10px 8px}
     </table></div>
   </div>
 
+  <!-- PAPER TRADING — per-trader summary -->
+  <div class="panel" style="margin-top:12px">
+    <div class="panel-title">
+      <span>Paper Trading &mdash; Trader Summary</span>
+      <span class="pill" id="paperSummaryCount">0 traders</span>
+    </div>
+    <div class="tw"><table class="trader-table" id="paperSummaryTable">
+      <thead><tr>
+        <th>Trader</th><th>State</th><th>Days</th><th>Trades</th><th>WR</th>
+        <th>1d P&amp;L</th><th>2d P&amp;L</th><th>3d P&amp;L</th><th>Total P&amp;L</th><th>Verdict</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
   <!-- PAPER TRADING — individual trades (promoted candidates proving themselves) -->
   <div class="panel" style="margin-top:12px">
     <div class="panel-title">
@@ -1533,6 +1548,98 @@ function renderPipeline(lc){
   });
 }
 
+/* Paper trading — per-trader summary (above the proving-ground per-trade table) */
+function renderPaperSummary(data){
+  var tbl=$('#paperSummaryTable');if(!tbl)return;
+  var tbody=tbl.querySelector('tbody');
+  var countEl=$('#paperSummaryCount');
+  while(tbody.firstChild)tbody.removeChild(tbody.firstChild);
+  var list=(data&&data.paper_traders)||[];
+  if(countEl)countEl.textContent=list.length+' traders';
+  if(list.length===0){
+    var tr=document.createElement('tr');
+    var td=document.createElement('td');td.colSpan=10;
+    td.style.color='var(--text-dim)';td.style.textAlign='center';td.style.padding='14px';
+    td.textContent='no traders in paper trading';
+    tr.appendChild(td);tbody.appendChild(tr);return;
+  }
+  list.forEach(function(p){
+    var tr=document.createElement('tr');
+    function td(content,cls){var el=document.createElement('td');if(cls)el.className=cls;if(typeof content==='string')el.textContent=content;else if(content)el.appendChild(content);return el}
+    // Trader link
+    var name=document.createElement('a');
+    name.href='https://polymarket.com/profile/'+(p.address||'');
+    name.target='_blank';name.rel='noopener';
+    name.style.color='var(--cyan)';name.style.textDecoration='none';name.style.fontWeight='600';
+    name.textContent=p.username||String(p.address||'').slice(0,14);
+    tr.appendChild(td(name));
+    // Lifecycle state — handles both trader_lifecycle (PAPER_FOLLOW) and trader_candidates (OBSERVING/PROMOTED)
+    var state=document.createElement('span');
+    var st=(p.status||'-').toUpperCase();
+    var stShort=st.replace('_FOLLOW','').replace('OBSERVING','OBSERV');
+    state.textContent=stShort;
+    state.style.fontSize='.56rem';state.style.letterSpacing='.08em';
+    var stColor='var(--text-dim)';
+    if(st==='PROMOTED'||st==='LIVE_FOLLOW')stColor='var(--green)';
+    else if(st==='PAPER_FOLLOW'||st==='OBSERVING')stColor='var(--yellow)';
+    else if(st==='KICKED')stColor='var(--red)';
+    state.style.color=stColor;
+    tr.appendChild(td(state));
+    // Days in status
+    var days=Number(p.days_in_status||0);
+    var daysEl=document.createElement('span');
+    daysEl.textContent=days.toFixed(1)+'d';
+    daysEl.style.color=days>=3?'var(--green)':days>=7?'var(--red)':'var(--yellow)';
+    daysEl.style.fontWeight='600';
+    tr.appendChild(td(daysEl));
+    // Paper trades count (open + closed)
+    var ptCount=p.paper_trades||0;
+    var openN=p.open_trades||0;
+    var closedN=Math.max(0,ptCount-openN);
+    var countWrap=document.createElement('span');
+    countWrap.textContent=closedN+' cl';
+    if(openN>0){
+      countWrap.textContent+=' / '+openN+' op';
+    }
+    countWrap.style.color='var(--text-mid)';
+    tr.appendChild(td(countWrap));
+    // Paper WR
+    var wr=Number(p.paper_wr||0);
+    var wrEl=document.createElement('span');
+    wrEl.textContent=wr>0?wr.toFixed(0)+'%':'-';
+    wrEl.style.color=wr>=55?'var(--green)':wr>=45?'var(--yellow)':wr>0?'var(--red)':'var(--text-dim)';
+    tr.appendChild(td(wrEl));
+    // 1d / 2d / 3d P&L
+    function pnlCell(v){
+      var el=document.createElement('span');
+      var n=Number(v||0);
+      el.className=pnlClass(n);
+      el.textContent=n===0?'$0.00':((n>=0?'+$':'-$')+Math.abs(n).toFixed(2));
+      return el;
+    }
+    tr.appendChild(td(pnlCell(p.pnl_1d)));
+    tr.appendChild(td(pnlCell(p.pnl_2d)));
+    tr.appendChild(td(pnlCell(p.pnl_3d)));
+    // Total paper P&L
+    tr.appendChild(td(pnlCell(p.paper_pnl)));
+    // Verdict: promotes at 3d positive, kicks at 7d no progress
+    var verdict=document.createElement('span');
+    var totalPnl=Number(p.paper_pnl||0);
+    var trades=ptCount;
+    if(days>=7&&totalPnl<=0){
+      verdict.textContent='KICK';verdict.style.color='var(--red)';verdict.className='tier terrible';
+    }else if(days>=3&&totalPnl>0&&trades>=10){
+      verdict.textContent='PROMOTE';verdict.style.color='var(--green)';verdict.className='tier solid';
+    }else if(days>=3){
+      verdict.textContent='HOLD';verdict.style.color='var(--yellow)';verdict.className='tier neutral';
+    }else{
+      verdict.textContent='OBSERVING';verdict.style.color='var(--text-mid)';verdict.className='tier neutral';
+    }
+    tr.appendChild(td(verdict));
+    tbody.appendChild(tr);
+  });
+}
+
 /* Paper trades list — individual trades from promoted candidates */
 function renderPaperTrades(data){
   var tbl=$('#paperTradesTable');if(!tbl)return;
@@ -1606,8 +1713,8 @@ function renderCandidates(data){
   var tbody=tbl.querySelector('tbody');
   while(tbody.firstChild)tbody.removeChild(tbody.firstChild);
   var list=(data&&data.candidates)||[];
-  // Filter out inactive/kicked, sort by profit descending, top 12
-  list=list.filter(function(c){return c.status!=='inactive'&&c.status!=='kicked'}).slice(0,12);
+  // Filter out inactive/kicked, sort by profit descending, top 30
+  list=list.filter(function(c){return c.status!=='inactive'&&c.status!=='kicked'}).slice(0,30);
   if(list.length===0){
     var tr=document.createElement('tr');
     var td=document.createElement('td');td.colSpan=6;
@@ -1679,15 +1786,19 @@ function mcard(lbl,val,valCls,sub){
   return c;
 }
 
-function renderCoreMini(status,mlInfo,decisions){
+function renderCoreMini(status,mlInfo,decisions,tradersData){
   var box=$('#coreMini');if(!box)return;
   while(box.firstChild)box.removeChild(box.firstChild);
   var ml=status&&status.ml_model||{};
   var cand=status&&status.candidates||{};
   var auto=status&&status.autonomous||{};
-  var traderStatus=status&&status.trader_status||[];
-  var pausedN=traderStatus.filter(function(t){return t.status==='paused'}).length;
-  var activeN=traderStatus.length-pausedN;
+  // Authoritative trader count comes from /api/upgrade/trader-performance (the
+  // actual followed-traders list). status.trader_status only has rows for soft
+  // throttle/pause entries which is a subset.
+  var traderList=(tradersData&&tradersData.traders)||[];
+  var totalN=traderList.length;
+  var pausedN=traderList.filter(function(t){return (t.trader_status||'')==='paused'}).length;
+  var activeN=totalN-pausedN;
   // Brain decisions today
   var today=new Date().toISOString().slice(0,10);
   var decToday=(decisions||[]).filter(function(d){return (d.created_at||'').slice(0,10)===today}).length;
@@ -1700,7 +1811,7 @@ function renderCoreMini(status,mlInfo,decisions){
   box.appendChild(mcard('Decisions Today',String(decToday),decToday>0?'up':'','since 00:00'));
   box.appendChild(mcard('Active Tightens',String(tightens),tightens>0?'dn':'','filter map'));
   box.appendChild(mcard('Blacklists',String(blacklists),blacklists>0?'dn':'','categories'));
-  box.appendChild(mcard('Active Traders',String(activeN)+'/'+String(traderStatus.length||5),activeN>0?'up':'','followed'));
+  box.appendChild(mcard('Active Traders',String(activeN)+'/'+String(totalN),activeN>0?'up':'','followed'));
   box.appendChild(mcard('Paused',String(pausedN),pausedN>0?'dn':'','brain-forced'));
   box.appendChild(mcard('Promoted',String(cand.promoted||0),'up','to paper/live'));
   box.appendChild(mcard('Observing',String(cand.observing||0),'yl','scouting'));
@@ -1786,8 +1897,9 @@ async function refresh(){
   streamEvents=merged.slice(0,800);
   renderBrainStream();
 
-  renderCoreMini(status,mlInfo,decisions);
+  renderCoreMini(status,mlInfo,decisions,traders);
   renderCandidates(candidates);
+  renderPaperSummary(paper);
   renderPaperTrades(paperTradesList);
   renderFieldMini(traders,cats,scores,paper);
 

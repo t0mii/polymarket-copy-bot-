@@ -1504,8 +1504,17 @@ def api_ml_info():
 
 @app.route("/api/upgrade/candidates")
 def api_candidates():
-    """Trader-Kandidaten mit Paper-Stats (nur observing, nicht promoted/inactive/kicked)."""
-    candidates = db.get_all_candidates('observing')
+    """Trader-Kandidaten: observing + promoted (the ones still paper-proving).
+    Sorted by profit_total desc so the biggest candidates land on top.
+    Inactive/kicked are excluded."""
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM trader_candidates "
+            "WHERE status IN ('observing','promoted') "
+            "ORDER BY profit_total DESC "
+            "LIMIT 100"
+        ).fetchall()
+        candidates = [dict(r) for r in rows]
     for c in candidates:
         stats = db.get_candidate_stats(c["address"])
         c.update(stats)
@@ -1579,22 +1588,46 @@ def brain_dashboard():
 
 @app.route("/api/brain/paper-traders")
 def api_paper_traders():
-    """Paper traders with 1d/2d/3d PnL breakdown."""
+    """Paper traders with 1d/2d/3d PnL breakdown.
+
+    Combines two sources:
+    1. trader_candidates rows that have paper_trades (the observing+promoted
+       candidates actively paper-trading — this is the main source).
+    2. trader_lifecycle rows with status=PAPER_FOLLOW (the formal paper-follow
+       lifecycle state, if any exist).
+    Duplicates are collapsed by address; lifecycle status wins where present."""
+    from datetime import datetime as _dt
     with db.get_connection() as conn:
-        # Get all candidates in PAPER_FOLLOW or OBSERVING status
-        candidates = conn.execute(
-            "SELECT tl.username, tl.address, tl.status, tl.status_changed_at, "
-            "tl.paper_trades, tl.paper_pnl, tl.paper_wr, tl.pause_count "
-            "FROM trader_lifecycle tl "
-            "WHERE tl.status IN ('PAPER_FOLLOW') "
-            "ORDER BY tl.paper_pnl DESC"
+        by_addr = {}
+        # 1. Candidates — the bulk of the paper-trading activity lives here
+        cand_rows = conn.execute(
+            "SELECT address, username, status, paper_trades, paper_pnl, "
+            "COALESCE(paper_wins*100.0/NULLIF(paper_trades,0),0) AS paper_wr "
+            "FROM trader_candidates "
+            "WHERE paper_trades > 0 AND status IN ('observing','promoted') "
+            "ORDER BY paper_pnl DESC"
         ).fetchall()
+        for c in cand_rows:
+            d = dict(c)
+            d["status"] = d.get("status", "observing").upper()
+            d["source"] = "candidate"
+            by_addr[d["address"].lower()] = d
+        # 2. Lifecycle PAPER_FOLLOW rows override / add
+        lc_rows = conn.execute(
+            "SELECT address, username, status, status_changed_at, "
+            "paper_trades, paper_pnl, paper_wr, pause_count "
+            "FROM trader_lifecycle "
+            "WHERE status = 'PAPER_FOLLOW'"
+        ).fetchall()
+        for c in lc_rows:
+            d = dict(c)
+            d["source"] = "lifecycle"
+            by_addr[d["address"].lower()] = d
 
         result = []
-        for c in candidates:
-            d = dict(c)
+        for d in by_addr.values():
             addr = d["address"]
-            # 1d/2d/3d PnL from paper_trades table
+            # 1d/2d/3d PnL from paper_trades
             for days, key in [(1, "pnl_1d"), (2, "pnl_2d"), (3, "pnl_3d")]:
                 row = conn.execute(
                     "SELECT COALESCE(SUM(pnl), 0) as pnl, COUNT(*) as cnt "
@@ -1604,27 +1637,37 @@ def api_paper_traders():
                 ).fetchone()
                 d[key] = round(row["pnl"], 2) if row else 0
                 d["trades_%dd" % days] = row["cnt"] if row else 0
-            # Also count open paper trades
             open_row = conn.execute(
                 "SELECT COUNT(*) as c FROM paper_trades WHERE candidate_address = ? AND status = 'open'",
                 (addr,)
             ).fetchone()
             d["open_trades"] = open_row["c"] if open_row else 0
             d["paper_trades"] = (d.get("paper_trades") or 0) + d["open_trades"]
-
-            # Days in current status
+            # Days in status
             if d.get("status_changed_at"):
                 try:
-                    from datetime import datetime as _dt
                     _changed = _dt.strptime(d["status_changed_at"], "%Y-%m-%d %H:%M:%S")
                     d["days_in_status"] = round((_dt.now() - _changed).total_seconds() / 86400, 1)
                 except Exception:
                     d["days_in_status"] = 0
             else:
-                d["days_in_status"] = 0
-
+                # For candidate-sourced rows we don't have a lifecycle timestamp.
+                # Derive from the oldest paper trade so "days in paper" is still meaningful.
+                oldest = conn.execute(
+                    "SELECT MIN(created_at) AS ts FROM paper_trades WHERE candidate_address = ?",
+                    (addr,)
+                ).fetchone()
+                if oldest and oldest["ts"]:
+                    try:
+                        _start = _dt.strptime(oldest["ts"], "%Y-%m-%d %H:%M:%S")
+                        d["days_in_status"] = round((_dt.now() - _start).total_seconds() / 86400, 1)
+                    except Exception:
+                        d["days_in_status"] = 0
+                else:
+                    d["days_in_status"] = 0
             result.append(d)
-
+        # Sort by paper_pnl desc
+        result.sort(key=lambda x: (x.get("paper_pnl") or 0), reverse=True)
     return jsonify({"paper_traders": result})
 
 

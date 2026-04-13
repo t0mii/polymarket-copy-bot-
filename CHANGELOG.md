@@ -2,6 +2,22 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (even later) — Brain paper/candidates visibility fix
+
+Diagnosis: `/api/brain/paper-traders` only queried `trader_lifecycle WHERE status='PAPER_FOLLOW'`, which had **0 rows** on the live server because piff's PATCH-038c runs auto-discovery through `trader_candidates` (status `observing`/`promoted`), not through the lifecycle table. Meanwhile `/api/upgrade/candidates` filtered only by `status='observing'`, hiding the 3 actively paper-trading `promoted` candidates (0x3e5b23e9f7 +$20.61, Dropper +$8.80, aenews2 +$0.41). And the brain frontend capped the top-candidates render at 12 rows. Net effect: the user saw an almost-empty Paper Trading panel even though the bot had already generated 5456 paper trades across 39 candidates.
+
+### Fixes
+
+- `dashboard/app.py::api_paper_traders`: now unions two sources. Primary is `trader_candidates WHERE paper_trades > 0 AND status IN ('observing','promoted')`. Secondary is `trader_lifecycle WHERE status='PAPER_FOLLOW'` (for the case where the lifecycle state eventually catches up). Duplicates collapse on address. For candidate-sourced rows without a `status_changed_at` timestamp, `days_in_status` is derived from the oldest paper trade so "days in paper" stays meaningful. Sorted by `paper_pnl` desc.
+- `dashboard/app.py::api_candidates`: now returns `status IN ('observing','promoted')` sorted by `profit_total` desc, limit 100. The 3 promoted whales finally show up on the Top Candidates list.
+- `dashboard/templates/brain.html::renderCandidates`: slice cap raised from 12 → 30.
+- `dashboard/templates/brain.html::renderPaperSummary`: state-badge color logic handles both lifecycle states (`PAPER_FOLLOW` / `LIVE_FOLLOW` / `KICKED`) and candidate states (`OBSERVING` / `PROMOTED`).
+- `dashboard/templates/brain.html::renderCoreMini`: Active Traders counter now pulls from `/api/upgrade/trader-performance` (the real followed-traders list) instead of `status.trader_status` (which only held soft-throttle rows — that's why it showed 3/3 even though the roster has more).
+
+### Live verification
+
+Server now returns 32 paper-traders and 39 candidates (36 observing + 3 promoted) through the brain page, with the top performers visible: `0x3e5b23e9f7` +$20.61 / 88 trades / 87.5% WR / 1.6d, `Dropper` +$8.80 / 118 trades / 59% WR / 1.2d.
+
 ## 2026-04-14 (still later) — Logs filter precision + brain paper-trades list
 
 ### `/logs` — bracket-tagged filter patterns + stable scroll
