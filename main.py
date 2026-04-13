@@ -243,11 +243,11 @@ def update_prices():
                         from database.db import get_connection as _gc_check
                         with _gc_check() as _cc:
                             _our_trade = _cc.execute(
-                                "SELECT id, size, entry_price, side, actual_entry_price, actual_size FROM copy_trades WHERE condition_id=? AND side=? AND status='open'", (_cid_pos, _pos_side)
+                                "SELECT id, size, entry_price, side, actual_entry_price, actual_size, wallet_username FROM copy_trades WHERE condition_id=? AND side=? AND status='open'", (_cid_pos, _pos_side)
                             ).fetchone()
                             if not _our_trade:
                                 _our_trade = _cc.execute(
-                                    "SELECT id, size, entry_price, side, actual_entry_price, actual_size FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
+                                    "SELECT id, size, entry_price, side, actual_entry_price, actual_size, wallet_username FROM copy_trades WHERE condition_id=? AND status='open'", (_cid_pos,)
                                 ).fetchone()
                         if not _our_trade:
                             continue  # not our bot's position, skip
@@ -287,6 +287,11 @@ def update_prices():
                                 broadcast_event("trade_closed", {"market": _close_title, "pnl": _close_pnl, "price": 0, "trader": "auto", "size": _our_size})
                             except Exception:
                                 pass
+                            try:
+                                _trader_name = _our_trade["wallet_username"] if "wallet_username" in _our_trade.keys() else ""
+                                _db.update_trade_score_outcome(_cid_pos, _trader_name or "", _close_pnl)
+                            except Exception as _score_e:
+                                logger.debug("[FEEDBACK] update_trade_score_outcome failed (AUTO-CLOSE lost): %s", _score_e)
                         continue  # Already handled — skip auto-sell
                     # Close won positions in DB (price at 100c, resolved)
                     elif _cp >= config.AUTO_CLOSE_WON_PRICE and _iv > 0.01:
@@ -321,6 +326,11 @@ def update_prices():
                                 broadcast_event("trade_closed", {"market": _close_title, "pnl": _pnl_won, "price": 100, "trader": "auto", "size": _our_size})
                             except Exception:
                                 pass
+                            try:
+                                _trader_name = _our_trade["wallet_username"] if "wallet_username" in _our_trade.keys() else ""
+                                _db.update_trade_score_outcome(_cid_pos, _trader_name or "", _pnl_won)
+                            except Exception as _score_e:
+                                logger.debug("[FEEDBACK] update_trade_score_outcome failed (AUTO-CLOSE won): %s", _score_e)
                         continue  # Already handled — skip auto-sell
                     # Use OUR entry price for profit check — API's initialValue differs due to slippage/fees
                     _our_pnl_check = (_cp - _our_entry) * (_our_size / _our_entry) if _our_entry > 0 else 0

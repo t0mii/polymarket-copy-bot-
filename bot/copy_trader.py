@@ -1579,6 +1579,10 @@ def copy_followed_wallets():
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
                                     "Position closed — sold",
                                     "#%d %s — P&L $%+.2f" % (our_trade["id"], our_trade["market_question"][:40], pnl), pnl)
+                    try:
+                        db.update_trade_score_outcome(sell_cid, our_trade.get("wallet_username","") or username or "", pnl)
+                    except Exception as _score_e:
+                        logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                     _already_sold_cids.add(sell_cid)
                     # Close ALL other open trades on same condition_id — sell each one too
                     _other_on_cid = [t for t in _cached_open_trades if t.get("condition_id") == sell_cid and t.get("id") != our_trade["id"]]
@@ -1586,6 +1590,10 @@ def copy_followed_wallets():
                         _ot_pnl, _ = _calc_pnl(_ot, sell_price)
                         # sell_shares already sold all shares for this token, just close DB
                         db.close_copy_trade(_ot["id"], _ot_pnl, close_price=sell_price)
+                        try:
+                            db.update_trade_score_outcome(sell_cid, _ot.get("wallet_username","") or "", _ot_pnl)
+                        except Exception as _score_e:
+                            logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                         logger.info("[FAST-SELL] #%d also closed (same market): PnL=$%.2f", _ot["id"], _ot_pnl)
                     try:
                         from dashboard.app import broadcast_event
@@ -2362,9 +2370,16 @@ def update_copy_positions():
                             # fast between scans, actual fill ends up far below trigger price.
                             # Last 4 esports trailing stops all bled (-$1.36 to -$13.43) while
                             # the one non-esports case (#2749 NEC) locked in +$0.42 profit cleanly.
+                            #
+                            # 2026-04-13 EXTENDED: also disable for nba/mlb/nhl — same BAD_FILL
+                            # pattern observed on #3035 (Spurs, nba, +$0.36 peak → -$0.37 fill) and
+                            # #3036 (Jazz/Lakers, nba, +$0.21 peak → -$0.55 fill). Both late-night
+                            # US sports with thin orderbooks. Slippage cascade walks the book below
+                            # max -20c config on thin markets, realizes ~50% slippage below quote.
+                            # Until trailing-stop fill logic is fixed, keep it off for thin-book cats.
                             _ts_category = (trade.get("category") or "").lower()
-                            _ts_is_esports = _ts_category in ("cs", "lol", "valorant", "dota")
-                            if config.TRAILING_STOP_ENABLED and _ep > 0 and not _ts_is_esports:
+                            _ts_thin_book = _ts_category in ("cs", "lol", "valorant", "dota", "nba", "mlb", "nhl")
+                            if config.TRAILING_STOP_ENABLED and _ep > 0 and not _ts_thin_book:
                                 _peak = trade.get("peak_price") if trade.get("peak_price") not in (None, 0) else effective_price
                                 _peak_gain = (_peak - _ep) / _ep
                                 _sell_at = _peak - config.TRAILING_STOP_MARGIN
@@ -2418,6 +2433,10 @@ def update_copy_positions():
                                                 trade["id"], gain_pct * 100, pnl, trade["market_question"][:40])
                                     db.log_activity("sell", "WIN", "Take-profit triggered",
                                                     "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:35], pnl), round(pnl, 2))
+                                    try:
+                                        db.update_trade_score_outcome(trade_cid, trade.get("wallet_username","") or "", pnl)
+                                    except Exception as _score_e:
+                                        logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                                     continue
 
 
@@ -2467,6 +2486,10 @@ def update_copy_positions():
                                 db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
                                                 "Trader closed position — sold",
                                                 "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:40], pnl), pnl)
+                                try:
+                                    db.update_trade_score_outcome(trade_cid, trade.get("wallet_username","") or "", pnl)
+                                except Exception as _score_e:
+                                    logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                                 continue
 
                         # --- FALLBACK: Check Gamma API if market is resolved ---
@@ -2508,6 +2531,10 @@ def update_copy_positions():
                                             db.log_activity("resolved", "WIN" if pnl > 0 else "LOSS",
                                                             "Position %s" % ("won" if pnl > 0 else "lost"),
                                                             "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:40], pnl), pnl)
+                                            try:
+                                                db.update_trade_score_outcome(trade_cid, trade.get("wallet_username","") or "", pnl)
+                                            except Exception as _score_e:
+                                                logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                                             try:
                                                 from dashboard.app import broadcast_event
                                                 broadcast_event("trade_closed", {
@@ -2551,6 +2578,10 @@ def update_copy_positions():
                                 db.log_activity("sell", "WIN" if _pnl > 0 else "LOSS",
                                                 "Position closed (stale)",
                                                 "#%d %s — P&L $%+.2f" % (trade["id"], trade["market_question"][:35], _pnl), _pnl)
+                                try:
+                                    db.update_trade_score_outcome(trade_cid, trade.get("wallet_username","") or "", _pnl)
+                                except Exception as _score_e:
+                                    logger.debug("[FEEDBACK] update_trade_score_outcome failed: %s", _score_e)
                         else:
                             logger.debug("Trade #%d: not in positions, miss %d/%d", trade["id"], miss, MISS_COUNT_TO_CLOSE)
 
