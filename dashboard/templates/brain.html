@@ -30,30 +30,30 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .stream-wrap{margin-bottom:14px;position:relative}
 .stream-head{display:flex;align-items:center;justify-content:space-between;padding:6px 0;
   border-bottom:1px solid var(--border);margin-bottom:4px}
-.stream-title{font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);
+.stream-title{font-size:.8rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
   display:flex;align-items:center;gap:8px}
 .stream-title .live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);
   animation:livePulse 1.4s ease-in-out infinite;box-shadow:0 0 8px rgba(248,113,113,0.5)}
 .stream-filter{display:flex;gap:4px;flex-wrap:wrap}
-.stream-filter .sbtn{font-size:.54rem;padding:3px 9px;border:1px solid var(--border);background:transparent;
+.stream-filter .sbtn{font-size:.62rem;padding:4px 10px;border:1px solid var(--border);background:transparent;
   color:var(--text-mid);cursor:pointer;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase}
 .stream-filter .sbtn:hover{border-color:var(--gold-dim);color:var(--gold)}
 .stream-filter .sbtn.act{color:var(--gold);border-color:var(--gold);background:rgba(201,168,76,0.06)}
 .stream-filter .sbtn.toggle{margin-left:auto;color:var(--text-dim);border-style:dashed;opacity:.6}
 .stream-filter .sbtn.toggle.act{color:var(--cyan);border-color:var(--cyan);background:rgba(34,211,238,0.06);opacity:1;border-style:solid}
 .stream-box{border:1px solid var(--border);background:var(--bg2);height:168px;overflow-y:auto;
-  font-family:var(--mono);font-size:.72rem;line-height:1.5;padding:4px 0}
+  font-family:var(--mono);font-size:.78rem;line-height:1.55;padding:4px 0}
 .stream-box::-webkit-scrollbar{width:4px}
 .stream-box::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:2px}
-.sline{padding:3px 12px;display:flex;gap:12px;
+.sline{padding:4px 12px;display:flex;gap:12px;
   border-left:2px solid transparent;align-items:baseline;white-space:nowrap;overflow:hidden}
 .sline:hover{background:rgba(201,168,76,0.03)}
 .sline.fresh{animation:streamFresh 1.8s ease-out}
 @keyframes streamFresh{0%{background:rgba(201,168,76,0.12)}100%{background:transparent}}
-.sline .sts{flex:0 0 58px;color:var(--text-dim);font-size:.64rem}
-.sline .sact{flex:0 0 88px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.66rem}
-.sline .stgt{flex:0 1 auto;max-width:42%;color:var(--cyan);font-weight:600;overflow:hidden;text-overflow:ellipsis}
-.sline .srsn{flex:1 1 auto;min-width:0;color:var(--text-mid);overflow:hidden;text-overflow:ellipsis;font-size:.66rem}
+.sline .sts{flex:0 0 64px;color:var(--text-dim);font-size:.72rem}
+.sline .sact{flex:0 0 96px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.74rem}
+.sline .stgt{flex:0 1 auto;max-width:42%;color:var(--cyan);font-weight:600;overflow:hidden;text-overflow:ellipsis;font-size:.78rem}
+.sline .srsn{flex:1 1 auto;min-width:0;color:var(--text-mid);overflow:hidden;text-overflow:ellipsis;font-size:.74rem}
 .sline.tighten_filter,.sline.blacklist_category,.sline.pause_trader,.sline.kick_trader,.sline.kick,.sline.trade_loss,.sline.paper_loss{border-left-color:var(--red)}
 .sline.relax_filter,.sline.boost_trader,.sline.promote_recommended,.sline.promote,.sline.unblacklist_category,.sline.unpause_trader,.sline.trade_win,.sline.trade_buy,.sline.paper_win{border-left-color:var(--green)}
 .sline.blocked,.sline.observe{border-left-color:var(--yellow)}
@@ -102,26 +102,27 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .core-mid{display:grid;grid-template-columns:1.4fr 2fr;gap:10px;margin-bottom:12px;align-items:stretch}
 @media(max-width:1100px){.core-mid{grid-template-columns:1fr}}
 .core-mid .mini-cards{margin-bottom:0;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:7px}
-.core-mid .mcard{padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-height:0}
-.core-mid .mcard-val{font-size:1.45rem;line-height:1.1;margin-top:2px}
-.core-mid .mcard-lbl{font-size:.62rem;letter-spacing:.14em;margin-bottom:0}
-.core-mid .mcard-sub{font-size:.6rem;margin-top:1px}
+.core-mid .mcard{padding:14px 18px;display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:0}
+.core-mid .mcard-val{font-size:1.65rem;line-height:1.1;margin-top:3px}
+.core-mid .mcard-lbl{font-size:.72rem;letter-spacing:.16em;margin-bottom:0}
+.core-mid .mcard-sub{font-size:.68rem;margin-top:2px}
 
 /* ML Model Health — right side, matches mini-cards height */
 .core-mid .ml-compact{display:flex;flex-direction:column;padding:12px 14px}
 .core-mid .ml-compact .panel-title{padding-bottom:6px;margin-bottom:6px;font-size:.64rem}
 .core-mid .ml-compact-body{display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
-.ml-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.ml-cell{background:var(--bg3);border:1px solid var(--border);padding:8px 10px;text-align:center;
-  position:relative;overflow:hidden}
+.ml-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+@media(max-width:900px){.ml-metrics{grid-template-columns:repeat(2,1fr)}}
+.ml-cell{background:var(--bg3);border:1px solid var(--border);padding:10px 8px;text-align:center;
+  position:relative;overflow:hidden;min-width:0}
 .ml-cell::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.6}
-.ml-cell .ml-lbl{font-size:.52rem;text-transform:uppercase;letter-spacing:.13em;color:var(--text-dim);font-weight:600}
-.ml-cell .ml-val{font-family:var(--mono);font-size:1.25rem;font-weight:700;color:var(--text);margin-top:3px;line-height:1.05;
-  text-shadow:0 0 10px rgba(201,168,76,0.22)}
+.ml-cell .ml-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml-cell .ml-val{font-family:var(--mono);font-size:1.25rem;font-weight:700;color:var(--text);margin-top:4px;line-height:1.05;
+  text-shadow:0 0 10px rgba(201,168,76,0.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ml-cell .ml-val.up{color:var(--green);text-shadow:0 0 10px rgba(52,211,153,0.3)}
 .ml-cell .ml-val.dn{color:var(--red);text-shadow:0 0 10px rgba(248,113,113,0.3)}
-.ml-cell .ml-sub{font-size:.5rem;color:var(--text-dim);margin-top:2px;font-family:var(--mono)}
+.ml-cell .ml-sub{font-size:.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ml-feats{flex:1;min-height:0;display:flex;flex-direction:column}
 .ml-feats .ml-feats-lbl{font-size:.54rem;color:var(--gold);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px;font-weight:700;
   padding-top:6px;border-top:1px solid var(--border)}
@@ -215,17 +216,17 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .counter-spark svg circle.head{animation:headPulse 1.4s ease-in-out infinite}
 /* Counter cards stretch to match the hero's row height; spark flex-fills */
 .core-top{align-items:stretch}
-.core-top .counter{padding:12px 14px 14px;display:flex;flex-direction:column}
-.core-top .counter-lbl{font-size:.6rem;margin-bottom:3px}
-.core-top .counter-val{font-size:1.4rem;margin-top:3px}
-.core-top .counter-delta{font-size:.58rem;margin-top:3px}
+.core-top .counter{padding:14px 16px 16px;display:flex;flex-direction:column}
+.core-top .counter-lbl{font-size:.7rem;margin-bottom:4px;letter-spacing:.16em}
+.core-top .counter-val{font-size:1.6rem;margin-top:4px}
+.core-top .counter-delta{font-size:.66rem;margin-top:4px}
 
 /* ML panel */
 .ml-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:12px;margin-bottom:16px}
 @media(max-width:1100px){.ml-grid{grid-template-columns:1fr}}
 .panel{background:var(--bg2);border:1px solid var(--border);padding:16px 18px;position:relative}
-.panel-title{font-size:.68rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);
-  margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);display:flex;align-items:center;
+.panel-title{font-size:.82rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);
+  margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--border);display:flex;align-items:center;
   justify-content:space-between;gap:8px}
 .panel-title .pill{font-size:.55rem;padding:2px 8px;border:1px solid var(--gold-dim);color:var(--text-dim);
   font-family:var(--mono);letter-spacing:.1em}
@@ -233,8 +234,8 @@ html.wide .app{max-width:none;padding:0 10px 8px}
   box-shadow:0 0 8px var(--green);animation:popupDot 1.2s ease-in-out infinite}
 
 /* ═══ BARS — dashboard-gold, LED-segment + shimmer ═══ */
-.feat-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-family:var(--mono);font-size:.72rem}
-.feat-row .name{width:120px;color:var(--text-mid);flex-shrink:0}
+.feat-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-family:var(--mono);font-size:.8rem}
+.feat-row .name{width:130px;color:var(--text-mid);flex-shrink:0}
 .feat-row .bar-bg{flex:1;height:12px;background:linear-gradient(180deg,rgba(0,0,0,0.45),rgba(12,12,18,0.8));
   border:1px solid var(--gold-dim);position:relative;overflow:hidden;
   box-shadow:inset 0 1px 3px rgba(0,0,0,0.7),inset 0 0 6px rgba(201,168,76,0.08)}
@@ -251,7 +252,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
   background:linear-gradient(90deg,transparent,var(--gold-bright));box-shadow:0 0 14px var(--gold-bright),0 0 20px var(--gold);
   animation:barTipPulse 1.8s ease-in-out infinite}
 @keyframes barTipPulse{0%,100%{opacity:.55}50%{opacity:1}}
-.feat-row .pct{width:52px;text-align:right;color:var(--text);font-weight:700}
+.feat-row .pct{width:60px;text-align:right;color:var(--text);font-weight:700;font-size:.78rem}
 
 /* Neural network SVG — live packet flow, dashboard-gold */
 .neural-box{position:relative;
@@ -282,7 +283,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 /* Scorer weights radial */
 .scorer-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
 @media(max-width:1100px){.scorer-grid{grid-template-columns:1fr}}
-.bucket-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-family:var(--mono);font-size:.78rem;border-bottom:1px solid rgba(30,30,48,0.5)}
+.bucket-row{display:flex;align-items:center;gap:10px;padding:9px 0;font-family:var(--mono);font-size:.86rem;border-bottom:1px solid rgba(30,30,48,0.5)}
 .bucket-row:last-child{border-bottom:none}
 .bucket-row .bucket-lbl{width:70px;color:var(--text);font-weight:600}
 .bucket-row .n{width:38px;text-align:right;color:var(--text-mid)}
@@ -299,10 +300,10 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .bucket-row .pnl{width:70px;text-align:right;font-weight:600}
 
 /* Trader table */
-.trader-table{font-family:var(--mono);font-size:.72rem;width:100%;border-collapse:collapse}
-.trader-table th{text-align:left;color:var(--text-dim);font-size:.58rem;font-weight:600;padding:6px 8px;
+.trader-table{font-family:var(--mono);font-size:.82rem;width:100%;border-collapse:collapse}
+.trader-table th{text-align:left;color:var(--text-dim);font-size:.66rem;font-weight:600;padding:8px 10px;
   text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border);background:var(--bg3)}
-.trader-table td{padding:7px 8px;border-bottom:1px solid rgba(30,30,48,0.5)}
+.trader-table td{padding:9px 10px;border-bottom:1px solid rgba(30,30,48,0.5)}
 .trader-table tr:hover td{background:rgba(201,168,76,0.03)}
 .tier{font-size:.54rem;padding:2px 7px;letter-spacing:.08em;font-weight:700;text-transform:uppercase;border:1px solid;border-radius:2px}
 .tier.star{color:#fbbf24;border-color:rgba(251,191,36,0.4);background:rgba(251,191,36,0.06)}
@@ -312,16 +313,16 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .tier.terrible,.tier.kicked{color:var(--red);border-color:var(--red-dim);background:rgba(248,113,113,0.05)}
 
 /* Category heatmap — larger tiles */
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
-.cat-cell{background:var(--bg3);border:1px solid var(--border);padding:16px 20px;text-align:center;
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.cat-cell{background:var(--bg3);border:1px solid var(--border);padding:18px 22px;text-align:center;
   transition:all .3s;position:relative;overflow:hidden}
 .cat-cell::before{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:var(--border-h);transition:background .4s}
 .cat-cell.pos::before{background:var(--green);box-shadow:0 0 8px rgba(52,211,153,0.4)}
 .cat-cell.neg::before{background:var(--red);box-shadow:0 0 8px rgba(248,113,113,0.4)}
 .cat-cell:hover{border-color:var(--gold-dim);transform:translateY(-2px)}
-.cat-name{font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);font-weight:700}
-.cat-pnl{font-family:var(--mono);font-size:1.45rem;font-weight:700;margin-top:6px;line-height:1.1}
-.cat-meta{font-size:.64rem;color:var(--text-dim);margin-top:5px;font-family:var(--mono)}
+.cat-name{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);font-weight:700}
+.cat-pnl{font-family:var(--mono);font-size:1.6rem;font-weight:700;margin-top:6px;line-height:1.1}
+.cat-meta{font-size:.72rem;color:var(--text-dim);margin-top:6px;font-family:var(--mono)}
 
 /* Brain activity log */
 .brain-log{height:340px;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);
@@ -374,19 +375,19 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .mini-cards{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:14px}
 @media(max-width:1400px){.mini-cards{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:700px){.mini-cards{grid-template-columns:repeat(2,1fr)}}
-.mcard{background:var(--bg2);border:1px solid var(--border);padding:13px 15px;position:relative;
+.mcard{background:var(--bg2);border:1px solid var(--border);padding:14px 16px;position:relative;
   transition:all .25s;overflow:hidden}
 .mcard:hover{border-color:var(--gold-dim)}
 .mcard::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--border-h);transition:background .3s}
 .mcard:hover::before{background:var(--gold)}
-.mcard-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);font-weight:600;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mcard-val{font-family:var(--mono);font-size:1.3rem;font-weight:700;line-height:1.1;color:var(--text)}
+.mcard-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.16em;color:var(--text-dim);font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard-val{font-family:var(--mono);font-size:1.55rem;font-weight:700;line-height:1.1;color:var(--text)}
 .mcard-val.up{color:var(--green);text-shadow:0 0 10px rgba(52,211,153,0.25)}
 .mcard-val.dn{color:var(--red);text-shadow:0 0 10px rgba(248,113,113,0.25)}
 .mcard-val.cy{color:var(--cyan)}
 .mcard-val.pu{color:var(--purple)}
 .mcard-val.yl{color:var(--yellow)}
-.mcard-sub{font-size:.62rem;color:var(--text-dim);margin-top:4px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard-sub{font-size:.7rem;color:var(--text-dim);margin-top:5px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* Power levels + streak emojis in trader table */
 .power{font-family:var(--mono);font-weight:800;font-size:.78rem;text-shadow:0 0 10px currentColor;letter-spacing:.02em}
@@ -521,9 +522,19 @@ html.wide .app{max-width:none;padding:0 10px 8px}
             <div class="ml-sub" id="mlTestN">n=--</div>
           </div>
           <div class="ml-cell">
+            <div class="ml-lbl">Copy-Only</div>
+            <div class="ml-val" id="mlCopyAcc">--</div>
+            <div class="ml-sub" id="mlCopySub">live decisions</div>
+          </div>
+          <div class="ml-cell">
+            <div class="ml-lbl">Baseline</div>
+            <div class="ml-val" id="mlBaseline">--</div>
+            <div class="ml-sub">majority class</div>
+          </div>
+          <div class="ml-cell">
             <div class="ml-lbl">vs Baseline</div>
             <div class="ml-val" id="mlGap">--</div>
-            <div class="ml-sub">majority 79.1%</div>
+            <div class="ml-sub" id="mlGapSub">test - baseline</div>
           </div>
         </div>
         <div class="ml-feats">
@@ -1148,25 +1159,28 @@ function renderFeatures(ml){
   $('#mlTestAcc').textContent=fmt(testAcc,1)+'%';
   $('#mlTrainN').textContent='n='+(latest.train_n||Math.round((latest.samples_count||0)*0.8));
   $('#mlTestN').textContent='n='+(latest.test_n||Math.round((latest.samples_count||0)*0.2));
+  // Copy-Only card: the metric that actually predicts live trading edge
+  var copyEl=$('#mlCopyAcc');
+  var copySubEl=$('#mlCopySub');
+  if(rawCopy!=null){
+    var copyAcc=scaleAcc(rawCopy);
+    if(copyEl){
+      copyEl.textContent=fmt(copyAcc,1)+'%';
+      copyEl.className='ml-val '+(copyAcc>=baseline?'up':'dn');
+    }
+    if(copySubEl)copySubEl.textContent=copyAcc>=baseline?'beats baseline':'below baseline';
+  }else{
+    if(copyEl){copyEl.textContent='--';copyEl.className='ml-val'}
+    if(copySubEl)copySubEl.textContent='n<5 samples';
+  }
+  // Baseline card
+  $('#mlBaseline').textContent=fmt(baseline,1)+'%';
+  // Gap card (test - baseline)
   var gap=testAcc-baseline;
   $('#mlGap').textContent=(gap>=0?'+':'')+fmt(gap,1)+'pp';
   $('#mlGap').className='ml-val '+(gap>=0?'up':'dn');
-  // Update gap subline to show actual baseline (was hard-coded "majority 79.1%")
   var gapSub=$('#mlGapSub');
-  if(gapSub)gapSub.textContent='vs majority '+fmt(baseline,1)+'%';
-  // Optional: append copy-only accuracy as a small inline pill on the baseline card
-  if(rawCopy!=null){
-    var copyAcc=scaleAcc(rawCopy);
-    var copyEl=$('#mlGapCopy');
-    if(!copyEl){
-      copyEl=document.createElement('div');
-      copyEl.id='mlGapCopy';
-      copyEl.style.cssText='font-size:.5rem;color:var(--text-dim);margin-top:2px;font-family:var(--mono)';
-      var gapCell=$('#mlGap');
-      if(gapCell&&gapCell.parentElement)gapCell.parentElement.appendChild(copyEl);
-    }
-    copyEl.textContent='copy-only '+fmt(copyAcc,1)+'%';
-  }
+  if(gapSub)gapSub.textContent='test - baseline';
   $('#mlLastTrained').textContent='last trained '+(latest.trained_at||'--');
 }
 
