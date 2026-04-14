@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wallet Detail - {{ wallet.username or wallet.address[:12] }}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/terminal.css">
 </head>
-<body>
+<body data-no-grid>
+    <div class="scan"></div>
     <div class="container">
-        <header>
-            <h1>Wallet Detail</h1>
-            {% with active=None %}{% include '_nav.html' %}{% endwith %}
-        </header>
+        {% with active=None %}{% include '_header.html' %}{% endwith %}
+        <h1 style="font-size:1rem;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);font-weight:500;margin:14px 0 8px">Wallet Detail</h1>
 
         {% if wallet %}
         <div class="section">
@@ -122,5 +122,6 @@
             .then(() => location.reload());
     }
     </script>
+    <script src="/static/terminal.js"></script>
 </body>
 </html>

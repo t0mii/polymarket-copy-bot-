@@ -2,6 +2,93 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (ui) — Frontend harmonisation: remove grid background + unify header across pages
+
+Visual-only pass, no bot-backend changes. Two fixes:
+
+1. **Remove animated gold grid background** on all dashboard pages except Dailyreport.
+   - Added a per-page opt-out in `dashboard/static/terminal.css`:
+     `body[data-no-grid]::before{display:none !important}`
+     (sits next to the existing `body::before` `gridDrift` rule).
+   - Added `<body data-no-grid>` on `dashboard.html`, `brain.html`, `logs.html`,
+     `index.html`, `history.html`, `wallet_detail.html`. `reports.html` (Dailyreport)
+     stays untouched and still shows the grid. Matrix-rain canvas is unaffected and
+     still renders everywhere except Dailyreport (pre-existing `data-no-matrix` there).
+
+2. **Unified header across every page** — same HTML, same CSS, same desktop + mobile behavior.
+   - Moved the canonical `.hd` header CSS from the `dashboard.html` inline `<style>` into
+     `terminal.css` (`.hd`, `.hd-left`, `.hd-center` with `margin:0 auto`, `.hd-right`,
+     `.digiclock` hidden by default / `html.wide .digiclock` visible, `.logo`, `.logo-sub`,
+     `.live-tag`, `.status-tags`, `.st` dots). Single source of truth now.
+   - Added explicit `.hd{flex-direction:row}` so `style.css`'s legacy
+     `@media(max-width:782px){header{flex-direction:column}}` tag-rule can no longer
+     hijack the new header on history/wallet.
+   - Added a proper mobile breakpoint `@media(max-width:720px)` for the header: reorders
+     logo/buttons to top row, pushes clock/live/status into a centered row below,
+     shrinks fonts, buttons stay tappable.
+   - Moved the `.fi` fade-in animation + `@keyframes fu` into terminal.css (was inline
+     in dashboard.html).
+   - Added `.hd-right{display:flex;align-items:center;gap:8px}` so button alignment is
+     identical on every page.
+
+3. **New shared header partial** `dashboard/templates/_header.html`. Uses the
+   terminal.js-compatible IDs (`#digiClock`, `#sscSound`, `#sscWide`, `#stBot`,
+   `#stApi`, `#stPoll`) that `terminal.js` already wires. Includes `_nav.html` for the
+   nav links. Does **not** include the Lock button or Sauna scene — those stay
+   dashboard-only because their JS handlers (`togLock`, sauna animation loop) live in
+   `dashboard.html` inline.
+
+4. **Page migrations** — replaced each page's hand-rolled `<header class="hd">…</header>`
+   block with `{% with active='...' %}{% include '_header.html' %}{% endwith %}`:
+   - `brain.html` → `active='brain'`
+   - `logs.html` → `active='logs'`
+   - `index.html` → `active='wallets'`
+   - `history.html` → `active='copy'` (also added `<link terminal.css>` after style.css,
+     `<script terminal.js>`, `<div class="scan">`)
+   - `wallet_detail.html` → `active=None` (same style/js additions; the old `<h1>Wallet
+     Detail</h1>` is now a dim `h2`-ish label below the header so the page keeps its
+     section title without competing with the canonical logo wordmark)
+   - `dashboard.html` keeps its own inline header (Lock button + sauna + extra buttons
+     are bound by its own inline JS), but the duplicated header CSS block in its inline
+     `<style>` was deleted now that the rules live in terminal.css. `.conn-dot` helper
+     stays because it's dashboard-only.
+
+### What **did not** change
+
+- `reports.html` is untouched (both background and header).
+- `terminal.js` logic unchanged — its expected IDs were already the canonical ones.
+- No backend / bot / DB changes.
+
+### Verification
+
+- Jinja templates all parse.
+- Flask `test_client` renders: `/copy` (dashboard) 200, `/brain` 200, `/logs` 200,
+  `/wallets` 200, `/reports` 200 — all include the expected header HTML + `data-no-grid`
+  (reports has no data-no-grid, as intended).
+- `wallet_detail.html` and `history.html` render cleanly via direct `render_template`
+  with mock data and include terminal.css + terminal.js + the shared header partial +
+  the `.scan` line + `data-no-grid`.
+- Browser verification (desktop 1440 + mobile 375/414 + toggle Wide mode + click
+  Sound/Desktop buttons) is still **pending and should be done by the user** — Claude
+  cannot browse headlessly here.
+
+### Files touched
+
+- `dashboard/static/terminal.css` — grid opt-out, header-CSS consolidation, mobile
+  @media, `.fi` + `@keyframes fu`, explicit `flex-direction:row` on `.hd`.
+- `dashboard/templates/_header.html` — **new** shared header partial.
+- `dashboard/templates/dashboard.html` — `data-no-grid`, header CSS removed from inline
+  `<style>`, `.fi` keyframe removed from inline `<style>`.
+- `dashboard/templates/brain.html`, `logs.html`, `index.html` — `data-no-grid`, header
+  replaced with partial include.
+- `dashboard/templates/history.html`, `wallet_detail.html` — additionally load
+  `terminal.css` + `terminal.js`, add `.scan` div, replace minimal legacy header with
+  the partial include.
+- `dashboard/templates/reports.html` — **untouched**.
+- `dashboard/static/terminal.js`, `style.css` — **untouched**.
+
+---
+
 ## 2026-04-14 (latest) — Prevent buy_shares ghost-share race + fix paper_follow for promoted candidates
 
 Two related fixes spawned by a live incident earlier this afternoon.

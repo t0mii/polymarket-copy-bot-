@@ -26,9 +26,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     linear-gradient(90deg,rgba(201,168,76,0.03) 1px,transparent 1px);
   background-size:80px 80px;animation:gridDrift 60s linear infinite}
 @keyframes gridDrift{to{background-position:80px 80px}}
+/* Per-page grid opt-out — pages set <body data-no-grid> to hide the gridDrift layer */
+body[data-no-grid]::before{display:none !important}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:radial-gradient(ellipse at 20% 0%,rgba(201,168,76,0.06),transparent 55%),
              radial-gradient(ellipse at 80% 100%,rgba(201,168,76,0.03),transparent 50%)}
+
+/* Fade-in animation used by header/cards (moved from dashboard.html inline) */
+.fi{animation:fu .6s ease-out both}
+@keyframes fu{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* ═══ MATRIX RAIN (falling gold chars) ═══ */
 #matrixRain{position:fixed;inset:0;z-index:0;opacity:0.11;pointer-events:none}
@@ -55,17 +61,20 @@ html.wide .hd .sfx-btn{padding:4px 10px;font-size:.62rem}
 html.wide .tk-wrap{padding:3px 0;margin-bottom:10px}
 html.wide .tk-i{font-size:.75rem}
 
-/* ═══ HEADER ═══ */
-.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 0;
+/* ═══ HEADER — canonical (matches dashboard) ═══ */
+.hd{display:flex;flex-direction:row;align-items:center;justify-content:space-between;padding:12px 0;
   border-bottom:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap;gap:12px}
 .hd-left{display:flex;align-items:center;gap:8px}
 .hd-logo-img{height:36px}
 .logo{font-size:1.25rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);
   text-shadow:0 0 30px rgba(201,168,76,0.2);line-height:1.05}
 .logo-sub{font-size:.68rem;color:var(--text-dim);letter-spacing:.12em;font-weight:300}
-.hd-center{display:flex;align-items:center;gap:16px}
-.digiclock{font-family:var(--mono);font-size:.85rem;font-weight:500;letter-spacing:.1em;color:var(--gold);
-  text-shadow:0 0 12px rgba(201,168,76,0.2)}
+.hd-center{display:flex;align-items:center;gap:16px;margin:0 auto}
+.hd-right{display:flex;align-items:center;gap:8px}
+/* Clock is hidden by default and only shown in wide/desktop mode — matches dashboard */
+.digiclock{display:none;font-family:var(--font);font-size:1.4rem;font-weight:300;letter-spacing:.12em;
+  color:var(--gold);text-shadow:0 0 20px rgba(201,168,76,0.15)}
+html.wide .digiclock{display:block}
 .status-tags{display:flex;gap:10px}
 .st{font-size:.65rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;letter-spacing:.06em;
   text-transform:uppercase}
@@ -75,6 +84,22 @@ html.wide .tk-i{font-size:.75rem}
 .live-tag{display:flex;align-items:center;gap:6px;font-size:.7rem;font-weight:600;letter-spacing:0.15em;color:var(--red);text-transform:uppercase}
 .live-dot{width:8px;height:8px;background:var(--red);border-radius:50%;animation:livePulse 1.4s ease-in-out infinite;box-shadow:0 0 8px rgba(248,113,113,0.5)}
 @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.25;transform:scale(.6)}}
+
+/* ═══ HEADER — mobile ═══ */
+@media(max-width:720px){
+  .hd{padding:10px 0;gap:8px}
+  .hd-left{order:1;flex:1 1 auto;min-width:0}
+  .hd-right{order:2;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .hd-center{order:3;width:100%;justify-content:center;margin:0;gap:10px;flex-wrap:wrap}
+  .hd .logo{font-size:1.05rem}
+  .hd .logo-sub{font-size:.58rem}
+  .hd .hd-logo-img{height:28px}
+  .hd .sfx-btn{padding:5px 9px;font-size:.6rem;letter-spacing:.04em}
+  .hd .nav a{padding:6px 10px;font-size:.64rem;letter-spacing:.08em}
+  .hd .live-tag{font-size:.58rem}
+  .hd .st{font-size:.56rem}
+  html.wide .hd .digiclock{font-size:.85rem}
+}
 
 /* ═══ NAV ═══ */
 .nav{display:flex;gap:0;flex-wrap:wrap}

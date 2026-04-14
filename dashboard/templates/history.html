@@ -7,14 +7,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/terminal.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
+<body data-no-grid>
+    <div class="scan"></div>
     <div class="container">
-        <header>
-            <div style="display:flex;align-items:center;gap:8px"><img src="/static/logo.png" alt="SSC" style="height:36px"><div><h1>Poly Copybot</h1><div style="font-size:.8rem;color:#5c5a6a;letter-spacing:.12em;font-weight:300">by Super Sauna Club</div></div></div>
-            {% with active='copy' %}{% include '_nav.html' %}{% endwith %}
-        </header>
+        {% with active='copy' %}{% include '_header.html' %}{% endwith %}
 
         <!-- Trader Suche -->
         <div style="margin-bottom:12px;">
@@ -209,5 +208,6 @@ function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').repl
 
     setPeriod('week');
     </script>
+    <script src="/static/terminal.js"></script>
 </body>
 </html>

@@ -1,0 +1,31 @@
+{#
+  Shared dashboard-style header — used on brain/logs/settings/history/wallet.
+  Dashboard has its own inline header (with Lock button + sauna scene).
+  Usage: {% with active='brain' %}{% include '_header.html' %}{% endwith %}
+  Valid `active` values: 'dashboard','brain','dailyreport','wallets','logs' (propagated to _nav.html).
+  Relies on terminal.js for clock (#digiClock), status dots (#stBot/#stApi/#stPoll),
+  sound toggle (#sscSound), wide toggle (#sscWide).
+#}
+<header class="hd fi">
+  <div class="hd-left">
+    <img src="/static/logo.png" alt="SSC" class="hd-logo-img" onerror="this.style.display='none'">
+    <div>
+      <div class="logo">Poly Copybot</div>
+      <div class="logo-sub">by Super Sauna Club</div>
+    </div>
+  </div>
+  <div class="hd-center">
+    <div id="digiClock" class="digiclock">--:--:--</div>
+    <div class="live-tag"><span class="live-dot"></span>LIVE</div>
+    <div class="status-tags">
+      <span class="st"><span class="st-dot" id="stBot"></span>Bot</span>
+      <span class="st"><span class="st-dot" id="stApi"></span>API</span>
+      <span class="st"><span class="st-dot" id="stPoll"></span>Poll</span>
+    </div>
+  </div>
+  <div class="hd-right">
+    <button class="sfx-btn" id="sscSound" type="button">&#128266; Sound</button>
+    <button class="sfx-btn" id="sscWide" type="button">&#9724; Desktop</button>
+    {% include '_nav.html' %}
+  </div>
+</header>

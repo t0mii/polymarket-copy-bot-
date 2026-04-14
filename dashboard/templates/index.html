@@ -39,32 +39,10 @@ tr:hover{background:rgba(201,168,76,0.02)}
 .foot code{color:var(--gold)}
 </style>
 </head>
-<body>
+<body data-no-grid>
 <div class="scan"></div>
 <div class="app">
-  <header class="hd">
-    <div class="hd-left">
-      <img src="/static/logo.png" alt="SSC" class="hd-logo-img" onerror="this.style.display='none'">
-      <div>
-        <div class="logo">Poly Copybot</div>
-        <div class="logo-sub">by Super Sauna Club</div>
-      </div>
-    </div>
-    <div class="hd-center">
-      <div class="digiclock" id="digiClock">--:--:--</div>
-      <div class="live-tag"><span class="live-dot"></span>LIVE</div>
-      <div class="status-tags">
-        <div class="st"><span class="st-dot" id="stBot"></span>Bot</div>
-        <div class="st"><span class="st-dot" id="stApi"></span>API</div>
-        <div class="st"><span class="st-dot" id="stPoll"></span>Poll</div>
-      </div>
-    </div>
-    <div class="hd-right" style="display:flex;align-items:center;gap:8px">
-      <button class="sfx-btn" id="sscSound" type="button">&#128264; Sound</button>
-      <button class="sfx-btn" id="sscWide" type="button" title="Switch layout">&#9724; Desktop</button>
-      {% with active='wallets' %}{% include '_nav.html' %}{% endwith %}
-    </div>
-  </header>
+  {% with active='wallets' %}{% include '_header.html' %}{% endwith %}
 
   <div class="tk-wrap">
     <div class="tk" id="sscTicker"><div class="tk-i dim">Initializing market flow...</div></div>
