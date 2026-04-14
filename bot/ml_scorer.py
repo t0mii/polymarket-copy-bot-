@@ -16,6 +16,7 @@ Feature engineering (refactored 2026-04-14):
   and the model can learn esports-specific or NHL-specific patterns
 - side dropped (was 0% importance, YES/NO is symmetric)
 """
+import hashlib
 import logging
 import os
 import pickle
@@ -31,15 +32,97 @@ logger = logging.getLogger(__name__)
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ml_model.pkl")
 MIN_TRAINING_SAMPLES = 50
 
-# One-hot category columns. Order MUST match the FEATURE_NAMES list below
-# and the _get_features() return order.
-_CATEGORIES = [
-    "cs", "lol", "valorant", "dota",
-    "nhl", "nba", "nfl", "mlb",
-    "tennis", "soccer", "geopolitics", "politics",
+# Single label-encoded category feature in fee-tier hundreds, with gaps so
+# future sports can slot in without renumbering existing IDs (and breaking
+# pickled model compatibility). The hundred-band IS the semantic split:
+#   1xx = 0% Polymarket fee (politics, NHL, geopolitics)
+#   2xx = ~5% fee (NBA, NFL, MLB, tennis, soccer, ...)
+#   3xx = 10% fee (esports — CS, LoL, Valorant, Dota, ...)
+# Then a tree split at `category_id < 300` cleanly separates esports from
+# everything else without needing one-hot columns.
+_CATEGORY_ID_MAP = {
+    # 1xx: 0% fee
+    "nhl":          110,
+    "politics":     120,
+    "geopolitics":  130,
+    # (room for: cricket=140, weather=150, …)
+    # 2xx: ~5% fee
+    "nba":          210,
+    "nfl":          220,
+    "mlb":          230,
+    "tennis":       240,
+    "soccer":       250,
+    # (room for: ufc/mma=260, f1=270, boxing=280, golf=290, …)
+    # 3xx: 10% fee esports
+    "cs":           310,
+    "lol":          320,
+    "valorant":     330,
+    "dota":         340,
+    # (room for: rocket league=350, fortnite=360, …)
+}
+
+# Keyword-based category detector. The DB `category` column is empty for ~97%
+# of historical rows (insert-path doesn't populate it for blocked_trades and
+# rarely for copy_trades), so the model would see an all-zero one-hot block.
+# This detector parses the market_question text at training/predict time so
+# the categorical signal actually lands in the feature vector.
+# Order matters — esports team names checked FIRST so they don't get caught
+# by the broader sports keyword list (e.g. "Spirit" is a CS team, not a generic).
+_CATEGORY_KEYWORDS = [
+    # Esports — tighten before the generic sports list
+    ("dota",        ["dota 2:", "dota", "nigma", "virtus.pro", "team spirit"]),
+    ("cs",          ["counter-strike", "csgo", "cs2-", "cs:go", "faze", "heroic", "vitality clan",
+                     "g2 esports", "mouz", "natus vincere", "navi", "3dmax", "fokus", "fut esport"]),
+    ("lol",         ["lol:", "league of legends", "drx", "t1 ", "hanwha", "jd gaming",
+                     "gen.g", "bilibili", "weibo", "fnatic", "top esports", "sk gaming"]),
+    ("valorant",    ["valorant", "paper rex", "nongshim", "esprit"]),
+    # Traditional sports
+    ("mlb",         ["mlb", "rays", "brewers", "astros", "braves", "angels", "mariners", "athletics",
+                     "cardinals", "tigers", "phillies", "nationals", "marlins", "rockies", "reds",
+                     "mets", "giants", "orioles", "pirates", "padres", "yankees", "dodgers", "cubs",
+                     "guardians", "twins", "rangers", "royals", "diamondbacks", "white sox",
+                     "blue jays", "red sox"]),
+    ("nba",         ["nba", "celtics", "bucks", "76ers", "knicks", "bulls", "hawks", "nets", "magic",
+                     "mavericks", "timberwolves", "pelicans", "kings", "raptors", "grizzlies",
+                     "lakers", "warriors", "heat", "spurs", "suns", "thunder", "cavaliers", "pacers",
+                     "pistons", "rockets", "clippers", "nuggets", "blazers", "jazz", "wizards",
+                     "hornets"]),
+    ("nhl",         ["nhl", "flyers", "islanders", "blues", "ducks", "penguins", "canadiens",
+                     "maple leafs", "oilers", "flames", "canucks", "blackhawks", "predators",
+                     "lightning", "panthers", "hurricanes", "avalanche", "capitals", "wild"]),
+    ("nfl",         ["nfl", "patriots", "chiefs", "eagles", "cowboys", "packers", "49ers", "broncos",
+                     "ravens", "steelers", "raiders", "buccaneers", "saints", "bengals", "browns"]),
+    ("tennis",      ["atp", "wta", "wimbledon", "roland garros", "indian wells", "miami open",
+                     "monte carlo", "barcelona open", "challenger", "sinner", "djokovic", "alcaraz",
+                     "medvedev", "rublev", "zverev", "tsitsipas", "fritz", "swiatek", "sabalenka",
+                     "gauff"]),
+    ("soccer",      ["soccer", "bundesliga", "epl", "ucl", "mls", "la liga", "serie a",
+                     "premier league", "arsenal", "liverpool", "man city", "manchester", "tottenham",
+                     "chelsea", "newcastle", "bayern", "dortmund", "leipzig", "borussia",
+                     "barcelona", " madrid", "atletico", "sevilla", "juventus", "napoli", "milan",
+                     "roma", " inter", "psg", "marseille", "lyon"]),
+    # Geopolitics / politics
+    ("geopolitics", ["iran", "israel", "gaza", "ukraine", "russia", "ceasefire", "nuclear",
+                     "hezbollah", "houthi", "yemen", "lebanon", "tehran", "missile", "airstrike"]),
+    ("politics",    ["trump", "biden", "congress", "senate", "election", "president", "tariff",
+                     "fed ", "dhs", "cabinet", "supreme court"]),
 ]
 
-# 21 feature names — kept in sync with _get_features() return order
+
+def _detect_category(market_question: str) -> str:
+    """Return canonical category string from a market question, or empty string
+    if no keyword matched. Used when copy_trades.category / blocked_trades.category
+    is empty (most of the historical data)."""
+    if not market_question:
+        return ""
+    s = str(market_question).lower()
+    for cat, keywords in _CATEGORY_KEYWORDS:
+        for kw in keywords:
+            if kw in s:
+                return cat
+    return ""
+
+# 11 feature names — kept in sync with _get_features() return order
 FEATURE_NAMES = [
     "entry_price",
     "price_dist_from_50",
@@ -50,7 +133,19 @@ FEATURE_NAMES = [
     "hour",
     "day_of_week",
     "side_yes",
-] + ["cat_" + c for c in _CATEGORIES]
+    "category_id",
+    "trader_id",
+]
+
+
+def _trader_id(name: str) -> int:
+    """Stable deterministic int ID for a trader name. md5 hash mod 1000 so
+    new traders get a stable ID without a manual map and the value space
+    stays bounded (trees can iterate ranges). 0 = unknown / empty."""
+    if not name:
+        return 0
+    h = hashlib.md5(name.strip().lower().encode("utf-8")).hexdigest()
+    return int(h[:6], 16) % 1000 + 1  # 1..1000, 0 reserved for unknown
 
 _model = None
 _model_loaded = False
@@ -114,7 +209,7 @@ def _stats_for(trader_stats: dict, trader_name: str) -> dict:
 
 
 def _get_features(trade: dict, trader_stats: dict = None) -> list:
-    """Extract 21-feature vector from a trade dict + trader's rolling stats.
+    """Extract 11-feature vector from a trade dict + trader's rolling stats.
 
     Layout (must match FEATURE_NAMES):
       0  entry_price                  (continuous, 0..1)
@@ -126,7 +221,14 @@ def _get_features(trade: dict, trader_stats: dict = None) -> list:
       6  hour                         (int 0..23)
       7  day_of_week                  (int 0..6, Mon=0)
       8  side_yes                     (binary, 1=YES bet, 0=NO bet)
-      9..20  cat_<sport>              (12 binary one-hot columns)
+      9  category_id                  (int, 0=unknown, hundred-band fee tier)
+     10  trader_id                    (int, stable md5 hash, 1..1001)
+
+    Category is detected from `market_question` text when the DB column is
+    empty (~97% of rows). category_id uses fee-tier hundreds (1xx=0% fee,
+    2xx=5%, 3xx=10% esports) with gaps so new sports can be inserted without
+    renumbering. A single tree split at `category_id < 300` separates esports
+    cleanly from everything else.
 
     `trader_stats` is the per-trader dict returned by _stats_for(). When
     None (e.g. unknown trader), trader features default to 0 and
@@ -134,6 +236,10 @@ def _get_features(trade: dict, trader_stats: dict = None) -> list:
     """
     entry = trade.get("actual_entry_price") or trade.get("entry_price") or 0.5
     cat_lc = (trade.get("category") or "").lower()
+    if not cat_lc:
+        # Fall back to keyword detection from the market question text.
+        # The DB category column is empty for ~97% of historical rows.
+        cat_lc = _detect_category(trade.get("market_question") or "")
 
     # 0. entry_price
     f0 = float(entry)
@@ -179,11 +285,16 @@ def _get_features(trade: dict, trader_stats: dict = None) -> list:
     side_str = (trade.get("side") or "YES").upper()
     f8 = 1 if side_str == "YES" else 0
 
-    # 9..20. Category one-hot — trees can split each sport independently,
-    # which is what the old label-encoded int version couldn't do.
-    cat_features = [1 if cat_lc == c else 0 for c in _CATEGORIES]
+    # 9. Category as a single fee-tier-ordered int. Detector populates
+    # `cat_lc` from market_question above when the DB column is empty.
+    f9 = _CATEGORY_ID_MAP.get(cat_lc, 0)
 
-    return [f0, f1, f2, f3, f4, f5, f6, f7, f8] + cat_features
+    # 10. Trader identity (stable hash). Captures deterministic per-trader
+    # patterns that the rolling stats (wr/pnl/trades) can't see — e.g.
+    # a trader's category preferences or time-of-day routine.
+    f10 = _trader_id(trade.get("trader_name") or trade.get("wallet_username") or "")
+
+    return [f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10]
 
 
 def _build_training_data():
@@ -212,12 +323,12 @@ def _build_training_data():
     with db.get_connection() as conn:
         copy_rows = [dict(r) for r in conn.execute(
             "SELECT wallet_username, actual_entry_price, entry_price, category, "
-            "side, actual_size, size, fee_bps, created_at, pnl_realized "
+            "side, actual_size, size, fee_bps, created_at, pnl_realized, market_question "
             "FROM copy_trades WHERE status='closed' AND pnl_realized IS NOT NULL "
             "ORDER BY created_at ASC"
         ).fetchall()]
         blocked_rows = [dict(r) for r in conn.execute(
-            "SELECT trader, trader_price, category, side, created_at, would_have_won "
+            "SELECT trader, trader_price, category, side, created_at, would_have_won, market_question "
             "FROM blocked_trades WHERE would_have_won IS NOT NULL "
             "ORDER BY created_at ASC"
         ).fetchall()]
@@ -277,8 +388,10 @@ def _build_training_data():
             d = {
                 "entry_price": r.get("trader_price") or 0.5,
                 "category": r.get("category") or "",
+                "market_question": r.get("market_question") or "",
                 "side": r.get("side") or "YES",
                 "created_at": r.get("created_at") or "",
+                "trader_name": name,  # so _trader_id() can hash it
             }
             features = _get_features(d, snap)
             label = int(r.get("would_have_won") or 0)
