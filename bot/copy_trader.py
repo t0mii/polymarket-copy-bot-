@@ -2329,9 +2329,15 @@ def update_copy_positions():
 
     for wallet_address, wallet_trades in trades_by_wallet.items():
         try:
-            # Get dynamic closed-position fetch limit: last_known + 100
+            # closed_positions fetch has a hard 50/page API limit, so a
+            # growing last_closed_count+100 compounded to 50 serial API calls
+            # (~14s for 2400 rows, ~28s for 5000) and pushed update_prices
+            # over its 60s interval, causing apscheduler skips. We only need
+            # enough recent closures to detect if THIS cycle's trader-closes
+            # include any of our open copy_trades. New closures/cycle are
+            # near-zero in practice, so 50 is a comfortable safety margin.
             scan_cfg = db.get_or_create_scan_config(wallet_address)
-            closed_limit = scan_cfg.get("last_closed_count", 0) + 100
+            closed_limit = 50
 
             # Fetch open and closed positions ONCE per wallet
             open_positions = fetch_wallet_positions(wallet_address)

@@ -2,7 +2,52 @@
 
 Session-level notes. For full commit history see `git log`.
 
-## 2026-04-14 (latest) — Disable auto-write of CATEGORY_BLACKLIST_MAP
+## 2026-04-14 (later) — Remove MAX_DAILY_TRADES cap + fix update_prices compound slowdown
+
+Two related fixes after a rigorous audit of "why is the bot idle?" and "why does apscheduler keep skipping update_prices?"
+
+### Why
+
+**1. MAX_DAILY_TRADES cap was silently crippling learning.** The cap was added 2026-04-12 as a "safety rail against runaway scans" after the MAX_COPIES_PER_MARKET bug. That bug was fixed in the big 2026-04-14 session, but the cap stayed. The early `return 0` in `bot/copy_trader.copy_scan` sits BEFORE the block-logging logic, so hitting 30/30 skips the entire scan — including `blocked_trades` INSERTs that feed `ml_block` and the Filter Precision Audit. Observed on Apr 14: cap hit at 13:46 UTC → **10+ hours/day idle** with ~90% drop in `blocked_trades` rows (e.g. 336k rows on Apr 11 unrestricted → 4.9k today). The magnitude-aware blacklist rebalance from this morning cannot prove itself with so little data. Pre-cap avg P&L per trade was +$1.07 (Apr 5-11, 209 verified trades, +$223); post-cap has been −$0.51 (77 trades, −$39) but that correlates with a regime change that started Apr 10 — the cap didn't help either way, it just silenced the feedback loop.
+
+**2. `update_prices` took 50-73s with a 60s interval** → apscheduler `max_instances=1` caused 7 skips per 95min. Root cause measured in-process: `fetch_wallet_closed_positions(wallet, limit=last_count+100)` in `bot/copy_trader.update_copy_positions`. The API page size is hard-capped at 50 per page, and `last_closed_count` grows monotonically as we observe the trader's history. For the currently-open Keiko Fujimori trade (wallet's 2405 historical closures), this translates to 50 serial API calls = **13.87s per cycle** spent just on ONE wallet's closed-history fetch. For sovereign2013 (5050 historical closures) it would compound to ~28s. In-process timing breakdown:
+
+```
+db.get_open_copy_trades (n=2)                0.01s
+price_tracker.subscribe x2                   0.65s
+fetch_wallet_positions (n=50)                0.20s
+fetch_wallet_closed_positions (limit=506)    2.34s   (fsavhlc)
+fetch_wallet_closed_positions (limit=2505)  13.87s   (Keiko trader)
+chain /positions paginated (n=94)            0.22s
+DB lookups for 94 positions                  0.01s
+get_wallet_balance + snapshot                0.32s
+----------------------------------------------------
+TOTAL isolated                              18.22s
+TOTAL production (+dashboard contention)    49-73s
+```
+
+The fix is to fetch a bounded window instead of the full history. New closures per cycle are 0-3 in practice; 50 is a comfortable margin.
+
+### Changes
+
+- `bot/copy_trader.py::update_copy_positions` — `closed_limit = 50` (hard cap). Comment explains why the growing `last_closed_count+100` pattern was removed. The call to `db.update_closed_count(wallet, len(closed_positions))` is retained (harmless) so we can restore the old logic if needed. Measured: 13.87s → 0.37s for the Keiko wallet (37× faster on that one call).
+
+- `settings.env` — `MAX_DAILY_TRADES=0` (disabled). `settings.example.env` matched. Other safety rails (`MAX_OPEN_POSITIONS`, `MAX_DAILY_LOSS`, per-trader `TRADER_EXPOSURE_MAP`, `BET_SIZE_MAP`) remain active.
+
+### Expected effects
+
+- Bot resumes copy_scan immediately (no more `[SKIP] Max daily trades reached`).
+- `blocked_trades` table grows again at natural rate (tens of thousands/day), feeding ml_block and Filter Precision Audit with fresh data.
+- `update_prices` cycle drops from ~52s to ~30-40s (the 13s closed-fetch savings plus residual dashboard-contention overhead). Skip rate should drop to near zero with 2 open trades. Still a scaling risk if 3+ open trades on high-history wallets — deferred to a later session (proper fix: use `trader_closed_positions` DB cache for incremental sync instead of API polling).
+
+### What was NOT changed
+
+- `filter_audit` log spam (926 lines/95min from dashboard polling hitting `/api/brain/filter-precision`). Lower priority, defer.
+- The `last_closed_count` tracking column in `trader_scan_config`. Still written by the retained `db.update_closed_count` call. Unused now but harmless and allows quick revert.
+
+---
+
+## 2026-04-14 (earlier) — Disable auto-write of CATEGORY_BLACKLIST_MAP
 
 Per piff-philosophy: `CATEGORY_BLACKLIST_MAP` joins `PAUSE_TRADER` / `THROTTLE_TRADER` / `KICK_TRADER` on the list of brain auto-actions that are disabled and must be managed manually. Manual edits were being overwritten every 2h cycle.
 
