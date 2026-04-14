@@ -556,7 +556,12 @@ def get_copy_portfolio_snapshots(limit=168):
 
 
 def get_copy_snapshots_in_range(start: str, end: str):
+    """Snapshots in [start, end]. Honours PERFORMANCE_SINCE so a baseline reset
+    wipes the displayed curve even if snapshots have been accumulated since."""
     with get_connection() as conn:
+        performance_since = get_performance_since()
+        if performance_since and performance_since > start:
+            start = performance_since
         rows = conn.execute(
             "SELECT * FROM copy_portfolio WHERE created_at BETWEEN ? AND ? ORDER BY created_at ASC",
             (start, end)
@@ -1642,20 +1647,35 @@ def get_autonomous_performance(days: int = 14, mode: str = None) -> list:
 
 def get_equity_curve(period: str = "all") -> list:
     """Equity curve data. Uses portfolio snapshots for short periods (4h/1d),
-    daily aggregates for longer periods (1w/1m/all)."""
+    daily aggregates for longer periods (1w/1m/all).
+
+    All periods honour PERFORMANCE_SINCE — when the config key is set, rows
+    before that timestamp are excluded so a baseline reset (advancing
+    PERFORMANCE_SINCE to the current time) effectively clears the curve
+    across every period without deleting historical copy_trades.
+    """
+    performance_since = get_performance_since()  # "" or "YYYY-MM-DD HH:MM:SS"
     with get_connection() as conn:
         if period in ("4h", "1d"):
-            # Use copy_portfolio snapshots (every ~15min) for granular data
             if period == "4h":
                 cutoff = "-4 hours"
             else:
                 cutoff = "-24 hours"
-            rows = conn.execute(
-                "SELECT created_at, pnl_total FROM copy_portfolio "
-                "WHERE created_at >= datetime('now', ?, 'localtime') "
-                "ORDER BY created_at",
-                (cutoff,)
-            ).fetchall()
+            if performance_since:
+                rows = conn.execute(
+                    "SELECT created_at, pnl_total FROM copy_portfolio "
+                    "WHERE created_at >= datetime('now', ?, 'localtime') "
+                    "AND created_at >= ? "
+                    "ORDER BY created_at",
+                    (cutoff, performance_since)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT created_at, pnl_total FROM copy_portfolio "
+                    "WHERE created_at >= datetime('now', ?, 'localtime') "
+                    "ORDER BY created_at",
+                    (cutoff,)
+                ).fetchall()
             return [{"date": r["created_at"], "value": round(r["pnl_total"] or 0, 2)} for r in rows]
         else:
             # Daily aggregates for 1w/1m/all
@@ -1665,11 +1685,17 @@ def get_equity_curve(period: str = "all") -> list:
                 cutoff_sql = "AND closed_at >= datetime('now', '-30 days', 'localtime')"
             else:
                 cutoff_sql = ""
+            since_sql = ""
+            params = []
+            if performance_since:
+                since_sql = "AND closed_at >= ? "
+                params.append(performance_since)
             rows = conn.execute(
                 "SELECT DATE(closed_at) as date, SUM(pnl_realized) as daily_pnl "
                 "FROM copy_trades WHERE status = 'closed' AND closed_at IS NOT NULL "
-                + cutoff_sql +
-                " GROUP BY DATE(closed_at) ORDER BY date"
+                + cutoff_sql + " " + since_sql +
+                " GROUP BY DATE(closed_at) ORDER BY date",
+                tuple(params)
             ).fetchall()
             result = []
             cumulative = 0
