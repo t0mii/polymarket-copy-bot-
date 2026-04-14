@@ -2162,7 +2162,16 @@ function renderFilterPrecision(data){
     tr.appendChild(cell(r.precision_at_conf==null?'—':fmt(r.precision_at_conf,1)+'%'));
     var badge=document.createElement('span');
     badge.className='fp-badge '+(rec==='LOOSEN'?'loosen':rec==='KEEP'?'keep':rec==='REVIEW'?'review':'insuff');
-    badge.textContent=rec;
+    // Compact: append verified $ inline when available (e.g. "KEEP −$72").
+    // Verified PnL is ground-truth from copy_trades history and overrides
+    // the WR-based precision for asymmetric Polymarket payoffs.
+    var vpnl=r.verified_pnl_usd;
+    var label=rec;
+    if(vpnl!==null&&vpnl!==undefined){
+      var sign=vpnl>=0?'+':'−';
+      label=rec+' '+sign+'$'+Math.abs(vpnl).toFixed(0);
+    }
+    badge.textContent=label;
     var tdRec=document.createElement('td');tdRec.appendChild(badge);
     tr.appendChild(tdRec);
     body.appendChild(tr);
