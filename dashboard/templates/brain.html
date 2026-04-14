@@ -90,7 +90,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 @media(max-width:1100px){.core-top .counters{grid-template-columns:repeat(2,1fr)}}
 
 /* Brain stream + neural network side-by-side — compact height */
-.stream-net-row{display:grid;grid-template-columns:1.7fr 1fr;gap:10px;margin-bottom:12px}
+.stream-net-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 @media(max-width:1100px){.stream-net-row{grid-template-columns:1fr}}
 .stream-net-row .stream-wrap{margin-bottom:0}
 .stream-net-row .stream-box{height:198px}
@@ -1026,7 +1026,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
         </span>
       </div>
       <div class="neural-box">
-        <svg viewBox="0 0 420 180" preserveAspectRatio="xMidYMid meet" id="funnelSvg"></svg>
+        <svg viewBox="0 0 500 180" preserveAspectRatio="xMidYMid meet" id="funnelSvg"></svg>
       </div>
     </div>
   </div>
@@ -1267,15 +1267,19 @@ function buildFunnel(){
   FL.svg=svg;FL.stages=[];
   while(svg.firstChild)svg.removeChild(svg.firstChild);
   var ns='http://www.w3.org/2000/svg';
-  // viewBox 420 × 180 — flatter aspect so the row reads as a proper
-  // horizontal funnel instead of a stack of tall cells.
-  var W=420,H=180,cy=90;
-  // Balanced boxes (68 × 130). 5 × 68 = 340, leaving 80 for gaps and
-  // padding: pad 12 each side + 4 × 14 gap = 80. The wider gap gives
-  // the arrows room to breathe.
-  var BW=68,BH=130;
+  // viewBox 500 × 180 — wider canvas so the 5 boxes can spread out
+  // with generous breathing room. The .stream-net-row grid is now
+  // 1fr 1fr so the funnel column is effectively ~36% wider than it
+  // started; everything inside the viewBox scales up uniformly.
+  var W=500,H=180,cy=90;
+  // Generous boxes (76 × 130) with fat gaps. Width budget:
+  //   5 × 76 (boxes)  = 380
+  //   4 × 26 (gaps)   = 104
+  //   2 × 8  (padding)=  16
+  //   total           = 500 ✓
+  var BW=76,BH=130;
   var halfBW=BW/2;
-  var pad=12;
+  var pad=8;
   var step=(W-2*pad-BW)/(FUNNEL_STAGES.length-1);
 
   // <defs><marker id="fnArrow"><polygon/></marker></defs>
@@ -2468,9 +2472,18 @@ function renderCoreMini(status,mlInfo,decisions,tradersData,followedList){
     var n=(w.username||w.address||'').toLowerCase();
     if(n)followedNames[n]=true;
   });
+  // Treat null followedList as a fetch error (fetchJSON returns null on
+  // !r.ok / network exception). We deliberately do NOT fall back to
+  // perfList.length here even though that's what the code used to do:
+  // trader_performance contains stale auto-discovery rows (aenews2,
+  // 0x6bab41a0dc, 0x3e5b23e9f7 at time of this fix) that are NOT in the
+  // actual follow list, so the fallback silently inflates "8/8" when the
+  // follow-list fetch failed. Better to surface the error via "?/?" card
+  // below so the user knows data is stale instead of trusting a wrong
+  // count. On empty-but-present (0 traders followed) we correctly show
+  // 0/0 because that IS the truth.
+  var followedFetchFailed=(followedList===null);
   var totalN=(followedList||[]).length;
-  // If the fetch failed fall back to the perfList count so we never show 0
-  if(!totalN)totalN=perfList.length;
   // Paused = perf rows with status==='paused' whose username matches the follow list
   var pausedN=perfList.filter(function(t){
     if((t.trader_status||'')!=='paused')return false;
@@ -2508,8 +2521,16 @@ function renderCoreMini(status,mlInfo,decisions,tradersData,followedList){
   // Replaced with two operator-relevant metrics: live 24h P&L aggregate + ML edge vs baseline.
   box.appendChild(mcard('24h Net P&L',pnl1dStr,pnl1d>=0?'up':'dn','all traders'));
   box.appendChild(mcard('ML Edge',edgeStr,edgeClass,'vs baseline'));
-  box.appendChild(mcard('Active Traders',String(activeN)+'/'+String(totalN),activeN>0?'up':'','followed'));
-  box.appendChild(mcard('Paused',String(pausedN),pausedN>0?'dn':'','brain-forced'));
+  if(followedFetchFailed){
+    // /api/wallets/followed unreachable — signal the error state instead
+    // of lying with a fallback number. See comment above the totalN
+    // computation for full rationale.
+    box.appendChild(mcard('Active Traders','?/?','','fetch failed'));
+    box.appendChild(mcard('Paused','?','','unknown'));
+  }else{
+    box.appendChild(mcard('Active Traders',String(activeN)+'/'+String(totalN),activeN>0?'up':'','followed'));
+    box.appendChild(mcard('Paused',String(pausedN),pausedN>0?'dn':'','brain-forced'));
+  }
   box.appendChild(mcard('Promoted',String(cand.promoted||0),'up','to paper/live'));
   box.appendChild(mcard('Observing',String(cand.observing||0),'yl','scouting'));
   box.appendChild(mcard('Auto Trades',String(auto.total||0),'','autonomous'));
