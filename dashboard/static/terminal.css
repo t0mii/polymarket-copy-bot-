@@ -102,18 +102,18 @@ html.wide .digiclock{display:block}
 }
 
 /* ═══ NAV ═══ */
-.nav{display:flex;gap:0;flex-wrap:wrap}
-.nav a{font-size:.78rem;color:var(--text-mid);text-decoration:none;padding:8px 18px;
-  border:1px solid transparent;letter-spacing:0.12em;text-transform:uppercase;font-weight:400;transition:all .25s}
+.nav{display:flex;gap:0;flex-wrap:wrap;align-items:center}
+.nav a,.nav .dis{display:inline-flex;align-items:center;line-height:1;
+  font-size:.78rem;padding:8px 18px;border:1px solid transparent;
+  letter-spacing:0.12em;text-transform:uppercase;font-weight:400}
+.nav a{color:var(--text-mid);text-decoration:none;transition:all .25s}
 .nav a:hover,.nav a.act{color:var(--gold);border-color:rgba(201,168,76,0.35)}
-.nav .dis{font-size:.78rem;color:var(--text-dim);padding:8px 18px;
-  border:1px solid transparent;letter-spacing:0.12em;text-transform:uppercase;
-  font-weight:400;opacity:.4;cursor:not-allowed;user-select:none;pointer-events:none}
+.nav .dis{color:var(--text-dim);opacity:.4;cursor:not-allowed;user-select:none;pointer-events:none}
 
-/* ═══ SOUND TOGGLE ═══ */
-.sfx-btn{cursor:pointer;font-size:.68rem;color:var(--text-dim);display:inline-flex;align-items:center;
-  gap:5px;padding:7px 12px;border:1px solid var(--border);background:transparent;font-family:var(--font);
-  transition:all .25s;letter-spacing:0.08em;text-transform:uppercase}
+/* ═══ SOUND TOGGLE — matches dashboard original (no uppercase, bigger hit target) ═══ */
+.sfx-btn{cursor:pointer;font-size:.75rem;color:var(--text-dim);display:inline-flex;align-items:center;
+  gap:5px;padding:8px 14px;border:1px solid var(--border);background:transparent;font-family:var(--font);
+  transition:all .25s;letter-spacing:0.06em}
 .sfx-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
 .sfx-btn.on{color:var(--green);border-color:var(--green-dim)}
 
