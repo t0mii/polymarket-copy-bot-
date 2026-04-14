@@ -632,15 +632,137 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 .section-divider .lbl{
   background:transparent !important;
   border:none !important;
-  padding:0 6px !important;
-  font-size:.62rem;letter-spacing:.32em;
+  padding:0 8px !important;
+  font-size:.72rem;letter-spacing:.32em;
   color:var(--gold) !important;
   text-shadow:0 0 14px rgba(201,168,76,0.4)
 }
 .section-divider .lbl::before,.section-divider .lbl::after{display:none}
-.section-divider .sub{
-  position:static !important;margin:0 !important;
-  font-size:.52rem;color:var(--text-dim);letter-spacing:.22em
+/* Subtitle next to the divider was confusing — kill it, the label is enough */
+.section-divider .sub{display:none !important}
+
+/* ── 13b. FONT-SIZE NORMALISATION → canonical scale ───────────────────
+   All small-text selectors map to one of the --fs-* tokens defined in
+   terminal.css :root (--fs-meta 0.68rem, --fs-label 0.72rem,
+   --fs-body 0.8rem, --fs-title 0.85rem, --fs-num-sm 1.1rem,
+   --fs-num 1.45rem, --fs-num-lg 1.7rem, --fs-hero 2rem).
+   Nothing below 0.68rem survives. Big numeric values snap to the
+   nearest num-* token so brain and dashboard read with the same ramp.
+   ─────────────────────────────────────────────────────────────────── */
+/* ── LABELS (--fs-label = 0.72rem) ── */
+.counter-lbl,.core-top .counter-lbl,
+.mcard-lbl,.core-mid .mcard-lbl,
+.ml-cell .ml-lbl,
+.ml-feats .feat-row .name,.ml-feats .feat-row .pct,.ml-feats .feat-row,
+.brain-state-label,
+.pipe-name,
+.cat-name,
+.trader-table th,
+.stream-filter .sbtn,.blog-filter .btn{
+  font-size:var(--fs-label) !important
+}
+
+/* ── META (--fs-meta = 0.68rem) — the absolute minimum ── */
+.counter-delta,.core-top .counter-delta,
+.counter-spark .spark-val,
+.mcard-sub,.core-mid .mcard-sub,
+.ml-cell .ml-sub,
+.ml-feats .ml-feats-lbl,
+.fp-table th,
+.fp-badge,
+.fp-legend,
+.pill,.panel-title .pill,.neural-head-pills .pill,.pill.pred-pill,
+.action-pill-lbl,
+.cat-meta,
+.tier,
+.flag,
+.badge{
+  font-size:var(--fs-meta) !important
+}
+
+/* Sparkline sub-label — slightly below meta because it's really a mini caption */
+.counter-spark .spark-val .lbl{font-size:.58rem !important}
+
+/* ── BODY (--fs-body = 0.8rem) ── */
+.fp-table,
+.brain-state-sub,
+.brain-stats-mini,.brain-hero .brain-stats-mini,
+.trader-table,
+.trader-table td{
+  font-size:var(--fs-body) !important
+}
+
+/* ── TITLES (--fs-title = 0.85rem) ── */
+.sec-t,
+.panel-title,
+.ml-compact-title,
+.stream-title{
+  font-size:var(--fs-title) !important
+}
+/* Compact ML panel title stays at --fs-label because its parent is smaller */
+.core-mid .ml-compact .panel-title{font-size:var(--fs-label) !important}
+
+/* ── NUMERIC VALUES — ladder from small to hero ── */
+.pipe-count{font-size:var(--fs-num-sm) !important}
+.action-pill-val{font-size:var(--fs-num-sm) !important}
+.ml-cell .ml-val{font-size:var(--fs-num-sm) !important}
+.counter-val,.core-top .counter-val{font-size:var(--fs-num) !important}
+.mcard-val,.core-mid .mcard-val{font-size:var(--fs-num) !important}
+.cat-pnl{font-size:var(--fs-num-lg) !important}
+/* Brain state headline: --fs-hero (2rem) — unchanged dramatic */
+.brain-state-value{font-size:var(--fs-hero) !important}
+
+/* ── 13c. BRAIN STREAM — column budget ────────────────────────────────
+   Old layout wasted horizontal space: reason had flex-basis 42% even
+   when the content was short like "$2.8 < $5 min", leaving a huge
+   empty gap on the right. New layout: timestamp + action are natural
+   width (fixed min), target + reason share all remaining space in a
+   3:2 grow ratio from basis 0, so every row fills the full box edge
+   to edge. Still nowrap + ellipsis so lines stay one-per-row.
+   ─────────────────────────────────────────────────────────────────── */
+.sline{
+  padding:5px 12px !important;
+  gap:10px !important;
+  font-size:.78rem;
+  align-items:baseline
+}
+.sline .sts{
+  flex:0 0 auto !important;
+  min-width:56px;
+  font-size:.72rem !important;
+  font-family:var(--mono);
+  color:var(--text-dim);
+  white-space:nowrap
+}
+.sline .sact{
+  flex:0 0 auto !important;
+  min-width:78px;
+  max-width:120px;
+  font-size:.7rem !important;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.sline .stgt{
+  flex:3 1 0 !important;
+  max-width:none !important;
+  min-width:0 !important;
+  font-size:.76rem !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.sline .srsn{
+  flex:2 1 0 !important;
+  min-width:0 !important;
+  font-size:.72rem !important;
+  color:var(--text-mid);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
 }
 
 /* ── 14. SKELETON LOADERS — pulse while async data loads ─────────────── */

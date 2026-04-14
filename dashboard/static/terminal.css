@@ -14,6 +14,17 @@
   --blue:#60a5fa;--yellow:#fbbf24;--purple:#a78bfa;--cyan:#22d3ee;
   --text:#e8e4dc;--text-dim:#7a7890;--text-mid:#a09eb0;
   --font:'Manrope',system-ui,sans-serif;--mono:'Fira Code','Courier New',monospace;
+  /* ═ Canonical type scale — shared by dashboard and brain so every small-text
+     selector lands on one of these tokens. Nothing below --fs-meta (10.2px) is
+     used anywhere; the biggest hero values use --fs-hero. ═ */
+  --fs-meta:.68rem;     /* 10.2px  dim meta, footnotes, helper text */
+  --fs-label:.72rem;    /* 10.8px  labels, table headers, buttons */
+  --fs-body:.8rem;      /* 12px    row content, stream items, body copy */
+  --fs-title:.85rem;    /* 12.75px section/panel titles, ticker items */
+  --fs-num-sm:1.1rem;   /* 16.5px  small metric values, pill counts */
+  --fs-num:1.45rem;     /* 21.75px standard metric value */
+  --fs-num-lg:1.7rem;   /* 25.5px  hero metric value (card-val, counter-val) */
+  --fs-hero:2rem;       /* 30px    biggest headline (brain state) */
 }
 html{font-size:15px;scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-weight:300;

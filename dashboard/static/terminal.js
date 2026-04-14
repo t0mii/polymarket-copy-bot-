@@ -10,6 +10,15 @@
   // ═══ MATRIX RAIN ═══
   // Global falling-gold-chars background, auto-created on every page that
   // links terminal.js. Pages can opt out with <body data-no-matrix>.
+  //
+  // Per-drop state model (replaces the flat number-array that kept every
+  // column permanently active):
+  //   { y, speed, active, delay }
+  // Drops have variable speeds so columns desync visually. When a drop
+  // runs off the bottom it flips inactive and queues a random 1.6–16s
+  // pause, then wakes up at the top with a fresh speed. Result: at any
+  // moment ~55-70% of columns are drawing, the rest are "breathing" —
+  // the effect keeps its fresh look instead of filling up over time.
   function initMatrix(){
     if(document.body.getAttribute('data-no-matrix')!==null)return;
     var cvs=$('#matrixRain');
@@ -28,17 +37,53 @@
     var chars=('01 {} [] <> ABCDEF 0123456789 $ '+String.fromCharCode(0x2716,0x25A0,0x25B2,0x25BC)).split('');
     var font=14;
     var drops=[];
-    for(var i=0;i<Math.floor(cvs.width/font);i++)drops.push(Math.random()*cvs.height/font);
+    function makeDrop(startActive){
+      return {
+        y: startActive ? -Math.random()*30 : 0,
+        speed: 0.4 + Math.random()*0.9,       // 0.4 – 1.3 rows/frame
+        active: startActive,
+        delay: startActive ? 0 : Math.floor(Math.random()*120)
+      };
+    }
+    function buildDrops(){
+      drops.length = 0;
+      var cols = Math.floor(cvs.width/font);
+      for(var i=0;i<cols;i++){
+        drops.push(makeDrop(Math.random() < 0.55));
+      }
+    }
+    buildDrops();
+    window.addEventListener('resize', buildDrops);
+
     function draw(){
-      ctx.fillStyle='rgba(6,6,10,0.08)';
+      // Slightly stronger trail fade (0.11 vs old 0.08) so old glyphs clear
+      // before the next frame stacks on top. Keeps the canvas from
+      // saturating over time.
+      ctx.fillStyle='rgba(6,6,10,0.11)';
       ctx.fillRect(0,0,cvs.width,cvs.height);
-      ctx.fillStyle='rgba(201,168,76,0.55)';
       ctx.font=font+'px "Fira Code",monospace';
       for(var i=0;i<drops.length;i++){
+        var d=drops[i];
+        if(!d.active){
+          if(d.delay>0){d.delay--;continue}
+          // Wake up: new random speed each cycle so the column feels fresh
+          d.active=true;
+          d.y=-1;
+          d.speed=0.4+Math.random()*0.9;
+          continue;
+        }
         var ch=chars[Math.floor(Math.random()*chars.length)];
-        ctx.fillText(ch,i*font,drops[i]*font);
-        if(drops[i]*font>cvs.height&&Math.random()>0.975)drops[i]=0;
-        drops[i]++;
+        // Head of the drop in gold-bright for a subtle lead-char highlight
+        if(d.y >= 0){
+          ctx.fillStyle='rgba(228,200,104,0.75)';
+          ctx.fillText(ch, i*font, d.y*font);
+        }
+        d.y += d.speed;
+        if(d.y*font > cvs.height){
+          // Finished its run — park it with a random pause before restart
+          d.active=false;
+          d.delay=20 + Math.floor(Math.random()*180);  // 1.6 – 16s at 80ms tick
+        }
       }
     }
     setInterval(draw,80);

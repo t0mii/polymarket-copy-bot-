@@ -152,7 +152,7 @@ html.wide,html.wide body{overflow-x:hidden!important;max-width:100vw}
 .tw{overflow-x:auto;max-height:460px;overflow-y:auto;border:1px solid var(--border);background:var(--bg2)}
 .tw table{width:100%;table-layout:fixed}
 .tw th,.tw td{padding:6px 8px;overflow:hidden;text-overflow:ellipsis}
-.c-mkt2{width:34%}.c-side2{width:7%;text-align:left}.c-num{width:4%;text-align:right;white-space:nowrap}.c-pnl{width:6%;text-align:right;white-space:nowrap}.c-evt2{width:10%;white-space:nowrap;text-align:center}.c-time{width:4%;white-space:nowrap;color:var(--text-dim);font-size:.65rem;text-align:center}
+.c-mkt2{width:34%}.c-side2{width:7%;text-align:left}.c-num{width:4%;text-align:center;white-space:nowrap}.c-pnl{width:6%;text-align:center;white-space:nowrap}.c-evt2{width:10%;white-space:nowrap;text-align:center}.c-time{width:4%;white-space:nowrap;color:var(--text-dim);font-size:.65rem;text-align:center}
 .c-close{width:9%;text-align:center;white-space:nowrap}
 .close-btn{display:inline-block;padding:4px 10px;border-radius:4px;font-size:.75rem;font-weight:700;cursor:pointer;border:none;min-width:70px;transition:opacity .2s}
 .close-btn:hover{opacity:.8}
@@ -356,6 +356,125 @@ tr:hover{background:rgba(201,168,76,0.03)}
 .s-aufguss{position:absolute;top:-2px;right:100%;margin-right:4px;font-size:7px;color:var(--gold);font-weight:700;opacity:0;white-space:nowrap;letter-spacing:.3px;text-shadow:0 0 8px rgba(201,168,76,0.4)}
 .s-aufguss.show{animation:s-pop 4s ease-out forwards}
 @keyframes s-pop{0%{opacity:0;transform:translateX(-50%) translateY(4px)}10%{opacity:1;transform:translateX(-50%) translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-6px)}}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLASS REFRESH + CANONICAL TYPE SCALE
+   Ports the transparent aesthetic from the brain page and aligns
+   every small-text selector to the --fs-* tokens defined in
+   terminal.css :root so brain and dashboard share one ramp.
+   Wins the cascade because it sits at the end of the stylesheet.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. CARDS → glass ─────────────────────────────────────────────── */
+.card{
+  background:rgba(12,12,18,0.28) !important;
+  border:1px solid rgba(201,168,76,0.1) !important;
+  padding:18px 20px !important;
+  position:relative;
+  overflow:hidden;
+  transition:border-color .25s,background .25s
+}
+.card:hover{
+  background:rgba(12,12,18,0.42) !important;
+  border-color:rgba(201,168,76,0.22) !important;
+  box-shadow:none
+}
+.card.hero{
+  background:linear-gradient(160deg,rgba(20,18,30,0.5),rgba(15,14,24,0.3)) !important;
+  border:1px solid rgba(201,168,76,0.22) !important
+}
+.card.hero::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px !important;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent)
+}
+
+/* ── 2. SECTIONS — gold hairline divider under .sec-hd ─────────────── */
+.sec-hd{
+  border-bottom:none !important;
+  position:relative;
+  padding:10px 0 !important;
+  margin-bottom:10px
+}
+.sec-hd::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--gold) 0%,rgba(201,168,76,0.35) 30%,rgba(201,168,76,0.08) 70%,transparent 100%);
+  opacity:.75
+}
+
+/* ── 3. TABLES inside .sec — transparent, sticky headers ──────────── */
+.sec .tw{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.12) !important
+}
+.sec .tw thead th{
+  background:rgba(6,6,10,0.92) !important;
+  border-bottom:1px solid var(--gold-dim) !important;
+  position:sticky;top:0;z-index:3;
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px)
+}
+
+/* ── 4. TRADER CARDS (.tc) ────────────────────────────────────────── */
+.tc{
+  background:rgba(12,12,18,0.32) !important;
+  border:1px solid rgba(201,168,76,0.12) !important
+}
+.tc:hover{
+  background:rgba(12,12,18,0.48) !important;
+  border-color:var(--gold-dim) !important
+}
+
+/* ── 5. CHART BOX, CLI PANEL, EXPO BOX ──────────────────────────────── */
+.chart-box{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.12) !important
+}
+.cli-panel{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.12) !important
+}
+.expo-box{
+  background:rgba(12,12,18,0.28) !important;
+  border:1px solid rgba(201,168,76,0.1) !important
+}
+
+/* ── 6. TICKER WRAP — transparent with hairline top ──────────────── */
+.tk-wrap{
+  background:transparent !important;
+  border-top:1px solid rgba(201,168,76,0.12);
+  border-bottom:1px solid rgba(201,168,76,0.08) !important
+}
+
+/* ── 7. FONT SCALE — aligns dashboard to the shared ramp ──────────── */
+.card-lbl{font-size:var(--fs-label) !important;letter-spacing:.14em}
+.card-val{font-size:var(--fs-num-lg) !important}
+.card-val-sm{font-size:var(--fs-num-sm) !important}
+.card-sub{font-size:var(--fs-label) !important}
+.card-lbl-line{font-size:var(--fs-meta) !important}
+.sec-t{font-size:var(--fs-title) !important}
+.tk-i{font-size:var(--fs-title) !important}
+.tk-i .s{font-size:inherit}
+.tw th{font-size:var(--fs-label) !important}
+.tw td{font-size:var(--fs-body) !important}
+.side{font-size:var(--fs-meta) !important}
+.tc-name{font-size:var(--fs-title) !important}
+.tc-s{font-size:var(--fs-body) !important}
+.tc-pnl{font-size:var(--fs-num) !important}
+.tc-det{font-size:var(--fs-label) !important}
+.btn-s{font-size:var(--fs-label) !important}
+.badge{font-size:var(--fs-meta) !important;padding:4px 12px}
+.close-btn{font-size:var(--fs-label) !important}
+.cp-btn{font-size:var(--fs-meta) !important}
+.expo-name{font-size:var(--fs-body) !important}
+.expo-pct{font-size:var(--fs-meta) !important}
+.live-btn{font-size:var(--fs-meta) !important}
+.c-id,.c-dt{font-size:var(--fs-body) !important}
+.c-time{font-size:var(--fs-meta) !important}
+th{font-size:var(--fs-label) !important}
+td{font-size:var(--fs-body) !important}
 </style>
 </head>
 <body data-no-grid>
@@ -1483,7 +1602,7 @@ function loadReport(){
       const avatar=addr?mkBlockie(addr,28):'';
       // All-time line
       const allLine=p.all_closed>0?'<div style="text-align:center;margin-top:6px;font-size:.68em;color:var(--text-dim)">all-time: <span style="color:'+(p.all_pnl>=0?'var(--green)':'var(--red)')+'">$'+(p.all_pnl>=0?'+':'')+p.all_pnl.toFixed(2)+'</span> ('+p.all_closed+' trades, '+p.all_win_rate+'% WR)</div>':'';
-      return`<div onclick="showTraderDetail('${esc(p.username)}')" style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;border-radius:6px;cursor:pointer;transition:border-color .2s" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+      return`<div onclick="showTraderDetail('${esc(p.username)}')" style="background:rgba(12,12,18,0.32);border:1px solid rgba(201,168,76,0.12);padding:14px 16px;border-radius:6px;cursor:pointer;transition:border-color .2s,background .2s" onmouseenter="this.style.borderColor='var(--gold-dim)';this.style.background='rgba(12,12,18,0.48)'" onmouseleave="this.style.borderColor='rgba(201,168,76,0.12)';this.style.background='rgba(12,12,18,0.32)'">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="display:flex;align-items:center;gap:8px">
             ${avatar?'<img src="'+avatar+'" style="width:28px;height:28px;border-radius:4px">':''}
@@ -1491,20 +1610,20 @@ function loadReport(){
           </div>
           <span style="color:${vc};font-weight:700;font-size:.62em;letter-spacing:.06em;background:${vBg};padding:2px 7px;border-radius:3px;text-transform:uppercase">${verdict}</span>
         </div>
-        <div style="text-align:center;padding:8px 0;margin-bottom:10px;background:${pnlBg};border-radius:4px">
+        <div style="text-align:center;padding:8px 0;margin-bottom:10px;border-top:1px solid rgba(201,168,76,0.08);border-bottom:1px solid rgba(201,168,76,0.08)">
           <div style="color:${pnlCol};font-weight:800;font-size:1.4em;font-family:var(--mono)">$${pnlT>=0?'+':''}${pnlT.toFixed(2)}</div>
           <div style="color:var(--text-dim);font-size:.65em;margin-top:2px">24H P&L</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;font-size:.75em">
-          <div style="background:var(--bg);padding:6px 4px;border-radius:4px">
+          <div style="background:transparent;border-top:1px solid rgba(201,168,76,0.12);padding:6px 4px">
             <div style="color:var(--green);font-weight:700;font-size:1.2em">${p.wins}</div>
             <div style="color:var(--text-dim);font-size:.85em">Wins</div>
           </div>
-          <div style="background:var(--bg);padding:6px 4px;border-radius:4px">
+          <div style="background:transparent;border-top:1px solid rgba(201,168,76,0.12);padding:6px 4px">
             <div style="color:var(--red);font-weight:700;font-size:1.2em">${p.losses}</div>
             <div style="color:var(--text-dim);font-size:.85em">Losses</div>
           </div>
-          <div style="background:var(--bg);padding:6px 4px;border-radius:4px">
+          <div style="background:transparent;border-top:1px solid rgba(201,168,76,0.12);padding:6px 4px">
             <div style="color:${wrCol};font-weight:700;font-size:1.2em">${wr}%</div>
             <div style="color:var(--text-dim);font-size:.85em">Win Rate</div>
           </div>
