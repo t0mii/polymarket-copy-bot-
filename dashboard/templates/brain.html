@@ -445,6 +445,250 @@ html.wide .app{max-width:none;padding:0 10px 8px}
 /* Big bottom grid */
 .bottom-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px}
 @media(max-width:1100px){.bottom-grid{grid-template-columns:1fr}}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLASS REFRESH — inspired by the transparent Filter Precision Audit.
+   Everything below strips the heavy .panel/box chrome so the content
+   floats over the page background. Sits at the end of the stylesheet
+   so it wins the cascade without touching the individual rules above.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. PANELS → transparent glass ─────────────────────────────────── */
+.panel{
+  background:transparent;
+  border:none;
+  padding:14px 2px 6px;
+  position:relative
+}
+.panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(201,168,76,0.25) 20%,rgba(201,168,76,0.5) 50%,rgba(201,168,76,0.25) 80%,transparent);
+  pointer-events:none;opacity:.85
+}
+.panel-title{
+  border-bottom:none;
+  padding-bottom:10px;
+  margin-bottom:10px;
+  position:relative
+}
+.panel-title::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--gold) 0%,rgba(201,168,76,0.25) 40%,transparent 100%);
+  opacity:.7
+}
+
+/* ── 2. CORE-MID ML-COMPACT panel keeps a whisper of glass ─────────── */
+.core-mid .ml-compact{
+  background:transparent;
+  padding:14px 2px 6px
+}
+
+/* ── 3. COUNTER cards → no solid bg, gold top hairline only ────────── */
+.counter{
+  background:transparent !important;
+  border:none;
+  padding:14px 16px 16px;
+  position:relative;
+  display:flex;flex-direction:column;
+  overflow:hidden
+}
+.counter::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold-dim) 25%,var(--gold) 50%,var(--gold-dim) 75%,transparent);
+  pointer-events:none
+}
+.counter::after{display:none !important}
+
+/* ── 4. MINI-CARDS (.mcard) → hairline-top only ─────────────────────── */
+.mcard{
+  background:transparent;
+  border:none;
+  border-top:1px solid rgba(201,168,76,0.18);
+  padding:12px 14px;
+  position:relative
+}
+.mcard::before{
+  background:transparent !important
+}
+.mcard:hover{
+  border-top-color:var(--gold)
+}
+
+/* ── 5. ML-CELL metric tiles → faintest possible glass ─────────────── */
+.ml-cell{
+  background:rgba(12,12,18,0.35);
+  border:1px solid rgba(201,168,76,0.12);
+  padding:10px 8px
+}
+
+/* ── 6. STREAM BOX → transparent, hairline top ──────────────────────── */
+.stream-box{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.15) !important
+}
+
+/* ── 7. NEURAL HOST → transparent container ─────────────────────────── */
+.stream-net-row .neural-host{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.15)
+}
+.stream-net-row .neural-host .panel-title{
+  border-bottom:none;
+  background:transparent
+}
+.neural-box{
+  background:radial-gradient(ellipse at center,rgba(201,168,76,0.035),transparent 70%);
+  border-top:1px solid rgba(201,168,76,0.08)
+}
+.neural-box::before{opacity:.45}  /* dim grid overlay noise */
+
+/* ── 8. BRAIN HERO → dim the drama ──────────────────────────────────── */
+.brain-hero{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid var(--gold-dim);
+  border-bottom:1px solid rgba(201,168,76,0.1);
+  padding:22px 26px
+}
+.brain-hero::before{opacity:.85}  /* keep the animated top-line */
+.brain-hero::after{
+  background:radial-gradient(ellipse at 30% 50%,rgba(201,168,76,0.05),transparent 60%)
+}
+
+/* ── 9. TABLES inside panels → transparent wrapper + hairline rows ──── */
+.panel .tw{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.12) !important;
+  overflow-x:auto;overflow-y:auto
+}
+.panel .trader-table th,
+.panel .trader-table{
+  background:transparent
+}
+.panel .trader-table thead th{
+  background:rgba(6,6,10,0.92) !important;
+  border-bottom:1px solid var(--gold-dim) !important;
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  position:sticky;top:0;z-index:3
+}
+.panel .trader-table td{
+  border-bottom:1px solid rgba(201,168,76,0.06)
+}
+/* Long tables get a scroll container so the sticky header has something to stick against */
+.panel.table-tall .tw{max-height:520px}
+
+/* ── 10. CATEGORY HEATMAP cells ──────────────────────────────────────── */
+.cat-cell{
+  background:rgba(12,12,18,0.28) !important;
+  border:1px solid rgba(201,168,76,0.12) !important
+}
+.cat-cell:hover{
+  background:rgba(12,12,18,0.45) !important;
+  border-color:var(--gold-dim) !important
+}
+
+/* ── 11. BRAIN LOG and ACTION PILLS ─────────────────────────────────── */
+.brain-log{
+  background:transparent !important;
+  border:none !important;
+  border-top:1px solid rgba(201,168,76,0.12) !important
+}
+.blog-filter{
+  background:rgba(6,6,10,0.75) !important;
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  border-bottom:1px solid rgba(201,168,76,0.15) !important
+}
+.action-pill{
+  background:transparent !important;
+  border:1px solid rgba(201,168,76,0.12) !important
+}
+
+/* ── 12. FEATURE IMPORTANCE + SCORE BUCKETS: dim grid noise ────────── */
+.feat-row .bar-bg::before{opacity:.35}
+.bucket-row .wr-bar-bg::before{opacity:.35}
+.pipe-bar-bg::before{opacity:.35}
+
+/* ── 13. SECTION-DIVIDER → animated gold hairline ────────────────────── */
+.section-divider{
+  margin:26px 0 16px;
+  gap:14px;
+  position:relative
+}
+.section-divider::before,.section-divider::after{
+  content:'';flex:1;height:1px;
+  background:linear-gradient(90deg,transparent 0%,var(--gold-dim) 30%,var(--gold) 50%,var(--gold-dim) 70%,transparent 100%);
+  background-size:200% 100%;
+  animation:divShimmer 9s ease-in-out infinite
+}
+@keyframes divShimmer{
+  0%,100%{background-position:0 0}
+  50%{background-position:100% 0}
+}
+.section-divider .lbl{
+  background:transparent !important;
+  border:none !important;
+  padding:0 6px !important;
+  font-size:.62rem;letter-spacing:.32em;
+  color:var(--gold) !important;
+  text-shadow:0 0 14px rgba(201,168,76,0.4)
+}
+.section-divider .lbl::before,.section-divider .lbl::after{display:none}
+.section-divider .sub{
+  position:static !important;margin:0 !important;
+  font-size:.52rem;color:var(--text-dim);letter-spacing:.22em
+}
+
+/* ── 14. SKELETON LOADERS — pulse while async data loads ─────────────── */
+.skeleton{
+  position:relative;
+  color:transparent !important;
+  user-select:none;
+  background:linear-gradient(90deg,
+    rgba(255,255,255,0.025) 0%,
+    rgba(201,168,76,0.1) 50%,
+    rgba(255,255,255,0.025) 100%);
+  background-size:200% 100%;
+  animation:skeletonPulse 1.6s ease-in-out infinite;
+  border-radius:2px;
+  display:inline-block
+}
+@keyframes skeletonPulse{
+  0%{background-position:200% 0}
+  100%{background-position:-200% 0}
+}
+.skeleton-row td{background:transparent !important;border-bottom-color:rgba(201,168,76,0.04) !important}
+.skeleton-bar{height:10px;width:72%;vertical-align:middle}
+.skeleton-bar.w50{width:50%}
+.skeleton-bar.w30{width:30%}
+.skeleton-bar.w80{width:80%}
+
+/* ── 15. ROW FLASH — new entries pulse gold ─────────────────────────── */
+@keyframes rowFlashGold{
+  0%{background:rgba(201,168,76,0.25);box-shadow:inset 0 0 24px rgba(201,168,76,0.18)}
+  100%{background:transparent;box-shadow:none}
+}
+.flash-new{animation:rowFlashGold 1.5s ease-out}
+.flash-new td{background:transparent !important}
+
+/* ── 16. FILTER PRECISION — align with the new rhythm ──────────────── */
+.ml-compact-title{
+  font-size:.72rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--gold);padding-bottom:8px;margin-bottom:8px;position:relative;flex:1
+}
+.ml-compact-head{
+  display:flex;align-items:center;gap:10px;margin-bottom:10px;
+  padding-bottom:8px;position:relative
+}
+.ml-compact-head::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--gold) 0%,rgba(201,168,76,0.25) 40%,transparent 100%);
+  opacity:.6
+}
 </style>
 </head>
 <body data-no-grid>
@@ -574,7 +818,10 @@ html.wide .app{max-width:none;padding:0 10px 8px}
           </tr>
         </thead>
         <tbody id="fpBody">
-          <tr><td colspan="6" style="opacity:.5;padding:10px">loading…</td></tr>
+          <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+          <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+          <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+          <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
         </tbody>
       </table>
       <div class="fp-legend">
@@ -605,7 +852,14 @@ html.wide .app{max-width:none;padding:0 10px 8px}
           <button class="sbtn toggle act" id="togglePaper" type="button" title="Show/hide paper events in the ALL view">&#9679; paper</button>
         </div>
       </div>
-      <div class="stream-box" id="streamBox"></div>
+      <div class="stream-box" id="streamBox">
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+        <div class="sline skeleton-row"><span class="sts"><span class="skeleton skeleton-bar w80"></span></span><span class="sact"><span class="skeleton skeleton-bar w80"></span></span><span class="stgt"><span class="skeleton skeleton-bar w80"></span></span><span class="srsn"><span class="skeleton skeleton-bar w80"></span></span></div>
+      </div>
     </div>
     <div class="neural-host">
       <div class="panel-title">
@@ -657,7 +911,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
   </div>
 
   <!-- TRADER DETAILS -->
-  <div class="panel" style="margin-bottom:16px">
+  <div class="panel table-tall" style="margin-bottom:16px">
     <div class="panel-title">
       <span>Per-Trader Intelligence</span>
       <span class="pill">brain view</span>
@@ -668,7 +922,13 @@ html.wide .app{max-width:none;padding:0 10px 8px}
         <th>7d P&amp;L</th><th>1d P&amp;L</th><th>7d WR</th><th>Streak</th>
         <th>Status</th><th>Effective Filter</th>
       </tr></thead>
-      <tbody></tbody>
+      <tbody>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w80"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w80"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w80"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w80"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w80"></span></td></tr>
+      </tbody>
     </table></div>
   </div>
 
@@ -706,7 +966,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
   </div>
 
   <!-- PAPER TRADING — per-trader summary -->
-  <div class="panel" style="margin-top:12px">
+  <div class="panel table-tall" style="margin-top:12px">
     <div class="panel-title">
       <span>Paper Trading &mdash; Trader Summary</span>
       <span class="pill" id="paperSummaryCount">0 traders</span>
@@ -717,12 +977,16 @@ html.wide .app{max-width:none;padding:0 10px 8px}
         <th>1d</th><th>2d</th><th>3d</th><th>5d</th><th>7d</th>
         <th>Unreal.</th><th>Realized</th><th>Verdict</th>
       </tr></thead>
-      <tbody></tbody>
+      <tbody>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+      </tbody>
     </table></div>
   </div>
 
   <!-- PAPER TRADING — individual trades (promoted candidates proving themselves) -->
-  <div class="panel" style="margin-top:12px">
+  <div class="panel table-tall" style="margin-top:12px">
     <div class="panel-title">
       <span>Paper Trading &mdash; Live Proving Ground</span>
       <span class="pill" id="paperTradesCount">0 trades</span>
@@ -736,7 +1000,11 @@ html.wide .app{max-width:none;padding:0 10px 8px}
         <th>Time</th><th>Trader</th><th>State</th><th>Market</th>
         <th>Side</th><th>Entry</th><th>Now</th><th>P&amp;L</th><th>Status</th>
       </tr></thead>
-      <tbody></tbody>
+      <tbody>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+        <tr class="skeleton-row"><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w80"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w30"></span></td><td><span class="skeleton skeleton-bar w50"></span></td><td><span class="skeleton skeleton-bar w50"></span></td></tr>
+      </tbody>
     </table></div>
   </div>
   </div><!-- /sec-field -->
@@ -972,6 +1240,39 @@ buildBrainMini();
 async function fetchJSON(u){try{var r=await fetch(u);if(!r.ok)return null;return await r.json()}catch(e){return null}}
 function fmt(v,d){if(v==null)return '--';return Number(v).toFixed(d==null?2:d)}
 function pnlClass(v){return v>0?'pos':v<0?'neg':''}
+
+/* ── Row flash helper ──
+   Each render function calls flashNewRows(tbodyEl, keyAttr) after appending
+   its rows. The helper tracks a Set of seen keys per container. Rows whose
+   key hasn't been seen before get .flash-new for 1.5s so new data pulses
+   gold. The first render seeds the Set without flashing (avoids the whole
+   table lighting up on page load).
+*/
+window._flashSeen = window._flashSeen || {};
+function flashNewRows(containerEl, keyAttr){
+  if(!containerEl) return;
+  var selKey = containerEl.id || containerEl.className || 'anon';
+  var entry = window._flashSeen[selKey] || { set:new Set(), seeded:false };
+  var rows = containerEl.querySelectorAll('tr[data-' + keyAttr + '], .sline[data-' + keyAttr + ']');
+  rows.forEach(function(row){
+    var key = row.getAttribute('data-' + keyAttr);
+    if(!key) return;
+    if(!entry.set.has(key)){
+      entry.set.add(key);
+      if(entry.seeded){
+        row.classList.add('flash-new');
+        setTimeout(function(){row.classList.remove('flash-new')}, 1600);
+      }
+    }
+  });
+  // cap the Set so it doesn't grow forever if keys churn
+  if(entry.set.size > 500){
+    var arr = Array.from(entry.set);
+    entry.set = new Set(arr.slice(arr.length - 400));
+  }
+  entry.seeded = true;
+  window._flashSeen[selKey] = entry;
+}
 
 /* Vienna time helpers — all stream timestamps are displayed as Europe/Vienna */
 var _vienna=null;
@@ -1337,6 +1638,7 @@ function renderTraderTable(traders,tuner){
     var ws=t.win_streak||0,ls=t.loss_streak||0;
     var onFire=ws>=3;
     var tr=document.createElement('tr');
+    tr.setAttribute('data-wallet', (t.trader_name||'').toLowerCase());
     if(onFire)tr.className='on-fire';
     function td(content,cls){var el=document.createElement('td');if(cls)el.className=cls;if(typeof content==='string')el.textContent=content;else if(content)el.appendChild(content);return el}
 
@@ -1412,6 +1714,7 @@ function renderTraderTable(traders,tuner){
 
     tbody.appendChild(tr);
   });
+  flashNewRows(tbody, 'wallet');
 }
 
 /* Category heatmap */
@@ -1667,6 +1970,7 @@ function renderPaperSummary(data){
   }
   list.forEach(function(p){
     var tr=document.createElement('tr');
+    tr.setAttribute('data-wallet', (p.username||p.address||'').toLowerCase());
     function td(content,cls){var el=document.createElement('td');if(cls)el.className=cls;if(typeof content==='string')el.textContent=content;else if(content)el.appendChild(content);return el}
     // Trader link
     var name=document.createElement('a');
@@ -1742,6 +2046,7 @@ function renderPaperSummary(data){
     tr.appendChild(td(verdict));
     tbody.appendChild(tr);
   });
+  flashNewRows(tbody, 'wallet');
 }
 
 /* Paper trades list — individual trades from promoted candidates */
@@ -1761,9 +2066,10 @@ function renderPaperTrades(data){
   }
   trades.forEach(function(t){
     var tr=document.createElement('tr');
+    var ts=t.closed_at||t.created_at||'';
+    tr.setAttribute('data-trade', (t.id!=null?String(t.id):((t.candidate_address||'')+'|'+ts)));
     function td(content,cls){var el=document.createElement('td');if(cls)el.className=cls;if(typeof content==='string')el.textContent=content;else if(content)el.appendChild(content);return el}
     // Time (Vienna)
-    var ts=t.closed_at||t.created_at||'';
     tr.appendChild(td(viennaTime(ts)));
     // Trader (link to polymarket profile)
     var name=document.createElement('a');
@@ -1815,6 +2121,7 @@ function renderPaperTrades(data){
     tr.appendChild(td(badge));
     tbody.appendChild(tr);
   });
+  flashNewRows(tbody, 'trade');
 }
 
 /* Top candidates table */
