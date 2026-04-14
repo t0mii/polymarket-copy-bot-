@@ -985,14 +985,14 @@ html.wide .app{max-width:none;padding:0 10px 8px}
     </div>
     <div class="neural-host">
       <div class="panel-title">
-        <span>Neural Network</span>
+        <span>Decision Funnel</span>
         <span class="neural-head-pills">
           <span class="pill pred-pill" id="predVal">idle</span>
-          <span class="pill" id="neuralActivity">ready</span>
+          <span class="pill" id="neuralActivity">last 1h</span>
         </span>
       </div>
       <div class="neural-box">
-        <svg viewBox="0 0 420 190" preserveAspectRatio="xMidYMid meet" id="neuralSvg"></svg>
+        <svg viewBox="0 0 420 190" preserveAspectRatio="xMidYMid meet" id="funnelSvg"></svg>
       </div>
     </div>
   </div>
@@ -1145,164 +1145,212 @@ var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelect
 
 /* Matrix rain moved to terminal.js — global on all pages except DailyReport */
 
-/* ── Neural network SVG — event-driven packet flow ── */
-var NN={packets:[],layers:[],nodeEls:[],svg:null,raf:null,activityDecay:null};
-function setNeuralActivity(label){
-  var el=$('#neuralActivity');if(el)el.textContent=label||'idle';
+/* ── Live Decision Funnel — replaces the decorative neural network ──
+   Real pipeline throughput over the last 1h, computed from streamEvents.
+   5 stages: INTAKE → FILTER → SCORE → TRADE → RESULT. Each stage shows
+   the true count of events that reached it; bar stroke glows with the
+   stage's share of total intake. Live SSE events fire a particle from
+   the previous stage to the newly triggered stage (color green for
+   win, red for loss, gold for everything else) so the animation shows
+   actual data flow instead of random packets.                        */
+var FL={svg:null,stages:[]};
+var FUNNEL_STAGES=[
+  {key:'intake',label:'INTAKE'},
+  {key:'filter',label:'FILTER'},
+  {key:'score', label:'SCORE'},
+  {key:'trade', label:'TRADE'},
+  {key:'result',label:'RESULT'}
+];
+
+function setNeuralActivity(label){   /* shim — older call sites still work */
+  var el=$('#neuralActivity');if(el)el.textContent=label||'last 1h';
 }
 function setPrediction(label,sub,kind){
   var v=$('#predVal');
   if(v){v.textContent=label||'idle';v.className='pill pred-pill '+(kind||'')}
 }
-function burstNeural(n,magenta,label){
-  if(label)setNeuralActivity(label);
-  for(var i=0;i<(n||1);i++){
-    setTimeout(function(m){return function(){spawnPacket(m)}}(magenta),i*70);
-  }
-  // decay back to idle after no packets for 2s
-  if(NN.activityDecay)clearTimeout(NN.activityDecay);
-  NN.activityDecay=setTimeout(function(){
-    if(NN.packets.length===0)setNeuralActivity('idle');
-  },2500);
+
+function _parseTs(tstr){
+  if(!tstr)return NaN;
+  var iso=String(tstr).indexOf('T')>=0?String(tstr):String(tstr).replace(' ','T');
+  if(!/Z$|[+-]\d\d:?\d\d$/.test(iso))iso+='Z';
+  return Date.parse(iso);
 }
-function spawnPacket(magenta){
-  if(!NN.svg||!NN.layers.length)return;
-  var ns='http://www.w3.org/2000/svg';
-  var path=[];
-  for(var li=0;li<NN.layers.length;li++){
-    var col=NN.layers[li];
-    path.push(col[Math.floor(Math.random()*col.length)]);
-  }
-  var dot=document.createElementNS(ns,'circle');
-  dot.setAttribute('class','packet'+(magenta?' magenta':''));
-  dot.setAttribute('r',3.4);
-  dot.setAttribute('cx',path[0].x);dot.setAttribute('cy',path[0].y);
-  NN.svg.appendChild(dot);
-  NN.packets.push({path:path,dot:dot,t:0,speed:0.009+Math.random()*0.006,trail:[]});
-  if(!NN.rafRunning)startNeuralLoop();
+
+function computeFunnel(){
+  var now=Date.now();
+  var oneHour=now-3600000;
+  var s={intake:0,filter:0,score:0,trade:0,result:0};
+  (streamEvents||[]).forEach(function(e){
+    var t=_parseTs(e.ts);
+    if(isNaN(t)||t<oneHour)return;
+    s.intake++;
+    if(e.kind!=='BLOCKED')s.filter++;
+    if(e.kind==='DECISION')s.score++;
+    var cls=String(e.cssClass||'');
+    if(cls.indexOf('trade_buy')>=0||cls.indexOf('paper_buy')>=0||e.kind==='TRADE')s.trade++;
+    if(cls.indexOf('win')>=0||cls.indexOf('loss')>=0)s.result++;
+  });
+  return s;
 }
-function startNeuralLoop(){
-  if(NN.raf)return;
-  NN.rafRunning=true;
-  function step(){
-    var alive=[];
-    NN.packets.forEach(function(p){
-      p.t+=p.speed;
-      var seg=Math.floor(p.t);
-      var segT=p.t-seg;
-      if(seg>=p.path.length-1){try{p.dot.remove()}catch(e){}return}
-      var from=p.path[seg],to=p.path[seg+1];
-      var x=from.x+(to.x-from.x)*segT;
-      var y=from.y+(to.y-from.y)*segT;
-      p.dot.setAttribute('cx',x);p.dot.setAttribute('cy',y);
-      var toIdx=NN.layers[seg+1].indexOf(to);
-      var edgeLine=from['_out'+toIdx];
-      if(edgeLine)edgeLine.classList.add('active');
-      if(segT>0.85&&to.el){to.el.classList.add('active')}
-      alive.push(p);
-    });
-    NN.packets=alive;
-    // Decay active edges/nodes quickly
-    var activeEdges=NN.svg.querySelectorAll('.edge.active');
-    if(activeEdges.length>0&&Math.random()<0.4){
-      activeEdges[Math.floor(Math.random()*activeEdges.length)].classList.remove('active');
-    }
-    var activeNodes=NN.svg.querySelectorAll('.node.active');
-    if(activeNodes.length>0&&Math.random()<0.25){
-      activeNodes[Math.floor(Math.random()*activeNodes.length)].classList.remove('active');
-    }
-    // If no packets AND no active elements → stop loop (truly idle)
-    if(NN.packets.length===0&&activeEdges.length===0&&activeNodes.length===0){
-      NN.raf=null;NN.rafRunning=false;setNeuralActivity('idle');
-      return;
-    }
-    NN.raf=requestAnimationFrame(step);
-  }
-  NN.raf=requestAnimationFrame(step);
-}
-function buildNeural(){
-  var svg=$('#neuralSvg');if(!svg)return;
-  NN.svg=svg;NN.packets.forEach(function(p){try{p.dot.remove()}catch(e){}});
-  NN.packets=[];NN.layers=[];NN.nodeEls=[];
+
+function buildFunnel(){
+  var svg=$('#funnelSvg');if(!svg)return;
+  FL.svg=svg;FL.stages=[];
   while(svg.firstChild)svg.removeChild(svg.firstChild);
   var ns='http://www.w3.org/2000/svg';
-  // Compact network that fits the small box with I/O label gutters
-  var layerSizes=[6,8,10,8,4,2];
-  var W=420,H=190;
-  var padL=70,padR=60,padT=12,padB=18;
-  var xs=layerSizes.map(function(_,i){return padL+(i/(layerSizes.length-1))*(W-padL-padR)});
-  var inputLabels=['trader_edge','category_wr','price_sig','conviction','market_q','correlation'];
-  var outputLabels=['BUY','SKIP'];
-  for(var li=0;li<layerSizes.length;li++){
-    var col=[];var n=layerSizes[li];
-    for(var ni=0;ni<n;ni++){
-      var y=padT+((H-padT-padB)*(ni+0.5)/n);
-      col.push({x:xs[li],y:y,el:null});
-    }
-    NN.layers.push(col);
-  }
-  // Edges: all-to-all between adjacent layers (capped at 12 per source for visual breathing room)
-  for(var li2=0;li2<NN.layers.length-1;li2++){
-    var a=NN.layers[li2],b=NN.layers[li2+1];
-    for(var ai=0;ai<a.length;ai++){
-      for(var bi=0;bi<b.length;bi++){
-        var line=document.createElementNS(ns,'line');
-        line.setAttribute('class','edge');
-        line.setAttribute('x1',a[ai].x);line.setAttribute('y1',a[ai].y);
-        line.setAttribute('x2',b[bi].x);line.setAttribute('y2',b[bi].y);
-        svg.appendChild(line);
-        a[ai]['_out'+bi]=line;
-      }
-    }
-  }
-  // Nodes on top
-  for(var li3=0;li3<NN.layers.length;li3++){
-    var col2=NN.layers[li3];
-    for(var ci=0;ci<col2.length;ci++){
-      var c=document.createElementNS(ns,'circle');
-      c.setAttribute('class','node');
-      c.setAttribute('cx',col2[ci].x);c.setAttribute('cy',col2[ci].y);
-      c.setAttribute('r',3.2);
-      svg.appendChild(c);
-      col2[ci].el=c;NN.nodeEls.push(c);
-    }
-  }
-  // Layer labels (inside, above bottom padding)
-  var names=['INPUT','DENSE','DENSE','DENSE','DROPOUT','OUTPUT'];
-  for(var li4=0;li4<xs.length;li4++){
-    var t=document.createElementNS(ns,'text');
-    t.setAttribute('class','layer-label');
-    t.setAttribute('x',xs[li4]);t.setAttribute('y',H-4);
-    t.setAttribute('text-anchor','middle');
-    t.textContent=names[li4]||'';
-    svg.appendChild(t);
-  }
-  // Input feature labels on the left gutter
-  var inputCol=NN.layers[0];
-  for(var il=0;il<inputCol.length&&il<inputLabels.length;il++){
-    var inT=document.createElementNS(ns,'text');
-    inT.setAttribute('class','io-label input');
-    inT.setAttribute('x',4);
-    inT.setAttribute('y',inputCol[il].y+2);
-    inT.textContent=inputLabels[il];
-    svg.appendChild(inT);
-  }
-  // Output labels on the right gutter
-  var outputCol=NN.layers[NN.layers.length-1];
-  for(var ol=0;ol<outputCol.length&&ol<outputLabels.length;ol++){
-    var outT=document.createElementNS(ns,'text');
-    outT.setAttribute('class','io-label output');
-    outT.setAttribute('x',W-4);
-    outT.setAttribute('y',outputCol[ol].y+2);
-    outT.textContent=outputLabels[ol];
-    svg.appendChild(outT);
+  var W=420,H=190,cy=95;
+  var pad=34;
+  var step=(W-2*pad)/(FUNNEL_STAGES.length-1);
+
+  // <defs><marker id="fnArrow"><polygon/></marker></defs> — built with DOM methods
+  var defs=document.createElementNS(ns,'defs');
+  var marker=document.createElementNS(ns,'marker');
+  marker.setAttribute('id','fnArrow');
+  marker.setAttribute('markerWidth','6');
+  marker.setAttribute('markerHeight','5');
+  marker.setAttribute('refX','5');
+  marker.setAttribute('refY','2.5');
+  marker.setAttribute('orient','auto');
+  var poly=document.createElementNS(ns,'polygon');
+  poly.setAttribute('points','0 0, 6 2.5, 0 5');
+  poly.setAttribute('fill','rgba(201,168,76,0.55)');
+  marker.appendChild(poly);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Dotted backbone through the centre
+  var spine=document.createElementNS(ns,'line');
+  spine.setAttribute('x1',pad-4);spine.setAttribute('y1',cy);
+  spine.setAttribute('x2',W-pad+4);spine.setAttribute('y2',cy);
+  spine.setAttribute('stroke','rgba(201,168,76,0.12)');
+  spine.setAttribute('stroke-width','0.6');
+  spine.setAttribute('stroke-dasharray','2 3');
+  svg.appendChild(spine);
+
+  // Arrows between stages
+  for(var i=0;i<FUNNEL_STAGES.length-1;i++){
+    var ax=pad+i*step,bx=pad+(i+1)*step;
+    var arr=document.createElementNS(ns,'line');
+    arr.setAttribute('x1',ax+26);arr.setAttribute('y1',cy);
+    arr.setAttribute('x2',bx-26);arr.setAttribute('y2',cy);
+    arr.setAttribute('stroke','rgba(201,168,76,0.35)');
+    arr.setAttribute('stroke-width','1');
+    arr.setAttribute('marker-end','url(#fnArrow)');
+    svg.appendChild(arr);
   }
 
-  setNeuralActivity('idle');
-  // Single intro burst on load (2 packets), then event-driven only
-  setTimeout(function(){burstNeural(2,false,'booting')},200);
+  FUNNEL_STAGES.forEach(function(s,i){
+    var x=pad+i*step;
+    var g=document.createElementNS(ns,'g');
+    var box=document.createElementNS(ns,'rect');
+    box.setAttribute('x',x-26);box.setAttribute('y',cy-34);
+    box.setAttribute('width',52);box.setAttribute('height',68);
+    box.setAttribute('rx',3);
+    box.setAttribute('fill','rgba(12,12,18,0.45)');
+    box.setAttribute('stroke','rgba(201,168,76,0.22)');
+    box.setAttribute('stroke-width','0.8');
+    g.appendChild(box);
+    var lbl=document.createElementNS(ns,'text');
+    lbl.setAttribute('x',x);lbl.setAttribute('y',cy-20);
+    lbl.setAttribute('text-anchor','middle');
+    lbl.setAttribute('font-size','7');
+    lbl.setAttribute('font-family','Fira Code,monospace');
+    lbl.setAttribute('fill','#c9a84c');
+    lbl.setAttribute('letter-spacing','1');
+    lbl.setAttribute('font-weight','700');
+    lbl.textContent=s.label;
+    g.appendChild(lbl);
+    var cnt=document.createElementNS(ns,'text');
+    cnt.setAttribute('x',x);cnt.setAttribute('y',cy+5);
+    cnt.setAttribute('text-anchor','middle');
+    cnt.setAttribute('font-size','17');
+    cnt.setAttribute('font-family','Fira Code,monospace');
+    cnt.setAttribute('font-weight','700');
+    cnt.setAttribute('fill','#e8e4dc');
+    cnt.textContent='0';
+    g.appendChild(cnt);
+    var sub=document.createElementNS(ns,'text');
+    sub.setAttribute('x',x);sub.setAttribute('y',cy+22);
+    sub.setAttribute('text-anchor','middle');
+    sub.setAttribute('font-size','5.2');
+    sub.setAttribute('font-family','Fira Code,monospace');
+    sub.setAttribute('fill','#7a7890');
+    sub.setAttribute('letter-spacing','0.5');
+    sub.textContent='events 1h';
+    g.appendChild(sub);
+    svg.appendChild(g);
+    FL.stages.push({key:s.key,x:x,cy:cy,box:box,cntEl:cnt});
+  });
+
+  setNeuralActivity('last 1h');
+  updateFunnel();
 }
-buildNeural();
+
+function updateFunnel(){
+  if(!FL.svg)return;
+  var stats=computeFunnel();
+  var maxV=Math.max(1,stats.intake||0);
+  FL.stages.forEach(function(s){
+    var target=stats[s.key]||0;
+    var cur=parseInt(s.cntEl.textContent,10)||0;
+    if(cur!==target){
+      var rng=target-cur,frames=8,frame=0;
+      clearInterval(s._ti);
+      s._ti=setInterval(function(){
+        frame++;
+        var v=Math.round(cur+rng*(frame/frames));
+        s.cntEl.textContent=String(v);
+        if(frame>=frames){s.cntEl.textContent=String(target);clearInterval(s._ti)}
+      },35);
+    }
+    var ratio=maxV>0?target/maxV:0;
+    s.box.setAttribute('stroke-width',(0.8+ratio*1.8).toFixed(2));
+    s.box.setAttribute('stroke','rgba(201,168,76,'+(0.22+ratio*0.55).toFixed(2)+')');
+    s.box.setAttribute('fill','rgba(12,12,18,'+(0.45+ratio*0.2).toFixed(2)+')');
+  });
+}
+
+function fireFunnelParticle(fromIdx,toIdx,color){
+  if(!FL.svg||fromIdx<0||toIdx>=FL.stages.length||fromIdx>=FL.stages.length)return;
+  var ns='http://www.w3.org/2000/svg';
+  var from=FL.stages[fromIdx],to=FL.stages[toIdx];
+  var dot=document.createElementNS(ns,'circle');
+  dot.setAttribute('r','2.8');
+  dot.setAttribute('fill',color||'rgba(228,200,104,0.95)');
+  dot.style.filter='drop-shadow(0 0 4px '+(color||'rgba(228,200,104,0.8)')+')';
+  dot.setAttribute('cx',from.x+26);
+  dot.setAttribute('cy',from.cy);
+  FL.svg.appendChild(dot);
+  var startT=performance.now();
+  var dur=620;
+  function anim(now){
+    var p=(now-startT)/dur;
+    if(p>=1){try{dot.remove()}catch(e){}return}
+    var x=(from.x+26)+((to.x-26)-(from.x+26))*p;
+    dot.setAttribute('cx',x);
+    dot.setAttribute('opacity',String(1-p*0.4));
+    requestAnimationFrame(anim);
+  }
+  requestAnimationFrame(anim);
+}
+
+function burstFunnel(stageKey,kind){
+  if(!FL.svg||!FL.stages.length)return;
+  var idx=-1;
+  for(var i=0;i<FL.stages.length;i++){if(FL.stages[i].key===stageKey){idx=i;break}}
+  if(idx<=0)idx=1;  // default: intake → filter
+  var color=kind==='loss'?'rgba(248,113,113,0.95)'
+           :kind==='win' ?'rgba(52,211,153,0.95)'
+           :null;
+  fireFunnelParticle(idx-1,idx,color);
+  setTimeout(updateFunnel,160);
+}
+
+buildFunnel();
+/* Periodic re-sync of the funnel counts — catches hourly bucket age-out
+   even if no live events arrive in the meantime. */
+setInterval(updateFunnel,30000);
 
 /* Mini brain SVG in hero: scattered nodes in a brain-hemisphere shape, pulsing */
 function buildBrainMini(){
@@ -1422,98 +1470,115 @@ function viennaTime(stamp){
 /* (standalone stream clock removed — row timestamps use Vienna TZ directly) */
 
 var lastCounts={scored:0,decisions:0,samples:0,candidates:0};
-var sparkHist={scored:[0,0],decisions:[0,0],samples:[0,0],candidates:[0,0]};
-var SPARK_MAX=42;
-
 var SPARK_LBL={scored:'scored',decisions:'dec',samples:'samples',candidates:'cand'};
-/* Schreiber-Kurve: SVG polyline chart recorder */
-function drawSpark(key,arr){
+
+/* ── Time-bucket sparklines ──
+   24 buckets × 5 minutes = 2 hours of history per spark. The buffer is
+   a real time series keyed to wall-clock time (not an oscilloscope
+   sweep), and it's persisted to localStorage so reloads keep the
+   history. On each setCounter() the positive delta is added to the
+   current (rightmost) bucket. A background tick shifts buckets left
+   as time passes. The decisions spark is additionally seeded from the
+   real created_at timestamps of /api/brain/decisions at load time so
+   the operator sees actual last-2h activity immediately without
+   waiting for live events.                                            */
+var SPARK_BUCKETS=24;
+var SPARK_WINDOW_MS=5*60*1000;
+var _sparkData={};
+
+function _newSparkBuckets(){return {endTs:Date.now(),buckets:new Array(SPARK_BUCKETS).fill(0)}}
+function _sparkKey(k){return 'sparkBucket_v2_'+k}
+function _loadSpark(key){
+  try{
+    var raw=localStorage.getItem(_sparkKey(key));
+    if(!raw)return _newSparkBuckets();
+    var d=JSON.parse(raw);
+    if(!d||!Array.isArray(d.buckets)||d.buckets.length!==SPARK_BUCKETS)return _newSparkBuckets();
+    var now=Date.now();
+    var off=Math.floor((now-(d.endTs||now))/SPARK_WINDOW_MS);
+    if(off<=0)return {endTs:d.endTs||now,buckets:d.buckets.slice(),_seeded:!!d._seeded};
+    if(off>=SPARK_BUCKETS)return _newSparkBuckets();
+    var shifted=new Array(SPARK_BUCKETS).fill(0);
+    for(var i=0;i<SPARK_BUCKETS-off;i++)shifted[i]=d.buckets[i+off]||0;
+    return {endTs:now,buckets:shifted,_seeded:!!d._seeded};
+  }catch(e){return _newSparkBuckets()}
+}
+function _saveSpark(key){
+  try{localStorage.setItem(_sparkKey(key),JSON.stringify(_sparkData[key]))}catch(e){}
+}
+function _ageSpark(d){
+  var now=Date.now();
+  var off=Math.floor((now-d.endTs)/SPARK_WINDOW_MS);
+  if(off<=0)return d;
+  if(off>=SPARK_BUCKETS){d.buckets=new Array(SPARK_BUCKETS).fill(0);d.endTs=now;return d}
+  var shifted=new Array(SPARK_BUCKETS).fill(0);
+  for(var i=0;i<SPARK_BUCKETS-off;i++)shifted[i]=d.buckets[i+off]||0;
+  d.buckets=shifted;d.endTs=now;return d;
+}
+
+function drawSpark(key,buckets,current){
   var el=$('#spark'+key.charAt(0).toUpperCase()+key.slice(1));
   if(!el)return;
   while(el.firstChild)el.removeChild(el.firstChild);
-  // Current-value tag in the top-right corner
-  if(arr&&arr.length>0){
-    var tag=document.createElement('div');tag.className='spark-val';
-    var lbl=document.createElement('span');lbl.className='lbl';
-    lbl.textContent=SPARK_LBL[key]||key;
-    tag.appendChild(lbl);
-    tag.appendChild(document.createTextNode(Number(arr[arr.length-1]).toLocaleString('de')));
-    el.appendChild(tag);
-  }
+  // Current-value tag in the top-right corner (absolute, not delta)
+  var tag=document.createElement('div');tag.className='spark-val';
+  var lbl=document.createElement('span');lbl.className='lbl';
+  lbl.textContent=SPARK_LBL[key]||key;
+  tag.appendChild(lbl);
+  tag.appendChild(document.createTextNode(Number(current||0).toLocaleString('de')));
+  el.appendChild(tag);
+
   var ns='http://www.w3.org/2000/svg';
   var svg=document.createElementNS(ns,'svg');
   svg.setAttribute('viewBox','0 0 100 52');
   svg.setAttribute('preserveAspectRatio','none');
-  // Dashed baseline in the middle
+  // Baseline at bottom (not middle) so bars grow up naturally
   var baseline=document.createElementNS(ns,'line');
   baseline.setAttribute('class','baseline');
   baseline.setAttribute('x1','0');baseline.setAttribute('x2','100');
-  baseline.setAttribute('y1','26');baseline.setAttribute('y2','26');
+  baseline.setAttribute('y1','46');baseline.setAttribute('y2','46');
   svg.appendChild(baseline);
-  if(!arr||arr.length<2){el.appendChild(svg);return}
-  var n=arr.length;
-  var min=Math.min.apply(null,arr),max=Math.max.apply(null,arr);
-  var range=max-min;
-  var top=6,bot=46;
-  function yAt(v){
-    if(range<=0)return 26;
-    return bot-((v-min)/range)*(bot-top);
+
+  var max=1;
+  for(var i=0;i<buckets.length;i++)if(buckets[i]>max)max=buckets[i];
+  var barW=100/SPARK_BUCKETS;
+  for(var j=0;j<SPARK_BUCKETS;j++){
+    var v=buckets[j]||0;
+    if(v<=0)continue;
+    var h=(v/max)*38;
+    var rect=document.createElementNS(ns,'rect');
+    rect.setAttribute('x',(j*barW+barW*0.18).toFixed(2));
+    rect.setAttribute('y',(46-h).toFixed(2));
+    rect.setAttribute('width',(barW*0.64).toFixed(2));
+    rect.setAttribute('height',h.toFixed(2));
+    var isCurrent=(j===SPARK_BUCKETS-1);
+    rect.setAttribute('fill', isCurrent?'#e4c868':'#c9a84c');
+    rect.setAttribute('opacity', isCurrent?'0.95':'0.55');
+    svg.appendChild(rect);
   }
-  // Latest point on the right, oldest on the left — chart recorder style
-  function xAt(i){return (i/(SPARK_MAX-1))*100}
-  var pts=[];
-  for(var i=0;i<n;i++)pts.push(xAt(i).toFixed(1)+','+yAt(arr[i]).toFixed(1));
-  // Fill polygon under line
-  var poly=document.createElementNS(ns,'polygon');
-  var fillPts=pts.slice();
-  fillPts.push(xAt(n-1).toFixed(1)+',52');
-  fillPts.push(xAt(0).toFixed(1)+',52');
-  poly.setAttribute('points',fillPts.join(' '));
-  poly.setAttribute('fill','rgba(201,168,76,0.16)');
-  svg.appendChild(poly);
-  // Line (stroke set inline so CSS var resolves safely)
-  var line=document.createElementNS(ns,'polyline');
-  line.setAttribute('points',pts.join(' '));
-  line.setAttribute('fill','none');
-  line.setAttribute('stroke','#c9a84c');
-  line.setAttribute('stroke-width','1.5');
-  line.setAttribute('stroke-linecap','round');
-  line.setAttribute('stroke-linejoin','round');
-  line.setAttribute('vector-effect','non-scaling-stroke');
-  line.style.filter='drop-shadow(0 0 4px rgba(201,168,76,0.7))';
-  svg.appendChild(line);
-  // Head dot at the last point
-  var head=document.createElementNS(ns,'circle');
-  head.setAttribute('class','head');
-  head.setAttribute('cx',xAt(n-1));
-  head.setAttribute('cy',yAt(arr[n-1]));
-  head.setAttribute('r','2.2');
-  head.setAttribute('fill','#e4c868');
-  head.style.filter='drop-shadow(0 0 5px #e4c868) drop-shadow(0 0 10px rgba(201,168,76,0.6))';
-  svg.appendChild(head);
+  // Head dot over the current bar
+  if(buckets[SPARK_BUCKETS-1]>0){
+    var head=document.createElementNS(ns,'circle');
+    head.setAttribute('class','head');
+    head.setAttribute('cx',((SPARK_BUCKETS-1)*barW+barW*0.5).toFixed(2));
+    head.setAttribute('cy',(46-(buckets[SPARK_BUCKETS-1]/max)*38).toFixed(2));
+    head.setAttribute('r','1.8');
+    head.setAttribute('fill','#e4c868');
+    head.style.filter='drop-shadow(0 0 4px #e4c868) drop-shadow(0 0 8px rgba(201,168,76,0.5))';
+    svg.appendChild(head);
+  }
   el.appendChild(svg);
 }
 
-function pushSpark(key,val){
-  var arr=sparkHist[key];
-  arr.push(val);
-  // Oscilloscope sweep: when buffer is full, reset and start fresh from the left
-  if(arr.length>SPARK_MAX){arr.length=0;arr.push(val)}
-  drawSpark(key,arr);
-}
-
-/* Fast chart-recorder tick — pushes latest value to every spark every 300ms
-   so a glowing dot sweeps left→right, drawing the line behind it.
-   When it reaches the right edge, the buffer resets and it starts over from the left. */
+/* Background tick: shifts buckets if 5min window crossed. Once per minute. */
 setInterval(function(){
-  ['scored','decisions','samples','candidates'].forEach(function(k){
-    var arr=sparkHist[k];
-    var last=arr.length>0?arr[arr.length-1]:(lastCounts[k]||0);
-    arr.push(last);
-    if(arr.length>SPARK_MAX){arr.length=0;arr.push(last)}
-    drawSpark(k,arr);
+  Object.keys(_sparkData).forEach(function(k){
+    var d=_sparkData[k];
+    _ageSpark(d);
+    _saveSpark(k);
+    drawSpark(k,d.buckets,lastCounts[k]||0);
   });
-},300);
+},60000);
 
 function setCounter(key,val){
   var el=$('#cnt'+key.charAt(0).toUpperCase()+key.slice(1));
@@ -1521,22 +1586,54 @@ function setCounter(key,val){
   if(!el)return;
   var prev=lastCounts[key]||0;
   var delta=val-prev;
-  // Animate counter
-  var start=prev,range=val-prev,steps=18,step=0;
+  var start=prev,range=val-prev,steps=18,stepN=0;
   clearInterval(el._t);
   el._t=setInterval(function(){
-    step++;
-    var cur=Math.round(start+range*(step/steps));
+    stepN++;
+    var cur=Math.round(start+range*(stepN/steps));
     el.textContent=cur.toLocaleString('de');
-    if(step>=steps){clearInterval(el._t);el.textContent=val.toLocaleString('de')}
+    if(stepN>=steps){clearInterval(el._t);el.textContent=val.toLocaleString('de')}
   },22);
   if(dEl){
     dEl.textContent='\u0394 '+(delta>=0?'+':'')+delta;
     dEl.classList.toggle('dn',delta<0);
   }
   lastCounts[key]=val;
-  pushSpark(key,val);
+  if(!_sparkData[key])_sparkData[key]=_loadSpark(key);
+  _ageSpark(_sparkData[key]);
+  // Only positive deltas bump the bucket — cumulative counters that
+  // reset or drop shouldn't pollute the history with negative "drops".
+  if(delta>0)_sparkData[key].buckets[SPARK_BUCKETS-1]+=delta;
+  _saveSpark(key);
+  drawSpark(key,_sparkData[key].buckets,val);
 }
+
+/* Seed the decisions spark from real event timestamps at first load.
+   Other sparks (scored/samples/candidates) start from whatever's in
+   localStorage and accumulate live deltas from there. */
+function seedSparkFromDecisions(decisions){
+  if(!Array.isArray(decisions))return;
+  if(!_sparkData['decisions'])_sparkData['decisions']=_loadSpark('decisions');
+  if(_sparkData['decisions']._seeded)return;
+  var now=Date.now();
+  var spanStart=now-SPARK_BUCKETS*SPARK_WINDOW_MS;
+  var buckets=new Array(SPARK_BUCKETS).fill(0);
+  decisions.forEach(function(d){
+    var t=_parseTs(d.created_at||d.timestamp||'');
+    if(isNaN(t)||t<spanStart||t>now)return;
+    var idx=Math.floor((t-spanStart)/SPARK_WINDOW_MS);
+    if(idx>=0&&idx<SPARK_BUCKETS)buckets[idx]++;
+  });
+  _sparkData['decisions']={endTs:now,buckets:buckets,_seeded:true};
+  _saveSpark('decisions');
+  drawSpark('decisions',buckets,lastCounts['decisions']||0);
+}
+
+/* Initialise all four sparks from localStorage so reload keeps history */
+['scored','decisions','samples','candidates'].forEach(function(k){
+  _sparkData[k]=_loadSpark(k);
+  drawSpark(k,_sparkData[k].buckets,lastCounts[k]||0);
+});
 
 var brainStateTimer=null;
 function setBrainState(state,sub){
@@ -2341,15 +2438,28 @@ function renderCoreMini(status,mlInfo,decisions,tradersData){
   // Brain decisions today
   var today=new Date().toISOString().slice(0,10);
   var decToday=(decisions||[]).filter(function(d){return (d.created_at||'').slice(0,10)===today}).length;
-  // Action counts from decisions
-  var actionCounts={};
-  (decisions||[]).forEach(function(d){var a=d.action||d.action_type;actionCounts[a]=(actionCounts[a]||0)+1});
-  var tightens=actionCounts.TIGHTEN_FILTER||0;
-  var blacklists=actionCounts.BLACKLIST_CATEGORY||0;
+  // Aggregate 24h P&L across all followed traders (pnl_1d from trader-performance)
+  var pnl1d=0;
+  traderList.forEach(function(t){pnl1d+=Number(t.pnl_1d||0)});
+  var pnl1dStr=(pnl1d>=0?'+$':'-$')+Math.abs(pnl1d).toFixed(2);
+  // Copy-only accuracy — the ml_copy model's live score (copy decisions vs outcomes)
+  var copyAcc=ml.copy_accuracy!=null?ml.copy_accuracy:(ml.copy_only_acc!=null?ml.copy_only_acc:null);
+  var baseline=ml.baseline_accuracy!=null?ml.baseline_accuracy:(ml.baseline!=null?ml.baseline:null);
+  var edgeStr='--',edgeClass='';
+  if(copyAcc!=null&&baseline!=null){
+    var edgePct=(copyAcc-baseline)*100;
+    edgeStr=(edgePct>=0?'+':'')+edgePct.toFixed(1)+'%';
+    edgeClass=edgePct>=3?'up':edgePct>=0?'cy':'dn';
+  }else if(copyAcc!=null){
+    edgeStr=(copyAcc*100).toFixed(0)+'%';
+    edgeClass='cy';
+  }
   // Training Samples, Brain Decisions, Candidates live in the growing counters next to the hero.
   box.appendChild(mcard('Decisions Today',String(decToday),decToday>0?'up':'','since 00:00'));
-  box.appendChild(mcard('Active Tightens',String(tightens),tightens>0?'dn':'','filter map'));
-  box.appendChild(mcard('Blacklists',String(blacklists),blacklists>0?'dn':'','categories'));
+  // Dropped "Active Tightens" + "Blacklists" — they duplicate the Battlefield action-strip.
+  // Replaced with two operator-relevant metrics: live 24h P&L aggregate + ML edge vs baseline.
+  box.appendChild(mcard('24h Net P&L',pnl1dStr,pnl1d>=0?'up':'dn','all traders'));
+  box.appendChild(mcard('ML Edge',edgeStr,edgeClass,'vs baseline'));
   box.appendChild(mcard('Active Traders',String(activeN)+'/'+String(totalN),activeN>0?'up':'','followed'));
   box.appendChild(mcard('Paused',String(pausedN),pausedN>0?'dn':'','brain-forced'));
   box.appendChild(mcard('Promoted',String(cand.promoted||0),'up','to paper/live'));
@@ -2441,6 +2551,11 @@ async function refresh(){
   merged.sort(function(a,b){return (b.ts||'').localeCompare(a.ts||'')});
   streamEvents=merged.slice(0,800);
   renderBrainStream();
+
+  // Live decision funnel: recompute counts off the fresh streamEvents buffer
+  updateFunnel();
+  // Seed the decisions spark from real timestamps once per session
+  seedSparkFromDecisions(decisions);
 
   renderCoreMini(status,mlInfo,decisions,traders);
   renderCandidates(candidates);
@@ -2599,9 +2714,19 @@ try{
   setInterval(refresh,8000);
 }
 
-/* Listen for live events via SSE — append to merged stream + fire neural packets */
+/* Listen for live events via SSE — append to merged stream + fire a
+   real particle through the decision funnel for each event. The burst
+   target stage is derived from the event kind so the animation shows
+   the actual path the data took through the pipeline, not random
+   packets. */
 try{
   var es=new EventSource('/api/stream');
+  var _predDecayT=null;
+  function flashPrediction(label,sub,kind){
+    setPrediction(label,sub,kind);
+    if(_predDecayT)clearTimeout(_predDecayT);
+    _predDecayT=setTimeout(function(){setPrediction('last 1h','','')},8000);
+  }
   es.addEventListener('brain_decision',function(ev){
     var d=null;try{d=JSON.parse(ev.data)}catch(e){}
     if(d){
@@ -2609,38 +2734,33 @@ try{
       prependStreamEvent(normDecision(d));
     }
     setBrainState('EXECUTING','applying decision');
-    burstNeural(6,true,'decision');
+    burstFunnel('score');
     var action=(d&&(d.action||'')).toUpperCase();
     var isPos=/RELAX|BOOST|PROMOTE|UNBLACKLIST/.test(action);
-    setPrediction(isPos?'ADAPT':'TIGHTEN',(d&&d.target)||'—',isPos?'buy':'skip');
+    flashPrediction(isPos?'ADAPT':'TIGHTEN',(d&&d.target)||'—',isPos?'buy':'skip');
     setTimeout(function(){refresh()},700);
   });
   es.addEventListener('new_trade',function(ev){
     var d=null;try{d=JSON.parse(ev.data)}catch(e){}
     if(d)prependStreamEvent(normTrade('NEW',d));
     setBrainState('OBSERVING','new copy trade');
-    burstNeural(4,false,'buy');
-    var conf=60+Math.floor(Math.random()*30);
-    setPrediction('BUY '+conf+'%',(d&&d.trader)||'—','buy');
+    burstFunnel('trade');
+    flashPrediction('BUY',(d&&d.trader)||'—','buy');
   });
   es.addEventListener('trade_closed',function(ev){
     var d=null;try{d=JSON.parse(ev.data)}catch(e){}
     if(d)prependStreamEvent(normTrade('CLOSE',d));
     setBrainState('OBSERVING','trade closed');
     var pnl=d&&d.pnl||0;
-    burstNeural(3,pnl<0,pnl>=0?'win':'loss');
-    setPrediction(pnl>=0?'WIN':'LOSS',(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2),pnl>=0?'buy':'skip');
+    burstFunnel('result',pnl>=0?'win':'loss');
+    flashPrediction(pnl>=0?'WIN':'LOSS',(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2),pnl>=0?'buy':'skip');
   });
   es.addEventListener('smart_sell',function(ev){
     var d=null;try{d=JSON.parse(ev.data)}catch(e){}
     if(d)prependStreamEvent(normTrade('CLOSE',d));
-    burstNeural(2,true,'smart_sell');
-    setPrediction('SMART SELL','exit','skip');
+    burstFunnel('result','win');
+    flashPrediction('SMART SELL','exit','skip');
   });
-  // Decay prediction to idle after 10s
-  setInterval(function(){
-    if(NN.packets.length===0){setPrediction('--','idle','')}
-  },10000);
 }catch(e){}
 
 })();

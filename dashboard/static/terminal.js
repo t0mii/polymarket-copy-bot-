@@ -42,7 +42,8 @@
         y: startActive ? -Math.random()*30 : 0,
         speed: 0.4 + Math.random()*0.9,       // 0.4 – 1.3 rows/frame
         active: startActive,
-        delay: startActive ? 0 : Math.floor(Math.random()*120)
+        delay: startActive ? 0 : Math.floor(Math.random()*120),
+        lastRow: -999                          // draw-gate: only paint on row change
       };
     }
     function buildDrops(){
@@ -56,29 +57,35 @@
     window.addEventListener('resize', buildDrops);
 
     function draw(){
-      // Slightly stronger trail fade (0.11 vs old 0.08) so old glyphs clear
-      // before the next frame stacks on top. Keeps the canvas from
-      // saturating over time.
-      ctx.fillStyle='rgba(6,6,10,0.11)';
+      // Stronger trail fade (0.18 vs old 0.08) so old glyphs clear before
+      // the next frame stacks on top. Combined with the one-char-per-row
+      // gate below this keeps the canvas from forming vertical streaks.
+      ctx.fillStyle='rgba(6,6,10,0.18)';
       ctx.fillRect(0,0,cvs.width,cvs.height);
       ctx.font=font+'px "Fira Code",monospace';
+      ctx.fillStyle='rgba(228,200,104,0.78)';  // gold-bright head
       for(var i=0;i<drops.length;i++){
         var d=drops[i];
         if(!d.active){
           if(d.delay>0){d.delay--;continue}
-          // Wake up: new random speed each cycle so the column feels fresh
+          // Wake up: new random speed + fresh row-gate each cycle
           d.active=true;
           d.y=-1;
           d.speed=0.4+Math.random()*0.9;
+          d.lastRow=-999;
           continue;
         }
-        var ch=chars[Math.floor(Math.random()*chars.length)];
-        // Head of the drop in gold-bright for a subtle lead-char highlight
-        if(d.y >= 0){
-          ctx.fillStyle='rgba(228,200,104,0.75)';
-          ctx.fillText(ch, i*font, d.y*font);
-        }
         d.y += d.speed;
+        // Draw-gate: only paint a char when the drop crosses into a new
+        // integer row. Slow drops (speed 0.4) advance into the next row
+        // every ~2.5 frames — painting every frame would stack chars
+        // inside the same 14px cell and create solid vertical lines.
+        var row = Math.floor(d.y);
+        if(row >= 0 && row !== d.lastRow){
+          d.lastRow = row;
+          var ch = chars[Math.floor(Math.random()*chars.length)];
+          ctx.fillText(ch, i*font, row*font);
+        }
         if(d.y*font > cvs.height){
           // Finished its run — park it with a random pause before restart
           d.active=false;
