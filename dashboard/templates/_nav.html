@@ -7,7 +7,7 @@
 <nav class="nav">
   <a href="/copy"{% if active == 'dashboard' %} class="act"{% endif %}>Dashboard</a>
   <a href="/brain"{% if active == 'brain' %} class="act"{% endif %}>Brain</a>
-  <a href="/reports" target="_blank" rel="noopener"{% if active == 'dailyreport' %} class="act"{% endif %}>DailyReport</a>
+  <span class="dis" aria-disabled="true" title="Coming soon">AI-Report</span>
   <a href="/wallets"{% if active == 'wallets' %} class="act"{% endif %}>Settings</a>
   <a href="/logs"{% if active == 'logs' %} class="act"{% endif %}>Logs</a>
 </nav>

@@ -2,6 +2,29 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (ui) — Nav: rename DailyReport button to AI-Report and disable it
+
+Follow-up to the header harmonisation. User wants the DailyReport nav entry
+renamed and deactivated while the feature is being reworked.
+
+- `_nav.html`: replaced `<a href="/reports">DailyReport</a>` with
+  `<span class="dis" aria-disabled="true" title="Coming soon">AI-Report</span>`.
+  Span has no href so it's not clickable; the `pointer-events:none` in the CSS
+  makes it fully inert including hover.
+- `terminal.css`: new `.nav .dis{...}` rule — dim text, transparent border,
+  `opacity:.4`, `cursor:not-allowed`, `pointer-events:none`, `user-select:none`.
+  Layout matches the other nav items so the button still fills the same slot.
+- The `/reports` route itself and the `reports.html` template are UNCHANGED —
+  only the nav entry is gone. The page is still reachable by direct URL.
+- `active='dailyreport'` logic in `_nav.html` became dead but was removed as
+  part of the span replacement.
+
+Deployed live to walter@10.0.0.20, polybot restarted, curl verified on all 5
+routes: each returns 200 and contains exactly one `AI-Report` label and one
+`class="dis"` span. Remaining "DailyReport" string hits in brain.html (two CSS
+comments) and reports.html (in-page footer "Super Sauna Club — DailyReport")
+are user-invisible or intentional and were left alone.
+
 ## 2026-04-14 (ui) — Frontend harmonisation: remove grid background + unify header across pages
 
 Visual-only pass, no bot-backend changes. Two fixes:

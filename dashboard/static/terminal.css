@@ -106,6 +106,9 @@ html.wide .digiclock{display:block}
 .nav a{font-size:.78rem;color:var(--text-mid);text-decoration:none;padding:8px 18px;
   border:1px solid transparent;letter-spacing:0.12em;text-transform:uppercase;font-weight:400;transition:all .25s}
 .nav a:hover,.nav a.act{color:var(--gold);border-color:rgba(201,168,76,0.35)}
+.nav .dis{font-size:.78rem;color:var(--text-dim);padding:8px 18px;
+  border:1px solid transparent;letter-spacing:0.12em;text-transform:uppercase;
+  font-weight:400;opacity:.4;cursor:not-allowed;user-select:none;pointer-events:none}
 
 /* ═══ SOUND TOGGLE ═══ */
 .sfx-btn{cursor:pointer;font-size:.68rem;color:var(--text-dim);display:inline-flex;align-items:center;
