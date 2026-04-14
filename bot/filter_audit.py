@@ -128,6 +128,27 @@ def compute_filter_precision(min_samples: int = MIN_SAMPLES,
 
     out.sort(key=_sort_key)
 
+    # Pull ml_block model vitals for the header badge — so users can see
+    # the audit tool's health at a glance (trust indicator for the rows).
+    block_health = {}
+    try:
+        from bot.ml_scorer import get_model_health
+        from database import db as _db
+        h = get_model_health("ml_block")
+        block_health = {
+            "edge_pp": round(h.get("edge_vs_baseline", 0.0), 1),
+            "trained_at": h.get("trained_at", ""),
+        }
+        with _db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT samples_count FROM ml_training_log "
+                "WHERE COALESCE(model_name,'ml_copy')='ml_block' "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            block_health["samples"] = int(row["samples_count"]) if row and row["samples_count"] else 0
+    except Exception:
+        pass
+
     return {
         "rows": out,
         "meta": {
@@ -138,5 +159,6 @@ def compute_filter_precision(min_samples: int = MIN_SAMPLES,
             "loosen_threshold": LOOSEN_THRESHOLD,
             "keep_threshold": KEEP_THRESHOLD,
             "min_samples": min_samples,
+            "block_model": block_health,
         },
     }

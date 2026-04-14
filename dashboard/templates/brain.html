@@ -581,6 +581,7 @@ html.wide .app{max-width:none;padding:0 10px 8px}
     <div class="ml-compact-head">
       <div class="ml-compact-title">Filter Precision Audit</div>
       <span class="pill" id="fpMeta">—</span>
+      <span class="pill" id="fpBlockMeta" title="ml_block model vitals — the audit recommendations below are only as good as this model">—</span>
     </div>
     <div class="ml-compact-body">
       <table class="fp-table" id="fpTable">
@@ -2084,6 +2085,7 @@ async function refresh(){
 function renderFilterPrecision(data){
   var body=$('#fpBody');if(!body)return;
   var meta=$('#fpMeta');
+  var blockMeta=$('#fpBlockMeta');
   while(body.firstChild)body.removeChild(body.firstChild);
   if(!data||data.meta&&data.meta.error){
     var tr=document.createElement('tr');
@@ -2093,6 +2095,7 @@ function renderFilterPrecision(data){
     td.textContent=(data&&data.meta&&data.meta.error)||'ml_block model not trained yet — run train_block_model()';
     tr.appendChild(td);body.appendChild(tr);
     if(meta)meta.textContent='— not ready';
+    if(blockMeta){blockMeta.textContent='ml_block: not trained';blockMeta.className='pill fp-meta-neutral'}
     return;
   }
   var rows=data.rows||[];
@@ -2109,6 +2112,27 @@ function renderFilterPrecision(data){
     if(loosenN>0)txt+=' · '+loosenN+' LOOSEN';
     meta.textContent=txt;
     meta.className='pill'+(loosenN>0?' fp-meta-alert':(keepN>0?' fp-meta-ok':' fp-meta-neutral'));
+  }
+  // ml_block model vitals — the audit is only as good as this model.
+  // Green if edge >= 0 (model beats baseline), dim otherwise.
+  if(blockMeta){
+    var bh=m.block_model||{};
+    if(bh.samples){
+      var edge=bh.edge_pp||0;
+      var sign=edge>=0?'+':'';
+      var parts=['ml_block: n='+bh.samples];
+      parts.push('edge '+sign+edge.toFixed(1)+'pp');
+      if(bh.trained_at){
+        // Strip to HH:MM for compactness
+        var t=bh.trained_at.split(' ')[1]||'';
+        if(t)parts.push('trained '+t.slice(0,5));
+      }
+      blockMeta.textContent=parts.join(' · ');
+      blockMeta.className='pill '+(edge>0?'fp-meta-ok':'fp-meta-neutral');
+    }else{
+      blockMeta.textContent='ml_block: —';
+      blockMeta.className='pill fp-meta-neutral';
+    }
   }
   if(!rows.length){
     var tr2=document.createElement('tr');
