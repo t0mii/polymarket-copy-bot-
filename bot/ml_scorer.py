@@ -174,6 +174,7 @@ def train_model():
     # subset that often has trivial extreme-price → extreme-outcome
     # correlation and inflates overall accuracy). This is the number that
     # actually matters for live trading decisions.
+    copy_test_acc = None  # populated below if we have ≥5 copy samples
     copy_test_mask = is_copy_test
     n_copy_test = int(copy_test_mask.sum())
     if n_copy_test >= 5:
@@ -222,15 +223,25 @@ def train_model():
     except Exception as e:
         logger.warning("[ML] Failed to save model: %s", e)
 
-    # Log to DB
+    # Log to DB — three accuracies + sample sizes + per-run baseline so the
+    # brain dashboard can compare ML vs. majority-class without hardcoding 79.1.
     try:
         import json
         with db.get_connection() as conn:
             conn.execute(
-                "INSERT INTO ml_training_log (samples_count, accuracy, feature_importance, model_path) "
-                "VALUES (?, ?, ?, ?)",
-                (total, round(test_acc, 4),
-                 json.dumps(dict(importances)), MODEL_PATH)
+                "INSERT INTO ml_training_log "
+                "(samples_count, accuracy, train_accuracy, copy_only_accuracy, "
+                "baseline_accuracy, train_n, test_n, feature_importance, model_path) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (total,
+                 round(test_acc, 4),
+                 round(train_acc, 4),
+                 round(copy_test_acc, 4) if copy_test_acc is not None else None,
+                 round(baseline_acc, 4),
+                 len(X_train),
+                 len(X_test),
+                 json.dumps(dict(importances)),
+                 MODEL_PATH)
             )
     except Exception:
         pass

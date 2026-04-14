@@ -1133,14 +1133,40 @@ function renderFeatures(ml){
     row.appendChild(n);row.appendChild(bg);row.appendChild(p);
     box.appendChild(row);
   });
-  var trainAcc=latest.accuracy;
+  // Accuracy values are stored as sklearn decimals (0..1). Helper scales them
+  // to percent for display, but stays a no-op if a row is already on the
+  // 0..100 scale (e.g. a future row that was written in percent by mistake).
+  function scaleAcc(v){var n=Number(v||0);return n<=1.5?n*100:n}
+  var rawTest=latest.accuracy;
+  var rawTrain=latest.train_accuracy!=null?latest.train_accuracy:rawTest;
+  var rawCopy=latest.copy_only_accuracy;
+  var rawBaseline=latest.baseline_accuracy!=null?latest.baseline_accuracy:0.791;
+  var trainAcc=scaleAcc(rawTrain);
+  var testAcc=scaleAcc(rawTest);
+  var baseline=scaleAcc(rawBaseline);
   $('#mlTrainAcc').textContent=fmt(trainAcc,1)+'%';
-  $('#mlTestAcc').textContent=fmt(trainAcc,1)+'%';
-  $('#mlTrainN').textContent='n='+(latest.samples_count||0);
-  $('#mlTestN').textContent='n='+Math.round((latest.samples_count||0)*0.2);
-  var gap=(trainAcc||0)-79.1;  // majority baseline
+  $('#mlTestAcc').textContent=fmt(testAcc,1)+'%';
+  $('#mlTrainN').textContent='n='+(latest.train_n||Math.round((latest.samples_count||0)*0.8));
+  $('#mlTestN').textContent='n='+(latest.test_n||Math.round((latest.samples_count||0)*0.2));
+  var gap=testAcc-baseline;
   $('#mlGap').textContent=(gap>=0?'+':'')+fmt(gap,1)+'pp';
   $('#mlGap').className='ml-val '+(gap>=0?'up':'dn');
+  // Update gap subline to show actual baseline (was hard-coded "majority 79.1%")
+  var gapSub=$('#mlGapSub');
+  if(gapSub)gapSub.textContent='vs majority '+fmt(baseline,1)+'%';
+  // Optional: append copy-only accuracy as a small inline pill on the baseline card
+  if(rawCopy!=null){
+    var copyAcc=scaleAcc(rawCopy);
+    var copyEl=$('#mlGapCopy');
+    if(!copyEl){
+      copyEl=document.createElement('div');
+      copyEl.id='mlGapCopy';
+      copyEl.style.cssText='font-size:.5rem;color:var(--text-dim);margin-top:2px;font-family:var(--mono)';
+      var gapCell=$('#mlGap');
+      if(gapCell&&gapCell.parentElement)gapCell.parentElement.appendChild(copyEl);
+    }
+    copyEl.textContent='copy-only '+fmt(copyAcc,1)+'%';
+  }
   $('#mlLastTrained').textContent='last trained '+(latest.trained_at||'--');
 }
 

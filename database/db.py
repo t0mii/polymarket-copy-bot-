@@ -36,6 +36,12 @@ def init_db():
             "ALTER TABLE copy_trades ADD COLUMN fee_bps INTEGER",
             "ALTER TABLE blocked_trades ADD COLUMN asset TEXT DEFAULT ''",
             "ALTER TABLE blocked_trades ADD COLUMN category TEXT DEFAULT ''",
+            # 2026-04-14: separate train / test / copy-only / baseline accuracies + sample sizes
+            "ALTER TABLE ml_training_log ADD COLUMN train_accuracy REAL",
+            "ALTER TABLE ml_training_log ADD COLUMN copy_only_accuracy REAL",
+            "ALTER TABLE ml_training_log ADD COLUMN baseline_accuracy REAL",
+            "ALTER TABLE ml_training_log ADD COLUMN train_n INTEGER",
+            "ALTER TABLE ml_training_log ADD COLUMN test_n INTEGER",
         ]:
             try:
                 conn.execute(migration)

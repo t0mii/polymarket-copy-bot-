@@ -275,7 +275,12 @@ CREATE TABLE IF NOT EXISTS ml_training_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     trained_at TEXT DEFAULT (datetime('now','localtime')),
     samples_count INTEGER,
-    accuracy REAL,
+    accuracy REAL,                  -- test-set accuracy (decimal 0-1, sklearn convention)
+    train_accuracy REAL,            -- train-set accuracy (added 2026-04-14)
+    copy_only_accuracy REAL,        -- accuracy on copy-only test subset (added 2026-04-14)
+    baseline_accuracy REAL,         -- majority-class baseline at training time (added 2026-04-14)
+    train_n INTEGER,                -- size of the train slice
+    test_n INTEGER,                 -- size of the test slice
     feature_importance TEXT,
     model_path TEXT
 );
