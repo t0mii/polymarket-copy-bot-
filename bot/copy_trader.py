@@ -255,12 +255,21 @@ _STOP_LOSS_MAP = _parse_float_map(config.STOP_LOSS_MAP, "STOP_LOSS_MAP")
 _MAX_COPIES_MAP = {k: int(float(v)) for k, v in _parse_float_map(config.MAX_COPIES_PER_MARKET_MAP, "MAX_COPIES_PER_MARKET_MAP").items()}
 
 def _get_max_copies(username: str) -> int:
-    """Per-trader MAX_COPIES_PER_MARKET lookup with global fallback."""
+    """Per-trader MAX_COPIES_PER_MARKET lookup with global fallback.
+
+    Hard-capped at 1: idx_copy_trades_open_dedup is a UNIQUE partial
+    index on (condition_id, wallet_address) WHERE status='open', so the
+    DB permits only one open row per (market, trader). Auto-tuner emits
+    2-3 for STAR/SOLID tiers, but any value >1 causes the pre-insert
+    count check (count < max) to green-light a second INSERT which then
+    trips sqlite3.IntegrityError. The cap aligns the check with DB
+    reality until the schema or auto-tuner is fixed.
+    """
     if username:
         val = _MAX_COPIES_MAP.get(username.lower())
         if val is not None:
-            return val
-    return config.MAX_COPIES_PER_MARKET
+            return min(val, 1)
+    return min(config.MAX_COPIES_PER_MARKET, 1)
 _MIN_ENTRY_PRICE_MAP = _parse_float_map(config.MIN_ENTRY_PRICE_MAP, "MIN_ENTRY_PRICE_MAP")
 _MAX_ENTRY_PRICE_MAP = _parse_float_map(config.MAX_ENTRY_PRICE_MAP, "MAX_ENTRY_PRICE_MAP")
 _AVG_TRADER_SIZE_MAP = _parse_float_map(config.AVG_TRADER_SIZE_MAP, "AVG_TRADER_SIZE_MAP")

@@ -2,6 +2,43 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-14 (latest) — Hard-cap _get_max_copies at 1 to match DB UNIQUE index
+
+Immediately after removing `MAX_DAILY_TRADES=30` and fixing the compound slowdown (previous entry), the bot resumed active copying and uncapped a latent bug that the daily cap had been masking for 2 days: `sqlite3.IntegrityError: UNIQUE constraint failed: copy_trades.condition_id, copy_trades.wallet_address` firing every 10s on sovereign2013 positions.
+
+### Why
+
+Root cause is a contradiction between two config paths:
+
+- **Schema**: `idx_copy_trades_open_dedup` is a UNIQUE partial index on `(condition_id, wallet_address) WHERE status='open'`. The DB permits **exactly one** open row per (market, trader).
+- **Auto-tuner**: `MAX_COPIES_PER_MARKET_MAP` is auto-written per trader tier. STAR/SOLID traders get values >1 (observed: `sovereign2013:2.0` post-restart).
+- **Pre-insert check** (`bot/copy_trader.py:1504`): `if count_copies_for_market(...) >= _get_max_copies(...): continue` — with `count=1, max=2` the check green-lights a second INSERT, which then trips IntegrityError.
+
+The whole `copy_scan` tick is wrapped in try/except that catches the error and aborts the cycle, so other markets in the same scan are skipped. Not data-corrupting, but it silently stops progress whenever the affected trader opens a repeat position.
+
+### Why it was hidden until now
+
+`MAX_DAILY_TRADES=30` returned from `copy_scan` before reaching the hedge-wait buy path in most cycles (cap was usually hit by noon). With the cap removed, sovereign's 2.0 setting got a chance to fire and immediately started bleeding errors. Memory says "MAX_COPIES_PER_MARKET bug cost $420 previously" — this is the same bug surface.
+
+### Fix
+
+`bot/copy_trader.py::_get_max_copies` — hard-cap return value at `min(val, 1)` for both the mapped and global-fallback branches. Auto-tuner can continue writing 2.0/3.0 into settings (separate scope), the reader just ignores anything above 1 until the schema is fixed. Comment explains the reasoning so a future reader doesn't "optimize" it away.
+
+### Verification post-deploy (2nd restart 16:43:08 UTC)
+
+- `_get_max_copies('sovereign2013')` → **1** (was 2)
+- `_get_max_copies(...)` for all followed traders → **1**
+- 0 `UNIQUE constraint failed` in logs since 16:43:08
+- `update_prices` cycles still at 3-4s (no regression from the `closed_limit` fix)
+- `blocked_trades` + `copy_trades` still being written normally
+
+### What still needs attention
+
+- **Auto-tuner** continues to write `sovereign2013:2.0` etc. into settings.env every 2h. Harmless with the hard cap but misleading in the dashboard. Proper fix: patch `bot/auto_tuner.py` to emit `min(tier_val, 1)` OR change the schema to allow per-side open rows (cond, wallet, side) — deferred.
+- **Root schema question**: is there any scenario where we want multiple open rows per (market, trader)? If the intent was "average in" on double-downs, the correct model is to UPDATE the existing row's size, not INSERT a second row. That's a bigger refactor.
+
+---
+
 ## 2026-04-14 (later) — Remove MAX_DAILY_TRADES cap + fix update_prices compound slowdown
 
 Two related fixes after a rigorous audit of "why is the bot idle?" and "why does apscheduler keep skipping update_prices?"
