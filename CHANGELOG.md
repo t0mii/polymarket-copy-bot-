@@ -2,7 +2,53 @@
 
 Session-level notes. For full commit history see `git log`.
 
-## 2026-04-14 (latest) — Two-model ML split + Filter Precision Audit
+## 2026-04-14 (latest) — Close-path atomic usdc_received (audit Step 1+4)
+
+Structural fix for the 87%-NULL `usdc_received` bug that drove the backfill work earlier in the session. The root cause (per `docs/close_logic_audit.md`) was that `close_copy_trade()` didn't accept `usdc_received`, forcing callers into a 2-step `close_copy_trade() → update_closed_trade_pnl()` pattern. Any error or early-return between the two steps left the row with `usdc_received=NULL` permanently.
+
+### `close_copy_trade()` signature
+
+`database/db.py::close_copy_trade(trade_id, pnl_realized, close_price=None, usdc_received=None)`. When `usdc_received` is provided, the UPDATE stores it AND recomputes `pnl_realized` from `usdc_received - COALESCE(actual_size, size, 0)` in the same statement so the column always reflects the real wallet delta. `pnl_realized` passed by the caller is ignored in that branch. The legacy 2-step path (pass `usdc_received=None`) is preserved for paper-mode and reconcile callers.
+
+### 7 close-paths migrated
+
+All 7 sell+close paths now extract `usdc_received` from the `sell_shares()` response and pass it directly into the single close call:
+
+1. `FAST-SELL` (`update_copy_positions` around line 1636)
+2. `STOP-LOSS` (normal path, ~2438)
+3. `TRAILING-STOP` (~2485)
+4. `TAKE-PROFIT` (~2517)
+5. `STOP-LOSS` trader-closed path (~2555)
+6. `trader-closed-it` (~2609)
+7. `miss-close` (~2715)
+
+Plus the two HIGH-severity paths in `main.py`:
+
+8. `AUTO-CLOSE-lost` (`main.py:335`) — passes `usdc_received=0.0` atomically
+9. `AUTO-CLOSE-won` (`main.py:361`) — passes `usdc_received=_usdc_won` atomically
+
+Each migrated call also updates the local `pnl` variable via a new `_real_pnl_from_sell(trade, sell_resp)` helper so the `logger.info` line below logs the verified PnL instead of the formula estimate.
+
+### New helpers
+
+`bot/copy_trader.py::_usdc_from_sell(sell_resp)` — extract the `usdc_received` field from a sell response, returning 0 for None/missing. `_real_pnl_from_sell(trade, sell_resp)` — compute verified PnL from the sell response without any DB side effects. The old `_correct_sell_pnl(trade, sell_resp, trade_id)` helper is kept as a thin compat shim (no longer called by anything in the codebase, but retained in case external code depends on it).
+
+### What this prevents going forward
+
+Every new close now writes `usdc_received` in the same atomic UPDATE that sets `status='closed'`. There is no intermediate state where `status='closed' AND usdc_received IS NULL`. Future trade_performance / ML / Brain calculations see verified data from the first observation — the backfill tool becomes unnecessary for rows created after this commit.
+
+### Files touched
+
+- `database/db.py::close_copy_trade` — signature + SQL expanded
+- `bot/copy_trader.py` — 7 close paths + 2 new helpers, old `_correct_sell_pnl` demoted to compat shim
+- `main.py` — 2 AUTO-CLOSE paths refactored to atomic
+- `tests/test_ml_time_split.py` — assertions updated for the `[ML-COPY]` log tag and the 6-tuple `_build_training_data` return shape
+
+### Verification
+
+`close_copy_trade` signature verified on the live server (`usdc_received` is in the parameter list). `_usdc_from_sell(None)=0`, `_usdc_from_sell({"usdc_received":2.47})=2.47`, `_real_pnl_from_sell({actual_size:2.0}, ...)=0.47`. Test suite runs 63 passing + 1 pre-existing flake (`test_log_dedup.TestBrainOscillationMutex.test_revert_skips_trader_in_mutex` was failing before this commit too). Bot restarted cleanly on walter, no errors in the journal.
+
+## 2026-04-14 — Two-model ML split + Filter Precision Audit
 
 User insight: blocked_trades are not training data for the live predictor — they are audit data for the filters themselves. Each filter reason is a policy decision that should be measured: does it block losers (correct) or winners (wrong)?
 

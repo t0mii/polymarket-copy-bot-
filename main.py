@@ -331,10 +331,11 @@ def update_prices():
                     if _cp <= config.AUTO_CLOSE_LOST_PRICE and _iv > 0.01:
                         _close_pnl = round(-_our_size, 2)
                         _close_title = (_p.get("title") or "")[:50]
-                        # PATCH-033: atomic close via close_copy_trade (prevents race with copy_trader.py)
-                        _did_close = _db.close_copy_trade(_our_trade["id"], _close_pnl, close_price=0)
-                        if _did_close:
-                            _db.update_closed_trade_pnl(_our_trade["id"], _close_pnl, 0)
+                        # Atomic close with usdc_received=0 (shares resolved worthless,
+                        # no wallet delta). Single UPDATE sets status/pnl/usdc_received
+                        # together so the row can't end up with NULL usdc_received.
+                        _did_close = _db.close_copy_trade(_our_trade["id"], _close_pnl,
+                                                          close_price=0, usdc_received=0.0)
                         if _did_close:
                             logger.info("[AUTO-CLOSE] Lost position marked closed: $%.2f | %s", _iv, _close_title[:40])
                             _recently_closed[_cid_pos] = _t.time()
@@ -357,10 +358,12 @@ def update_prices():
                         _pnl_won = round((1.0 - _our_entry) * _shares, 2)
                         _usdc_won = round(_shares, 4)
                         _close_title = (_p.get("title") or "")[:50]
-                        # PATCH-033: atomic close via close_copy_trade (prevents race with copy_trader.py)
-                        _did_close = _db.close_copy_trade(_our_trade["id"], _pnl_won, close_price=1.0)
-                        if _did_close:
-                            _db.update_closed_trade_pnl(_our_trade["id"], _pnl_won, _usdc_won)
+                        # Atomic close with formula-projected usdc_received (the
+                        # shares ARE resolved to 1 on-chain but may not be redeemed
+                        # yet — usdc_won is the theoretical wallet delta once
+                        # redeem_positions.py runs).
+                        _did_close = _db.close_copy_trade(_our_trade["id"], _pnl_won,
+                                                          close_price=1.0, usdc_received=_usdc_won)
                         if _did_close:
                             logger.info("[AUTO-CLOSE] Won position marked closed: +$%.2f | %s", _pnl_won, _close_title[:40])
                             _recently_closed[_cid_pos] = _t.time()

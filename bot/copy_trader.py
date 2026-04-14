@@ -144,22 +144,43 @@ def _apply_fill_details(trade: dict, order_resp: dict, planned_size: float, plan
     trade["size"] = trade["actual_size"]
 
 
-def _correct_sell_pnl(trade: dict, sell_resp: dict, trade_id: int):
-    """If sell_shares returned actual USDC received, correct P&L in DB.
-    Returns the corrected real_pnl, or None if no correction was made.
-    Callers can use this to update local pnl variables for accurate logging.
-    """
+def _usdc_from_sell(sell_resp):
+    """Extract the wallet-verified usdc_received from a sell_shares response
+    dict. Returns 0 when the field is missing or sell_resp is None. Used so
+    callers can pass usdc_received directly into db.close_copy_trade() for
+    an atomic close — no more separate update_closed_trade_pnl() race."""
     if not sell_resp:
-        return None
-    usdc_received = sell_resp.get("usdc_received", 0)
+        return 0
+    try:
+        return float(sell_resp.get("usdc_received") or 0)
+    except Exception:
+        return 0
+
+
+def _real_pnl_from_sell(trade: dict, sell_resp: dict):
+    """Compute the wallet-verified realized PnL from a sell response,
+    WITHOUT touching the DB. Returns None if no verified fill data.
+    Used by callers that want to log the corrected PnL before the close
+    call happens."""
+    usdc_received = _usdc_from_sell(sell_resp)
     if usdc_received > 0:
         actual_cost = _get_size(trade)
-        real_pnl = round(usdc_received - actual_cost, 2)
-        db.update_closed_trade_pnl(trade_id, real_pnl, usdc_received)
-        logger.info("[PNL-FIX] #%d corrected: formula→real P&L=$%+.2f (received=$%.2f - cost=$%.2f)",
-                    trade_id, real_pnl, usdc_received, actual_cost)
-        return real_pnl
+        return round(usdc_received - actual_cost, 2)
     return None
+
+
+def _correct_sell_pnl(trade: dict, sell_resp: dict, trade_id: int):
+    """Legacy 2-step path kept for backward-compat with callers that were
+    written before close_copy_trade() accepted usdc_received directly.
+    New code should pass usdc_received into close_copy_trade() instead.
+    Returns the corrected real_pnl, or None if no correction was made."""
+    real_pnl = _real_pnl_from_sell(trade, sell_resp)
+    if real_pnl is not None:
+        usdc_received = _usdc_from_sell(sell_resp)
+        db.update_closed_trade_pnl(trade_id, real_pnl, usdc_received)
+        logger.info("[PNL-FIX] #%d corrected: formula→real P&L=$%+.2f (received=$%.2f)",
+                    trade_id, real_pnl, usdc_received)
+    return real_pnl
 
 
 def _cb_success():
@@ -1611,13 +1632,17 @@ def copy_followed_wallets():
                             # Do NOT bump _last_processed_ts — event stays unconsumed for retry
                             # Do NOT add to _already_sold_cids — allow retry within same scan
                             continue
-                    # Atomic DB close — only if WE are the one closing (prevents double close)
-                    if not db.close_copy_trade(our_trade["id"], pnl, close_price=sell_price):
+                    # Atomic DB close with wallet-verified usdc_received when available.
+                    # Passing usdc_received=None (paper mode) keeps the formula pnl.
+                    _fs_usdc = _usdc_from_sell(sell_resp) if sell_resp else 0
+                    _fs_real = _real_pnl_from_sell(our_trade, sell_resp)
+                    if _fs_real is not None:
+                        pnl = _fs_real  # use verified pnl for the logger.info below
+                    if not db.close_copy_trade(our_trade["id"], pnl, close_price=sell_price,
+                                               usdc_received=(_fs_usdc if _fs_usdc > 0 else None)):
                         logger.info("[FAST-SELL] Trade #%d already closed by another path", our_trade["id"])
                         _already_sold_cids.add(sell_cid)
                         continue
-                    if sell_resp:
-                        _correct_sell_pnl(our_trade, sell_resp, our_trade["id"])
                     logger.info("[FAST-SELL] #%d CLOSED (trader sold): PnL=$%.2f @ %.0fc | %s",
                                 our_trade["id"], pnl, sell_price * 100, our_trade["market_question"][:40])
                     db.log_activity("sell", "WIN" if pnl > 0 else "LOSS",
@@ -2407,17 +2432,20 @@ def update_copy_positions():
                             if _sl_pct > 0 and _ep > 0 and _sl_category not in _sl_skip_cats:
                                 loss_pct = (_ep - effective_price) / _ep
                                 if loss_pct >= _sl_pct:
-                                    # Sell FIRST, then close DB (prevents orphaned positions)
+                                    # Sell FIRST, then atomically close DB with verified usdc_received
                                     _sl_resp = None
                                     if LIVE_MODE and trade_cid:
                                         _sl_resp = sell_shares(trade_cid, trade["side"], effective_price)
                                         if not _sl_resp:
                                             logger.warning("[STOP-LOSS] Sell failed, keeping position open: %s", trade["market_question"][:40])
                                             continue
-                                    if not db.close_copy_trade(trade["id"], pnl):
+                                    _sl_usdc = _usdc_from_sell(_sl_resp)
+                                    _sl_real = _real_pnl_from_sell(trade, _sl_resp)
+                                    if _sl_real is not None:
+                                        pnl = _sl_real
+                                    if not db.close_copy_trade(trade["id"], pnl,
+                                                               usdc_received=(_sl_usdc if _sl_usdc > 0 else None)):
                                         continue  # already closed by another path
-                                    if _sl_resp:
-                                        _correct_sell_pnl(trade, _sl_resp, trade["id"])
                                     logger.info("[STOP-LOSS] #%d closed at %.0f%% loss: $%.2f | %s",
                                                 trade["id"], loss_pct * 100, pnl, trade["market_question"][:40])
                                     db.log_activity("sell", "LOSS", "Stop-loss triggered",
@@ -2457,12 +2485,14 @@ def update_copy_positions():
                                         if not _ts_resp:
                                             logger.warning("[TRAILING-STOP] Sell failed, keeping position open: %s", trade["market_question"][:40])
                                             continue
-                                    if not db.close_copy_trade(trade["id"], pnl):
+                                    # Use verified P&L for logs (was buggy: showed live snapshot price)
+                                    _ts_usdc = _usdc_from_sell(_ts_resp)
+                                    _ts_real = _real_pnl_from_sell(trade, _ts_resp)
+                                    if _ts_real is not None:
+                                        pnl = _ts_real
+                                    if not db.close_copy_trade(trade["id"], pnl,
+                                                               usdc_received=(_ts_usdc if _ts_usdc > 0 else None)):
                                         continue
-                                    # Use corrected real P&L for logs (was buggy: showed live snapshot price)
-                                    _real_pnl = _correct_sell_pnl(trade, _ts_resp, trade["id"]) if _ts_resp else None
-                                    if _real_pnl is not None:
-                                        pnl = _real_pnl
                                     logger.info("[TRAILING-STOP] #%d closed — peak was %.0fc (+%.0f%%), now %.0fc: P&L=$%.2f | %s",
                                                 trade["id"], _peak * 100, _peak_gain * 100, effective_price * 100, pnl, trade["market_question"][:40])
                                     db.log_activity("sell", "WIN" if pnl >= 0 else "LOSS", "Trailing stop triggered",
@@ -2483,17 +2513,20 @@ def update_copy_positions():
                             if _tp_pct > 0 and _ep > 0:
                                 gain_pct = (effective_price - _ep) / _ep
                                 if gain_pct >= _tp_pct:
-                                    # Sell FIRST, then close DB (prevents orphaned positions)
+                                    # Sell FIRST, then atomically close DB with verified usdc_received
                                     _tp_resp = None
                                     if LIVE_MODE and trade_cid:
                                         _tp_resp = sell_shares(trade_cid, trade["side"], effective_price)
                                         if not _tp_resp:
                                             logger.warning("[TAKE-PROFIT] Sell failed, keeping position open: %s", trade["market_question"][:40])
                                             continue
-                                    if not db.close_copy_trade(trade["id"], pnl):
+                                    _tp_usdc = _usdc_from_sell(_tp_resp)
+                                    _tp_real = _real_pnl_from_sell(trade, _tp_resp)
+                                    if _tp_real is not None:
+                                        pnl = _tp_real
+                                    if not db.close_copy_trade(trade["id"], pnl,
+                                                               usdc_received=(_tp_usdc if _tp_usdc > 0 else None)):
                                         continue  # already closed by another path
-                                    if _tp_resp:
-                                        _correct_sell_pnl(trade, _tp_resp, trade["id"])
                                     logger.info("[TAKE-PROFIT] #%d closed at %.0f%% gain: $%.2f | %s",
                                                 trade["id"], gain_pct * 100, pnl, trade["market_question"][:40])
                                     db.log_activity("sell", "WIN", "Take-profit triggered",
@@ -2529,10 +2562,13 @@ def update_copy_positions():
                                     if not _sl_resp2:
                                         logger.warning("[STOP-LOSS] Sell failed (trader closed path), keeping open: %s", trade["market_question"][:40])
                                         continue
-                                if not db.close_copy_trade(trade["id"], _sl_pnl2):
+                                _sl_usdc2 = _usdc_from_sell(_sl_resp2)
+                                _sl_real2 = _real_pnl_from_sell(trade, _sl_resp2)
+                                if _sl_real2 is not None:
+                                    _sl_pnl2 = _sl_real2
+                                if not db.close_copy_trade(trade["id"], _sl_pnl2,
+                                                           usdc_received=(_sl_usdc2 if _sl_usdc2 > 0 else None)):
                                     continue
-                                if _sl_resp2:
-                                    _correct_sell_pnl(trade, _sl_resp2, trade["id"])
                                 logger.info("[STOP-LOSS] #%d closed at %.0f%% loss (trader closed, price dropped): $%.2f | %s",
                                             trade["id"], _sl_loss * 100, _sl_pnl2, trade["market_question"][:40])
                                 db.log_activity("sell", "LOSS", "Stop-loss triggered (trader closed path)",
@@ -2568,18 +2604,21 @@ def update_copy_positions():
                                 else:
                                     close_price = raw_close
                                 pnl, shares = _calc_pnl(trade, close_price)
-                                # Sell FIRST, then close DB (prevents orphaned positions)
+                                # Sell FIRST, then atomically close DB with verified usdc_received
                                 sell_resp = None
                                 if LIVE_MODE and trade_cid:
                                     sell_resp = sell_shares(trade_cid, trade["side"], close_price)
                                     if not sell_resp:
                                         logger.warning("[LIVE] SELL failed, keeping open: %s", trade["market_question"][:40])
                                         continue
-                                if not db.close_copy_trade(trade["id"], pnl):
+                                _tc_usdc = _usdc_from_sell(sell_resp)
+                                _tc_real = _real_pnl_from_sell(trade, sell_resp)
+                                if _tc_real is not None:
+                                    pnl = _tc_real
+                                if not db.close_copy_trade(trade["id"], pnl, close_price=close_price,
+                                                           usdc_received=(_tc_usdc if _tc_usdc > 0 else None)):
                                     logger.info("[SKIP] Trade #%d already closed by another path", trade["id"])
                                     continue
-                                if sell_resp:
-                                    _correct_sell_pnl(trade, sell_resp, trade["id"])
                                 status = "[+]" if pnl > 0 else "[-]"
                                 logger.info("%s Copy trade #%d CLOSED (trader closed): P&L=$%.2f @ %.0fc (%s) | %s",
                                            status, trade["id"], pnl, close_price * 100, trade["side"],
@@ -2667,16 +2706,19 @@ def update_copy_positions():
                                 logger.debug("Trade #%d: invalid close price %.4f, skipping miss-close", trade["id"], _close_price)
                                 continue
                             _pnl, _ = _calc_pnl(trade, _close_price)
-                            # Sell first, then close DB
+                            # Sell first, then atomically close DB with verified usdc_received
                             _miss_resp = None
                             if LIVE_MODE and trade_cid:
                                 _miss_resp = sell_shares(trade_cid, trade["side"], _close_price)
                                 if not _miss_resp:
                                     logger.warning("[MISS-CLOSE] Sell failed, keeping open: %s", trade["market_question"][:40])
                                     continue  # PATCH-030: dont close DB if sell failed
-                            if db.close_copy_trade(trade["id"], _pnl, close_price=_close_price):
-                                if _miss_resp:
-                                    _correct_sell_pnl(trade, _miss_resp, trade["id"])
+                            _miss_usdc = _usdc_from_sell(_miss_resp)
+                            _miss_real = _real_pnl_from_sell(trade, _miss_resp)
+                            if _miss_real is not None:
+                                _pnl = _miss_real
+                            if db.close_copy_trade(trade["id"], _pnl, close_price=_close_price,
+                                                   usdc_received=(_miss_usdc if _miss_usdc > 0 else None)):
                                 logger.info("[MISS-CLOSE] #%d closed after %d misses: PnL=$%.2f @ %.0fc | %s",
                                             trade["id"], miss, _pnl, _close_price * 100, trade["market_question"][:40])
                                 db.log_activity("sell", "WIN" if _pnl > 0 else "LOSS",

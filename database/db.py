@@ -354,10 +354,43 @@ def update_closed_trade_pnl(trade_id: int, pnl: float, usdc_received: float):
         )
 
 
-def close_copy_trade(trade_id: int, pnl_realized: float, close_price: float = None) -> bool:
-    """Close a trade atomically — only if still open. Returns True if actually closed."""
+def close_copy_trade(trade_id: int, pnl_realized: float, close_price: float = None,
+                     usdc_received: float = None) -> bool:
+    """Close a trade atomically — only if still open. Returns True if actually closed.
+
+    When `usdc_received` is provided, the UPDATE also stores the capital-verified
+    wallet delta in the same statement AND recomputes `pnl_realized` from it
+    (usdc_received - COALESCE(actual_size, size)) so the column reflects the
+    real wallet delta instead of a formula-computed estimate. This collapses
+    what used to be a 2-step pattern (close_copy_trade then update_closed_trade_pnl)
+    into a single atomic UPDATE, eliminating the race window that left 87% of
+    historical rows with usdc_received=NULL. Caller should pass the usdc_received
+    value from the sell_shares() response dict when available; passing None
+    keeps the legacy formula-pnl behavior (used in paper mode and reconcile paths).
+    """
     with get_connection() as conn:
-        if close_price is not None:
+        if usdc_received is not None and close_price is not None:
+            rows = conn.execute(
+                "UPDATE copy_trades SET "
+                "status='closed', "
+                "pnl_realized = round(? - COALESCE(actual_size, size, 0), 4), "
+                "usdc_received = ?, "
+                "current_price = ?, "
+                "closed_at = datetime('now','localtime') "
+                "WHERE id=? AND status='open'",
+                (usdc_received, usdc_received, close_price, trade_id)
+            ).rowcount
+        elif usdc_received is not None:
+            rows = conn.execute(
+                "UPDATE copy_trades SET "
+                "status='closed', "
+                "pnl_realized = round(? - COALESCE(actual_size, size, 0), 4), "
+                "usdc_received = ?, "
+                "closed_at = datetime('now','localtime') "
+                "WHERE id=? AND status='open'",
+                (usdc_received, usdc_received, trade_id)
+            ).rowcount
+        elif close_price is not None:
             rows = conn.execute(
                 "UPDATE copy_trades SET status='closed', pnl_realized=?, current_price=?, closed_at=datetime('now','localtime') "
                 "WHERE id=? AND status='open'",

@@ -74,13 +74,17 @@ class TestMLTimeSplit(unittest.TestCase):
         # Must log class balance and baseline accuracy.
         self.assertIn("Class balance", log)
         self.assertIn("Baseline", log)
-        # Must log copy-only diagnostics (new this round).
-        self.assertIn("COPY-ONLY", log)
+        # After the 2026-04-14 two-model split, copy training has its own
+        # tagged log line and the whole dataset IS the copy subset, so the
+        # legacy "COPY-ONLY test subset" line is gone. Match the new tag.
+        self.assertIn("[ML-COPY] Trained on", log)
         # Sanity: builder returns all rows sorted ASC by created_at and
-        # an is_copy marker vector aligned with X.
-        X, y, is_copy, copy_count, blocked_count = ml_scorer._build_training_data()
+        # an is_copy marker vector aligned with X. Legacy wrapper now
+        # returns a 6-tuple (with weights) — unpack accordingly.
+        X, y, is_copy, copy_count, blocked_count, weights = ml_scorer._build_training_data()
         self.assertGreaterEqual(len(y), 60)
         self.assertEqual(len(is_copy), len(y))
+        self.assertEqual(len(weights), len(y))
         # All rows in this test come from copy_trades (no blocked_trades seeded).
         self.assertTrue(all(is_copy))
 
