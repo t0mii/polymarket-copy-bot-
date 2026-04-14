@@ -322,6 +322,29 @@ def auto_tune():
     # Load tier values fresh from settings.env (with hardcoded fallback)
     tiers = _load_tiers()
 
+    # Pre-read existing MIN/MAX_ENTRY_PRICE_MAP values BEFORE building
+    # the tier-default maps, so manual overrides in settings.env are
+    # honored as the starting point. This prevents the auto-tuner from
+    # silently resetting a hand-tuned value (e.g. xsaghav:0.30-0.85
+    # from Option A) back to tier default just because the calibrator
+    # has insufficient data to recommend a replacement.
+    _existing_content_for_prices = _read_settings()
+    _pre_existing_min: dict[str, float] = {}
+    _pre_existing_max: dict[str, float] = {}
+    for _line in _existing_content_for_prices.split("\n"):
+        if _line.startswith("MIN_ENTRY_PRICE_MAP="):
+            for _part in _line.split("=", 1)[1].split(","):
+                if ":" in _part:
+                    _k, _v = _part.split(":", 1)
+                    try: _pre_existing_min[_k.strip()] = float(_v.strip())
+                    except: pass
+        if _line.startswith("MAX_ENTRY_PRICE_MAP="):
+            for _part in _line.split("=", 1)[1].split(","):
+                if ":" in _part:
+                    _k, _v = _part.split(":", 1)
+                    try: _pre_existing_max[_k.strip()] = float(_v.strip())
+                    except: pass
+
     # Build ALL setting maps
     bet_map = {}
     exposure_map = {}
@@ -344,8 +367,10 @@ def auto_tune():
         exposure_map[name] = s["exposure"]
         if s["conviction"] > 0:
             conviction_map[name] = s["conviction"]
-        min_entry_map[name] = s["min_entry"]
-        max_entry_map[name] = s["max_entry"]
+        # Seed from existing manual value if present, else tier default.
+        # Calibrator below may override with verified-PnL compute.
+        min_entry_map[name] = _pre_existing_min.get(name, s["min_entry"])
+        max_entry_map[name] = _pre_existing_max.get(name, s["max_entry"])
         min_usd_map[name] = s["min_trader_usd"]
         tp_map[name] = s["take_profit"]
         sl_map[name] = s["stop_loss"]
@@ -367,21 +392,77 @@ def auto_tune():
     content = _update_map_setting(content, "BET_SIZE_MAP", bet_map)
     content = _update_map_setting(content, "TRADER_EXPOSURE_MAP", exposure_map)
     content = _update_map_setting(content, "MIN_CONVICTION_RATIO_MAP", conviction_map)
-    # 2026-04-14 DISABLED: MIN/MAX_ENTRY_PRICE_MAP auto-write joins the
-    # manual-managed list (piff-philosophy). The previous tier-based WR
-    # heuristic + "keep tighter" merge produced narrow windows (e.g.
-    # xsaghav 45-65c) that cut off empirically profitable zones. Analysis
-    # of 73 verified xsaghav trades showed +$57.69 PnL in the BLOCKED
-    # 30-40c and 70-90c buckets vs +$33.20 in the allowed 45-65c band —
-    # the auto-tuner was actively hurting profit by optimizing for
-    # win-rate without magnitude awareness. Until the compute is
-    # replaced with a magnitude-aware version (separate commit), writes
-    # stay disabled and the map is manually managed. The existing values
-    # in settings.env are authoritative and will not be overwritten.
-    logger.info("[TUNER] Would set MIN_ENTRY_PRICE_MAP (DISABLED, manual managed): %s",
-                ",".join("%s:%s" % (k, v) for k, v in sorted(min_entry_map.items())))
-    logger.info("[TUNER] Would set MAX_ENTRY_PRICE_MAP (DISABLED, manual managed): %s",
-                ",".join("%s:%s" % (k, v) for k, v in sorted(max_entry_map.items())))
+
+    # 2026-04-14 magnitude-aware price range compute, staged rollout.
+    # Replaces the old tier-based WR heuristic (which clipped profitable
+    # tails like xsaghav's +$41.65 30-40c bucket) with per-bucket
+    # verified PnL. Only applies to traders with >= PRICE_CALIBRATOR_
+    # MIN_TRADES verified samples — conservative gate to avoid 2-sample
+    # false-positives on $106 equity where worst-case blast radius is
+    # -$75/cycle if a tiny sample paints a wrong window.
+    #
+    # STAGED ROLLOUT PLAN (as of 2026-04-14):
+    #   Today    threshold=100 → only sovereign2013 (n=130) auto-updates
+    #   Week 2   lower to 50 if sovereign stable → xsaghav (73) + KING (~60) qualify
+    #   Week 4   lower to 30 → fsavhlc (~25) + Jargs (~20) qualify
+    #   Week 6+  lower to 20 → full autopilot
+    # Each step is a 1-line edit (PRICE_CALIBRATOR_MIN_TRADES below).
+    # If any step shows verified regression, raise the number back up.
+    PRICE_CALIBRATOR_MIN_TRADES = 100
+    try:
+        from bot.price_range_calibrator import compute_verified_price_range
+        from database import db as _db_pr
+        for name in list(min_entry_map.keys()):
+            try:
+                computed = compute_verified_price_range(
+                    _db_pr, name,
+                    min_total_trades=PRICE_CALIBRATOR_MIN_TRADES,
+                )
+            except Exception as _e:
+                logger.warning("[TUNER] %s price range compute failed: %s", name, _e)
+                continue
+            if computed is None:
+                logger.info(
+                    "[TUNER] %s price range: <%d verified trades, keeping tier default %.2f-%.2f",
+                    name, PRICE_CALIBRATOR_MIN_TRADES, min_entry_map[name], max_entry_map[name],
+                )
+                continue
+            old_min, old_max = min_entry_map[name], max_entry_map[name]
+            min_entry_map[name], max_entry_map[name] = computed
+            logger.info(
+                "[TUNER] %s price range: tier=%.2f-%.2f -> verified=%.2f-%.2f (calibrator, n>=%d)",
+                name, old_min, old_max, computed[0], computed[1], PRICE_CALIBRATOR_MIN_TRADES,
+            )
+    except Exception as _e:
+        logger.warning("[TUNER] price range calibrator unavailable: %s", _e)
+
+    # Preserve any existing non-followed entries (discovered wallets
+    # like 0x3e5b23e9f7, aenews2) so auto_tuner output doesn't erase
+    # them. The calibrator only covers classified/followed traders.
+    existing_min: dict[str, float] = {}
+    existing_max: dict[str, float] = {}
+    for line in content.split("\n"):
+        if line.startswith("MIN_ENTRY_PRICE_MAP="):
+            for part in line.split("=", 1)[1].split(","):
+                if ":" in part:
+                    k, v = part.split(":", 1)
+                    try: existing_min[k.strip()] = float(v.strip())
+                    except: pass
+        if line.startswith("MAX_ENTRY_PRICE_MAP="):
+            for part in line.split("=", 1)[1].split(","):
+                if ":" in part:
+                    k, v = part.split(":", 1)
+                    try: existing_max[k.strip()] = float(v.strip())
+                    except: pass
+    for k, v in existing_min.items():
+        if k not in min_entry_map:
+            min_entry_map[k] = v
+    for k, v in existing_max.items():
+        if k not in max_entry_map:
+            max_entry_map[k] = v
+
+    content = _update_map_setting(content, "MIN_ENTRY_PRICE_MAP", min_entry_map)
+    content = _update_map_setting(content, "MAX_ENTRY_PRICE_MAP", max_entry_map)
     content = _update_map_setting(content, "MIN_TRADER_USD_MAP", min_usd_map)
     content = _update_map_setting(content, "TAKE_PROFIT_MAP", tp_map)
     content = _update_map_setting(content, "STOP_LOSS_MAP", sl_map)

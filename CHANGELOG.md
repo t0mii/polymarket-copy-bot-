@@ -2,7 +2,150 @@
 
 Session-level notes. For full commit history see `git log`.
 
-## 2026-04-14 (latest) — Disable MIN/MAX_ENTRY_PRICE_MAP auto-write + loosen xsaghav to 30-85c
+## 2026-04-14 (latest) — Magnitude-aware price range calibrator + B3 staged rollout
+
+Option B for the MIN/MAX_ENTRY_PRICE_MAP problem (Option A was the
+earlier commit that disabled the auto-write as a stopgap). Replaces
+the tier-based WR heuristic with a per-bucket verified-PnL compute,
+but gates auto-application behind a conservative sample-size
+threshold so small-sample false positives can't nuke the $106 equity.
+
+### What the new compute does
+
+`bot/price_range_calibrator.py::compute_verified_price_range` —
+new module, TDD-built with 4 unit tests. For each trader:
+
+1. Fetch all closed copy_trades with `usdc_received IS NOT NULL AND
+   actual_size IS NOT NULL` (verified slice only — unverified rows
+   with formula-based pnl_realized are excluded).
+2. Bucket by 10c on actual_entry_price (fall back to entry_price).
+3. A bucket is "good" if `n >= min_samples_per_bucket (2)` and
+   `pnl > min_bucket_pnl (-2.0)`.
+4. Require `len(rows) >= min_total_trades` and `len(good) >= 2`,
+   else return None (caller falls back to tier/manual).
+5. Return `(min_good_bucket / 10, (max_good_bucket + 1) / 10)`.
+
+Known suboptimality: the "lowest good to highest good" heuristic
+absorbs bad middle buckets into the range. For KING7777777's actual
+distribution the Kadane-optimal window would be ~$3 better per 53
+trades. The simple algorithm is retained for clarity; documented in
+the calibrator docstring as an upgrade path if the gap grows.
+
+### TDD tests (bot/price_range_calibrator.py via tests/test_price_range_calibration.py)
+
+Four RED→GREEN cycles verified the compute:
+
+1. `test_xsaghav_like_bimodal_absorbs_middle_gap` — synthetic data
+   matching xsaghav's real pattern, asserts (0.30, 0.90).
+2. `test_insufficient_total_trades_returns_none` — 9 trades across
+   3 good buckets but below the 20-trade minimum → None.
+3. `test_all_losing_buckets_returns_none` — every bucket below the
+   pnl threshold → None.
+4. `test_unverified_trades_excluded_from_count` — 15 verified + 30
+   unverified; without the `usdc_received IS NOT NULL` filter the
+   45 rows would pass the count guard and produce a spurious range.
+   Strict-TDD verified by temporarily removing the filter and
+   watching the test fail with `(0.3, 0.8) is not None` before
+   reinstating it.
+
+All 4 green in 0.05s. Full suite: 67/68 pass (the 1 failure is the
+pre-existing test_brain_dedup.py::test_bad_category_losses_log_once
+from this morning's _execute_loss_actions disable, unrelated).
+
+### Auto-tuner integration (bot/auto_tuner.py)
+
+Reverts Option A's "disable the write" and re-enables writing
+MIN_ENTRY_PRICE_MAP / MAX_ENTRY_PRICE_MAP, with three structural
+guards stacked around the calibrator call:
+
+1. **Pre-read existing settings.env values** before tier-default
+   seeding so manual overrides (like Option A's xsaghav:0.30-0.85)
+   are not silently clobbered. The loop at the top of `auto_tune`
+   now does `min_entry_map[name] = _pre_existing_min.get(name,
+   s["min_entry"])` instead of always using the tier default. First
+   dry-run of Option B missed this guard and produced a regression
+   that reset xsaghav to tier (0.45-0.65) — caught in the dry-run
+   diff, fixed before deploy.
+
+2. **Calibrator gate via `PRICE_CALIBRATOR_MIN_TRADES = 100`** —
+   only traders with ≥100 verified trades get auto-updated. Today
+   that's sovereign2013 alone (n=130). xsaghav (n=73), KING7777777
+   (n=53), fsavhlc (n=18), Jargs (n=13) fall through to their
+   existing values (manual or previous).
+
+3. **Non-followed wallet preservation** — auto-tuner only classifies
+   followed traders, but the settings.env MIN/MAX maps contain
+   discovered wallets (0x3e5b23e9f7, aenews2, 0x6bab41a0dc) that
+   the brain/filter logic uses for emerging trader tracking. The
+   merge loop at the bottom of the update block pulls those entries
+   back in so they aren't dropped when the new map is written.
+
+### Staged rollout plan (documented inline in auto_tuner.py)
+
+```
+  Today     threshold=100 → only sovereign2013 auto-updates
+  Week 2    lower to 50 if sovereign stable → xsaghav + KING qualify
+  Week 4    lower to 30 → fsavhlc + Jargs qualify
+  Week 6+   lower to 20 → full autopilot
+```
+
+Each step is a 1-line edit to `PRICE_CALIBRATOR_MIN_TRADES` in
+`bot/auto_tuner.py`. If any step shows a verified regression, raise
+the number back up — the guard is bidirectional. This is
+evidence-gated rollout: the system proves itself trader by trader
+over weeks rather than the all-at-once option.
+
+### Why conservative over aggressive
+
+Worst-case blast radius on a 2-sample false-positive bucket: ~$75
+per 2h cycle of mis-configured window. At $106 equity with 6 cycles
+per day, that's -$450/day worst case — game-over in hours if the
+window is wrong. B1 (threshold=20) would have auto-opened KING's
+10-20c bucket based on 2 samples, exactly the noise vulnerability.
+B3 (threshold=100) only trusts sovereign's 130-sample distribution,
+where bucket-level n ≈ 15-25 and means start stabilizing.
+
+### Dry-run + live verification
+
+Dry-run on server (copy settings.env to /tmp, run patched auto_tune
+in subprocess, diff, restore) showed exactly:
+
+  sovereign2013:  0.38-0.75 → 0.30-0.90  (calibrator, n=130)
+  xsaghav:        0.30-0.85 → 0.30-0.85  (manual preserved)
+  KING7777777:    0.53-0.60 → 0.53-0.60  (preserved, n<100)
+  fsavhlc:        0.45-0.65 → 0.45-0.65  (preserved, n<100)
+  Jargs:          0.38-0.75 → 0.38-0.75  (preserved, n<100)
+  Non-followed wallets: unchanged (0x3e5b23e9f7, aenews2, 0x6bab41a0dc)
+
+Post-deploy + manual auto_tune() trigger in production, verified
+via `ct._reload_maps()` live values match expectations. No errors
+in journalctl since restart at 19:15:02 UTC.
+
+### How to monitor this change
+
+- `ssh walter@10.0.0.20 'curl -s http://localhost:8090/api/upgrade/tuner-settings'`
+  shows the live map after each auto_tune cycle.
+- Look for `[TUNER] <trader> price range: tier=X.XX-X.XX -> verified=X.XX-X.XX`
+  log lines in journalctl — sovereign should be the only match for the
+  next 1-2 weeks.
+- `[TUNER] <trader> price range: <100 verified trades, keeping tier default`
+  shows the other 4 traders falling through.
+- Check DB verified PnL for sovereign specifically after 24-48h in
+  the expanded 30-90c range — if it turns negative, raise threshold
+  back to 200 or revert the one line.
+
+### Revert path
+
+- Raise `PRICE_CALIBRATOR_MIN_TRADES` to e.g. 1000 in auto_tuner.py
+  and redeploy → calibrator stops applying, fall back to existing
+  values.
+- OR manually edit settings.env `sovereign2013:0.3 -> 0.38` and
+  `sovereign2013:0.9 -> 0.75` — hot-reloaded on next copy_scan.
+- No code revert needed in either direction.
+
+---
+
+## 2026-04-14 (later) — Disable MIN/MAX_ENTRY_PRICE_MAP auto-write + loosen xsaghav to 30-85c
 
 After the outcome_tracker DESC fix started populating Filter Precision
 Audit with fresh labels, I spot-checked whether xsaghav's tight 45-65c
