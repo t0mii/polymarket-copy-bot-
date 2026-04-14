@@ -367,36 +367,21 @@ def auto_tune():
     content = _update_map_setting(content, "BET_SIZE_MAP", bet_map)
     content = _update_map_setting(content, "TRADER_EXPOSURE_MAP", exposure_map)
     content = _update_map_setting(content, "MIN_CONVICTION_RATIO_MAP", conviction_map)
-    # PATCH-024: Merge with existing values — keep the TIGHTER value to preserve brain's tightens
-    existing_min = {}
-    existing_max = {}
-    for line in content.split("\n"):
-        if line.startswith("MIN_ENTRY_PRICE_MAP="):
-            for part in line.split("=", 1)[1].split(","):
-                if ":" in part:
-                    k, v = part.split(":", 1)
-                    try: existing_min[k.strip()] = float(v.strip())
-                    except: pass
-        if line.startswith("MAX_ENTRY_PRICE_MAP="):
-            for part in line.split("=", 1)[1].split(","):
-                if ":" in part:
-                    k, v = part.split(":", 1)
-                    try: existing_max[k.strip()] = float(v.strip())
-                    except: pass
-    # For MIN_ENTRY_PRICE: higher = tighter, keep the higher value
-    for k, v in existing_min.items():
-        if k in min_entry_map:
-            min_entry_map[k] = max(v, min_entry_map[k])
-        else:
-            min_entry_map[k] = v
-    # For MAX_ENTRY_PRICE: lower = tighter, keep the lower value
-    for k, v in existing_max.items():
-        if k in max_entry_map:
-            max_entry_map[k] = min(v, max_entry_map[k])
-        else:
-            max_entry_map[k] = v
-    content = _update_map_setting(content, "MIN_ENTRY_PRICE_MAP", min_entry_map)
-    content = _update_map_setting(content, "MAX_ENTRY_PRICE_MAP", max_entry_map)
+    # 2026-04-14 DISABLED: MIN/MAX_ENTRY_PRICE_MAP auto-write joins the
+    # manual-managed list (piff-philosophy). The previous tier-based WR
+    # heuristic + "keep tighter" merge produced narrow windows (e.g.
+    # xsaghav 45-65c) that cut off empirically profitable zones. Analysis
+    # of 73 verified xsaghav trades showed +$57.69 PnL in the BLOCKED
+    # 30-40c and 70-90c buckets vs +$33.20 in the allowed 45-65c band —
+    # the auto-tuner was actively hurting profit by optimizing for
+    # win-rate without magnitude awareness. Until the compute is
+    # replaced with a magnitude-aware version (separate commit), writes
+    # stay disabled and the map is manually managed. The existing values
+    # in settings.env are authoritative and will not be overwritten.
+    logger.info("[TUNER] Would set MIN_ENTRY_PRICE_MAP (DISABLED, manual managed): %s",
+                ",".join("%s:%s" % (k, v) for k, v in sorted(min_entry_map.items())))
+    logger.info("[TUNER] Would set MAX_ENTRY_PRICE_MAP (DISABLED, manual managed): %s",
+                ",".join("%s:%s" % (k, v) for k, v in sorted(max_entry_map.items())))
     content = _update_map_setting(content, "MIN_TRADER_USD_MAP", min_usd_map)
     content = _update_map_setting(content, "TAKE_PROFIT_MAP", tp_map)
     content = _update_map_setting(content, "STOP_LOSS_MAP", sl_map)

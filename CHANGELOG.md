@@ -2,7 +2,114 @@
 
 Session-level notes. For full commit history see `git log`.
 
-## 2026-04-14 (latest) — Outcome tracker: DESC order + limit 500 to unblock Filter Precision Audit
+## 2026-04-14 (latest) — Disable MIN/MAX_ENTRY_PRICE_MAP auto-write + loosen xsaghav to 30-85c
+
+After the outcome_tracker DESC fix started populating Filter Precision
+Audit with fresh labels, I spot-checked whether xsaghav's tight 45-65c
+price window was actually justified. Queried the 73 verified closed
+trades for xsaghav grouped by 10c entry-price bucket. Result was
+damning for the auto-tuner's WR-based approach:
+
+```
+BUCKET         N    W    L     WR%     VOL    NET P&L
+------------------------------------------------------
+10-20c         1    1    0  100.0%  $ 2.76  $  +3.22
+20-30c         1    0    1    0.0%  $ 9.37  $  -3.76
+30-40c         6    4    2   66.7%  $38.64  $ +41.65   BLOCKED (best bucket!)
+40-50c        13    4    9   30.8%  $32.32  $  -1.00
+50-60c        14    6    8   42.9%  $58.69  $ +25.43   inside
+60-70c        23   13   10   56.5%  $95.68  $  +7.77   partial
+70-80c         9    4    5   44.4%  $23.40  $  +7.82   BLOCKED
+80-90c         6    5    1   83.3%  $62.27  $  +9.76   BLOCKED (83% WR!)
+------------------------------------------------------
+TOTAL         73                              $+90.89
+
+INSIDE 45-65c (let through):  n=37 WR=51.4% vol=$154 pnl=$+33.20 ROI=+21.5%
+OUTSIDE (blocked):            n=36 WR=50.0% vol=$169 pnl=$+57.69 ROI=+34.2%
+```
+
+The 30-40c bucket alone contributes +$41.65 — **46% of xsaghav's all-time
+verified profit** — and was fully blocked by MIN_ENTRY_PRICE=0.45. The
+80-90c bucket had 83% WR and was fully blocked by MAX_ENTRY_PRICE=0.65.
+The auto-tuner optimized for win-rate bounds inside a narrow band and
+in the process amputated the trader's two most profitable zones.
+
+### Why the WR-heuristic is wrong
+
+Polymarket has asymmetric payoffs: a 30c bet paying out 100c is 3.3x
+profit, while a 80c bet paying out 100c is 0.25x profit. A trader can
+have 30% WR at 30c and still be net profitable (need only 25% to break
+even), but a 60% WR at 80c is marginal. The tier_defaults table in
+auto_tuner.py uses a single min/max band per tier based on "safe" WR
+zones, which ignores this magnitude asymmetry entirely. Same bug we
+fixed for CATEGORY_BLACKLIST_MAP this morning.
+
+### Fix (Option A — quick, this commit)
+
+- `bot/auto_tuner.py::auto_tune` — disable the `_update_map_setting`
+  calls for `MIN_ENTRY_PRICE_MAP` and `MAX_ENTRY_PRICE_MAP`. The tier-
+  based computation still runs and logs `[TUNER] Would set ... (DISABLED,
+  manual managed)` so the intent is visible in journalctl. Removed the
+  PATCH-024 "keep tighter" merge block since it's no longer needed.
+  Other maps (BET_SIZE_MAP, TRADER_EXPOSURE_MAP, etc.) continue to be
+  auto-written unchanged.
+
+- `settings.env` on server — manually set `xsaghav:0.30` (MIN) and
+  `xsaghav:0.85` (MAX). All other trader bounds unchanged. The bounds
+  were picked to capture the 30-40c bucket (+$41.65) and the 70-90c
+  range (+$17.58) without extending into 20-30c (1 sample, -$3.76) or
+  90-100c (no sample, unknown risk).
+
+### Verification
+
+- `ct._reload_maps(); ct._MIN_ENTRY_PRICE_MAP.get('xsaghav')` returned
+  `0.3`; `_MAX_ENTRY_PRICE_MAP.get('xsaghav')` returned `0.85`.
+- Other traders unchanged (sovereign2013 still 0.38/0.75).
+- Manually called `auto_tuner.auto_tune()` in a subprocess and re-read
+  `settings.env` — xsaghav MIN/MAX values preserved (0.30/0.85). The
+  disabled writer honored the manual values.
+- Price-range simulation at 15c/32c/40c/50c/60c/70c/82c/95c confirms
+  the new window blocks only 15c and 95c, passing the 30-85c band.
+- `0` errors / `0` UNIQUE fails / `0` max-daily skips since restart
+  at 18:50:49 UTC (`sudo journalctl -u polybot --since '18:50:49'`
+  filtered for error/traceback/exception).
+
+### Expected uplift (extrapolation from verified history)
+
+If xsaghav's next 73 trades mirror his verified distribution and the
+per-bucket PnL is stable, the loosened window should capture roughly
++$58 additional profit on top of whatever the 45-65c band would have
+produced. In practice the sample is small (6 trades in 30-40c, 6 in
+80-90c) so real uplift will vary — could be +$30 or +$90 depending
+on which buckets his next runs land in. The point is the current
+window mechanically clips the profitable tails, which is
+correctable regardless of the precise expected value.
+
+### What this does NOT do
+
+- Does **not** touch sovereign2013, KING7777777, fsavhlc, Jargs. Their
+  verified samples also deserve the same bucket analysis — deferred to
+  Option B (magnitude-aware auto-tuner compute). This commit is
+  xsaghav-only because that is where the spot analysis pointed.
+- Does **not** fix the root cause in auto_tuner.py's tier table. That
+  table still maps tier → tight WR-optimized bands. Option B will
+  replace the computation with verified-PnL per-bucket logic and
+  re-enable the writer. Until then, MIN/MAX_ENTRY_PRICE_MAP joins
+  CATEGORY_BLACKLIST_MAP on the manual-managed list.
+- Does **not** change `MAX_ENTRY_PRICE_CAP=0.97` (the global absolute
+  hard cap). That stays as a post-slippage safety.
+
+### Revert
+
+If xsaghav's trades at 30-40c or 80-90c turn out to bleed money in
+the live window, revert is a 2-second edit in settings.env:
+`xsaghav:0.30 -> xsaghav:0.45` and `xsaghav:0.85 -> xsaghav:0.65`.
+Hot-reloaded on next copy_scan tick. No code revert needed — the
+disabled writer stays disabled regardless.
+
+---
+
+## 2026-04-14 (later) — Outcome tracker: DESC order + limit 500 to unblock Filter Precision Audit
 
 After the MAX_DAILY_TRADES removal (earlier today) turned on the full
 block-logging flow again, I looked at the Filter Precision Audit panel
