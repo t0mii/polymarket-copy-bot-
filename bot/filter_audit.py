@@ -31,6 +31,34 @@ CONFIDENCE = 0.70
 MIN_SAMPLES = 100
 
 
+def _current_category_blacklist_map() -> dict:
+    """Parse CATEGORY_BLACKLIST_MAP from settings.env into {trader_lower: set(categories)}.
+    Used by the audit to ignore historical blocks whose (trader, category)
+    combo is no longer enforced, so LOOSEN recommendations reflect the
+    CURRENT policy not accumulated history.
+    """
+    import os, re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(root, "settings.env")
+    try:
+        with open(path) as f:
+            content = f.read()
+    except Exception:
+        return {}
+    m = re.search(r"^CATEGORY_BLACKLIST_MAP=([^\n#]*)", content, re.MULTILINE)
+    if not m:
+        return {}
+    out = {}
+    for entry in m.group(1).split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            t, cats = entry.split(":", 1)
+            out[t.strip().lower()] = set(
+                c.strip().lower() for c in cats.split("|") if c.strip()
+            )
+    return out
+
+
 def compute_filter_precision(min_samples: int = MIN_SAMPLES,
                              confidence: float = CONFIDENCE) -> dict:
     """Return {rows: [...], meta: {...}} where rows is one dict per
@@ -48,10 +76,44 @@ def compute_filter_precision(min_samples: int = MIN_SAMPLES,
         return {"rows": [], "meta": {"error": "ml_block model not trained yet",
                                      "total_rows": 0}}
 
-    X, y, _, reasons = _build_block_training_data(verified_only=False)
+    X, y, _, reasons, metas = _build_block_training_data(verified_only=False, with_metas=True)
     if not X:
         return {"rows": [], "meta": {"error": "no verified blocked_trades",
                                      "total_rows": 0}}
+
+    # Drop historical category_blacklist rows whose (trader, category) combo
+    # is no longer in the current CATEGORY_BLACKLIST_MAP. After a manual
+    # cleanup (e.g. removing sovereign2013:tennis because backfilled data
+    # showed it was profitable), the old tennis-blocked rows stay in DB
+    # forever and would keep pushing the LOOSEN recommendation even though
+    # the rule has already been loosened. This filter collapses the audit
+    # to only the rules that are STILL enforced today.
+    current_bl = _current_category_blacklist_map()
+    kept_X, kept_y, kept_reasons, stale_dropped = [], [], [], 0
+    for i in range(len(X)):
+        r = reasons[i]
+        if r == "category_blacklist":
+            meta = metas[i] if i < len(metas) else {}
+            trader = (meta.get("trader") or "").strip().lower()
+            cat = (meta.get("detected_category") or "").strip().lower()
+            if trader and cat:
+                if cat not in current_bl.get(trader, set()):
+                    # This (trader, category) combo is no longer blacklisted —
+                    # drop the historical row so the audit reflects current state.
+                    stale_dropped += 1
+                    continue
+            # If trader or cat missing, keep the row (can't decide)
+        kept_X.append(X[i])
+        kept_y.append(y[i])
+        kept_reasons.append(r)
+    X, y, reasons = kept_X, kept_y, kept_reasons
+    if stale_dropped:
+        logger.info("[FILTER-AUDIT] dropped %d stale category_blacklist rows (no longer enforced)", stale_dropped)
+
+    if not X:
+        return {"rows": [], "meta": {"error": "no rows after stale filter",
+                                     "total_rows": 0,
+                                     "stale_dropped": stale_dropped}}
 
     import bot.ml_scorer as _ms
     model = _ms._model_block
@@ -160,5 +222,6 @@ def compute_filter_precision(min_samples: int = MIN_SAMPLES,
             "keep_threshold": KEEP_THRESHOLD,
             "min_samples": min_samples,
             "block_model": block_health,
+            "stale_dropped": stale_dropped,
         },
     }

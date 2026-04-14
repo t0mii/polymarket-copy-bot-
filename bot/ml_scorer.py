@@ -407,7 +407,7 @@ def _build_copy_training_data():
     return X, y, weights
 
 
-def _build_block_training_data(verified_only: bool = False):
+def _build_block_training_data(verified_only: bool = False, with_metas: bool = False):
     """Blocked-trade only training set for the filter-audit model.
 
     `verified_only` was meant to require real market resolves, but the
@@ -420,12 +420,19 @@ def _build_block_training_data(verified_only: bool = False):
     The `verified_only` arg is kept for API stability but is effectively
     a no-op (it adds an AND clause that never filters anything today).
 
-    Returns (X, y, weights, reasons):
+    `with_metas=True` additionally returns a 5th element `metas` — a list
+    of dicts with {trader, market_question, detected_category} per row.
+    Used by filter_audit.compute_filter_precision() so it can match
+    blocked rows against the CURRENT CATEGORY_BLACKLIST_MAP and drop
+    historical blocks whose (trader, category) combo is no longer enforced.
+
+    Returns (X, y, weights, reasons) or (X, y, weights, reasons, metas):
       - X: feature matrix with the same 11 feature layout as the copy model
       - y: would_have_won labels (0/1)
       - weights: 1.0 constant per row (no dollar magnitude available)
       - reasons: block_reason string per row, aligns with X — consumed by
         filter_audit.compute_filter_precision() for per-reason bucketing
+      - metas (optional): list of metadata dicts, same length as X
     """
     where = "would_have_won IS NOT NULL"
     if verified_only:
@@ -441,14 +448,15 @@ def _build_block_training_data(verified_only: bool = False):
         ).fetchall()]
 
     trader_running = {}
-    X, y, weights, reasons = [], [], [], []
+    X, y, weights, reasons, metas = [], [], [], [], []
     for r in rows:
         name = r.get("trader") or ""
         snap = _snapshot(trader_running, name)
+        mq = r.get("market_question") or ""
         d = {
             "entry_price": r.get("trader_price") or 0.5,
             "category": r.get("category") or "",
-            "market_question": r.get("market_question") or "",
+            "market_question": mq,
             "side": r.get("side") or "YES",
             "created_at": r.get("created_at") or "",
             "trader_name": name,
@@ -459,6 +467,15 @@ def _build_block_training_data(verified_only: bool = False):
         y.append(label)
         weights.append(1.0)
         reasons.append(r.get("block_reason") or "unknown")
+        if with_metas:
+            detected_cat = (r.get("category") or "").lower() or _detect_category(mq)
+            metas.append({
+                "trader": name,
+                "market_question": mq,
+                "detected_category": detected_cat,
+            })
+    if with_metas:
+        return X, y, weights, reasons, metas
     return X, y, weights, reasons
 
 
