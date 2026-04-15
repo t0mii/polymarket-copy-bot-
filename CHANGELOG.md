@@ -2,6 +2,45 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — dashboard: auto-promotion dry run panel (Phase γ.6 UI)
+
+Adds a live-refreshed dashboard panel that renders `/api/upgrade/promotion-dryrun` response data. Visible in `dashboard/templates/brain.html` between the Per-Trader Intelligence table and the Category Heatmap / Lifecycle Pipeline bottom grid.
+
+The panel shows:
+- **Thresholds line**: the currently-active PROMOTE_* values as a single readable gate string
+- **Safety rails strip**: cooldown state + circuit breaker state with color coding (warn amber / loss red / win green)
+- **Candidates table**: every observing/promoted candidate sorted by would_promote DESC, n_trades DESC, winrate DESC — so the most interesting rows (passing candidates + near-passers) are always on top
+- **Status pill**: `<N> would promote` when any candidate passes, `blocked / flag=false` when safety rails are tripped, `0 pass / flag=false` otherwise
+
+Columns: candidate name + status tag, n_trades, wins, WR%, Wilson lower bound, PnL (colored by sign), newest-trade age, verdict (PROMOTE in green when passing, "skip" grey otherwise), rejection reason (truncated to 60 chars).
+
+### Security note
+
+Initial implementation used `innerHTML` string concatenation for the table body. A security hook flagged this as an XSS risk — even though the data comes from our own API (not user input), the safer pattern is to build DOM nodes with `createElement` + `textContent`. Refactored to use a `_promoCell(text, opts)` helper that creates `<td>` nodes with plain-text content + style overrides via the DOM style property. Zero innerHTML on untrusted content anywhere in the new panel.
+
+### Refresh loop integration
+
+One new `fetchJSON('/api/upgrade/promotion-dryrun')` call added to the existing `refresh()` loop at `brain.html:2614`, and one new `renderPromotionDryRun(dryRun)` call alongside the other panel renders. The dashboard auto-refreshes every ~8s via the existing web worker, so the dry-run view updates alongside everything else.
+
+### What you'll see right now
+
+With the current walter state (flag=false, cooldown active from a historical promotion event on 2026-04-13, 39 candidates in observing/promoted):
+
+```
+pill:  "blocked / flag=false" (cooldown active)
+rails: "cooldown: cooldown: last promotion at 2026-04-13 00:08:37 (cooldown 7.0d)"
+table: 39 rows, 0 with "PROMOTE" verdict
+       Top rows: candidates with n=100+ that would otherwise be closest
+                 (ImJustKen 106 trades, GamblingIsAllYouNeed 182, swisstony 252)
+```
+
+As B2 paper tracker accumulates resolved-outcome data over the next 1-2 weeks, the table should start showing:
+1. Wilson LB values creeping up for profitable candidates
+2. Closer-to-60% WR values for candidates that were falsely "low WR" under the old fake-loss tracker
+3. Eventually, `would_promote=true` entries → green highlighted rows
+
+Once those appear and you're confident the data is sane, the next action is the AUTO_DISCOVERY_AUTO_PROMOTE flag flip — everything else (safety rails, probation, circuit breaker) is already in place.
+
 ## 2026-04-15 — Scenario D Phase γ.5b: probation bet-sizing wired into live
 
 Completes Phase γ.5 by wiring the `probation_limits(username)` helper into `bot.copy_trader._calculate_position_size`. When a trader is in probation (auto-promoted, within 14 days / 20 trades):

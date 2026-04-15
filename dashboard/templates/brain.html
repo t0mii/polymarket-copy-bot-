@@ -1122,6 +1122,26 @@ html.wide .app{max-width:none;padding:0 10px 8px}
     </table></div>
   </div>
 
+  <!-- AUTO-PROMOTION DRY RUN (Scenario D Phase γ.6 endpoint) -->
+  <div class="panel table-tall" id="promoDryRunPanel" style="margin-bottom:16px">
+    <div class="panel-title">
+      <span>Auto-Promotion Dry Run</span>
+      <span class="pill" id="promoStatusPill">loading…</span>
+    </div>
+    <div id="promoThresholds" style="font-family:var(--mono);font-size:.62rem;color:var(--text-mid);margin-bottom:6px"></div>
+    <div id="promoSafetyRails" style="font-size:.65rem;margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap"></div>
+    <div class="tw"><table class="trader-table" id="promoDryRunTable">
+      <thead><tr>
+        <th>Candidate</th><th>Status</th><th>N</th><th>Wins</th>
+        <th>WR</th><th>Wilson LB</th><th>PnL</th><th>Age</th>
+        <th>Verdict</th><th>Rejection</th>
+      </tr></thead>
+      <tbody>
+        <tr class="skeleton-row"><td colspan="10"><span class="skeleton skeleton-bar w80"></span></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
   <!-- CATEGORY HEATMAP + LIFECYCLE PIPELINE -->
   <div class="bottom-grid">
     <div class="panel">
@@ -2590,6 +2610,116 @@ function renderFieldMini(traders,cats,scores,paper){
   box.appendChild(mcard('Stop Loss','25%','dn','data-driven'));
 }
 
+/* ── Scenario D γ.6: promotion dry-run panel ── */
+function _promoCell(text, opts){
+  opts = opts || {};
+  var td = document.createElement('td');
+  if(opts.mono) td.style.fontFamily = 'var(--mono)';
+  if(opts.size) td.style.fontSize = opts.size;
+  if(opts.color) td.style.color = opts.color;
+  if(opts.weight) td.style.fontWeight = opts.weight;
+  td.textContent = text == null ? '' : String(text);
+  return td;
+}
+function renderPromotionDryRun(data){
+  var pill = document.getElementById('promoStatusPill');
+  if(!data || !data.thresholds){
+    pill.textContent = 'endpoint offline';
+    return;
+  }
+  var t = data.thresholds;
+  document.getElementById('promoThresholds').textContent =
+    'gate: n>=' + t.min_trades + ' | WR>=' + t.min_wr + '% | Wilson LB>=' + t.min_wilson_lower +
+    ' | ROI>=' + (t.min_roi*100).toFixed(1) + '% | PnL>=$' + t.min_abs_pnl +
+    ' | age<=' + t.max_age_days + 'd';
+
+  // Safety rails
+  var rails = document.getElementById('promoSafetyRails');
+  while(rails.firstChild) rails.removeChild(rails.firstChild);
+  if(data.cooldown_active){
+    var cd = document.createElement('span');
+    cd.style.color = 'var(--warn)';
+    cd.textContent = 'cooldown: ' + (data.cooldown_reason || '');
+    rails.appendChild(cd);
+  }
+  if(data.circuit_breaker_halted){
+    var cb = document.createElement('span');
+    cb.style.color = 'var(--loss)';
+    cb.textContent = 'breaker: ' + (data.circuit_breaker_reason || '');
+    rails.appendChild(cb);
+  }
+  if(!data.cooldown_active && !data.circuit_breaker_halted){
+    var ok = document.createElement('span');
+    ok.style.color = 'var(--win)';
+    ok.textContent = 'cooldown clear, breaker ok';
+    rails.appendChild(ok);
+  }
+
+  // Sort client-side: would_promote first, then most data, then highest WR
+  var cands = (data.candidates || []).slice();
+  cands.sort(function(a, b){
+    if(a.would_promote !== b.would_promote) return a.would_promote ? -1 : 1;
+    if(a.n_trades !== b.n_trades) return b.n_trades - a.n_trades;
+    return (b.winrate || 0) - (a.winrate || 0);
+  });
+
+  var tbody = document.querySelector('#promoDryRunTable tbody');
+  while(tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+  if(!cands.length){
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 10;
+    td.style.textAlign = 'center';
+    td.style.color = 'var(--text-mid)';
+    td.style.padding = '20px';
+    td.textContent = 'no candidates in observing/promoted pool';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    cands.forEach(function(c){
+      var tr = document.createElement('tr');
+      if(c.would_promote) tr.style.background = 'rgba(82,196,26,.08)';
+
+      var nameDisp = (c.username || (c.address || '').substring(0, 12)).substring(0, 22);
+      var ageStr = c.newest_trade_age_days >= 999 ? '-' :
+                   (c.newest_trade_age_days || 0).toFixed(1) + 'd';
+      var pnl = c.total_pnl || 0;
+      var pnlColor = pnl > 0 ? 'var(--win)' : pnl < 0 ? 'var(--loss)' : 'var(--text-mid)';
+      var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+
+      tr.appendChild(_promoCell(nameDisp, {mono: true}));
+      tr.appendChild(_promoCell(c.status || '', {size: '.6rem'}));
+      tr.appendChild(_promoCell(c.n_trades || 0));
+      tr.appendChild(_promoCell(c.wins || 0));
+      tr.appendChild(_promoCell(((c.winrate || 0).toFixed(1)) + '%'));
+      tr.appendChild(_promoCell((c.wilson_lower_bound || 0).toFixed(3),
+                                 {mono: true, size: '.62rem'}));
+      tr.appendChild(_promoCell(pnlStr, {mono: true, color: pnlColor}));
+      tr.appendChild(_promoCell(ageStr, {size: '.6rem', color: 'var(--text-mid)'}));
+      tr.appendChild(_promoCell(c.would_promote ? 'PROMOTE' : 'skip',
+                                 {weight: c.would_promote ? '700' : null,
+                                  color: c.would_promote ? 'var(--win)' : 'var(--text-mid)'}));
+      var reason = c.rejection_reason || '';
+      if(reason.length > 60) reason = reason.substring(0, 57) + '...';
+      tr.appendChild(_promoCell(reason, {size: '.58rem', color: 'var(--text-mid)'}));
+      tbody.appendChild(tr);
+    });
+  }
+
+  var wp = cands.filter(function(c){return c.would_promote;}).length;
+  if(wp > 0){
+    pill.textContent = wp + ' would promote';
+    pill.style.color = 'var(--win)';
+  } else if(data.cooldown_active || data.circuit_breaker_halted){
+    pill.textContent = 'blocked / flag=false';
+    pill.style.color = 'var(--warn)';
+  } else {
+    pill.textContent = '0 pass / flag=false';
+    pill.style.color = 'var(--text-mid)';
+  }
+}
+
 /* ── Fetch + refresh loop ── */
 async function refresh(){
   var status=await fetchJSON('/api/upgrade/status');
@@ -2607,6 +2737,7 @@ async function refresh(){
   var blocked=await fetchJSON('/api/ai/blocked-trades?hours=72&limit=500');
   var tickerEvents=await fetchJSON('/api/fun/ticker');
   var filterPrec=await fetchJSON('/api/brain/filter-precision');
+  var dryRun=await fetchJSON('/api/upgrade/promotion-dryrun');
   // Authoritative followed-wallet list — trader_performance has stale
   // rows from previously-followed traders, so we fetch the actual
   // follow list to show the true "active traders" count.
@@ -2633,6 +2764,7 @@ async function refresh(){
   renderPaperSummary(paper);
   renderPaperTrades(paperTradesList);
   renderFieldMini(traders,cats,scores,paper);
+  renderPromotionDryRun(dryRun);
 
   // Counters
   var totScored=(scores&&(scores.total||scores.count))||((scores&&scores.buckets)?scores.buckets.reduce(function(a,b){return a+(b.n||0)},0):0);
