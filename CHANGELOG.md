@@ -2,35 +2,100 @@
 
 Session-level notes. For full commit history see `git log`.
 
-## 2026-04-15 — paper_follow stateful watermark (piff-flagged freshness bug)
+## 2026-04-15 — paper_follow: stateful watermark + UNIQUE dedup + concurrency guard (piff-flagged)
 
-Piff reported that `paper_trades` showed near-identical rows across consecutive 3h observation windows, so candidates weren't accumulating enough paper-trade evidence for the promotion gate (`PROMOTE_MIN_TRADES=50`). Verified on the server:
+**Two commits**: `112160f` (primary watermark fix) + `4bd46b3` (concurrency/dedup follow-up after code review).
 
-- `scheduler.add_job(discovery_scan, 'interval', hours=3, ...)` at `main.py:799`.
-- `paper_follow_candidates()` at `bot/auto_discovery.py:309` applied `ENTRY_TRADE_SEC=300` (5min freshness window) — copy-pasted from `bot/copy_trader.py:1892` where it makes sense because the live copy path scans every 60s.
-- **Math**: 300s / 10800s = **2.78% theoretical coverage** per trade. Live snapshot: 149 paper_trades / 24h across 40 candidates = 3.7 trades/candidate/day — a 15-trades/day trader would take 20 days to cross `n=50`.
+### What piff needs to do
 
-**Fix**: replaced the fixed 300s window with a per-candidate `last_paper_scan_ts` watermark stored on `trader_candidates`. Each scan captures BUYs strictly newer than the watermark, then advances it to the newest timestamp. Zero duplicates, zero gaps, robust against any scan cadence. Plus `fetch_wallet_recent_trades` limit 10 → 50 so hyperactive traders aren't silently truncated.
+1. `git pull` on your fork.
+2. `sudo systemctl restart polybot` — required because `auto_discovery` is imported at startup, `init_db` runs the migrations on startup, and the scheduler setup in `main.py:799` changed.
+3. **No settings.env changes needed.** `ENTRY_TRADE_SEC=300` is untouched — only the live copy path uses it now; paper_follow has a stateful watermark instead.
+4. The migration runs automatically on first startup (idempotent, no-op on subsequent runs):
+   - `ALTER TABLE trader_candidates ADD COLUMN last_paper_scan_ts INTEGER DEFAULT 0`
+   - `DELETE FROM paper_trades WHERE rowid NOT IN (SELECT MIN(rowid) ... GROUP BY candidate_address, condition_id, side) AND status='open'` — collapses fill-split duplicates on open rows only (closed rows are left alone; partial index only enforces on open).
+   - `CREATE UNIQUE INDEX idx_paper_trades_open_dedup ON paper_trades(candidate_address, condition_id, side) WHERE status='open'`.
 
-**Files touched**:
-- `database/db.py` — idempotent `ALTER TABLE trader_candidates ADD COLUMN last_paper_scan_ts INTEGER DEFAULT 0`, plus `get_candidate_paper_scan_ts` / `set_candidate_paper_scan_ts` helpers.
-- `bot/auto_discovery.py` — `paper_follow_candidates()` now reads the watermark before the trade loop, filters `t_ts <= last_ts`, tracks `newest_ts`, writes the watermark after the loop. Filter 6 (ENTRY_TRADE_SEC) removed from this path. Limit bumped to 50.
-- `tests/test_paper_follow_stateful.py` — new file, 5 TDD tests (first-scan captures all, second-scan skips seen, no duplicates, SELL filtered, empty-noop). 5/5 pass.
+### The bug piff flagged
+
+Piff reported: "Beide 3 Stunden — identisch. Mit ENTRY_TRADE_SEC=300 ist es fast unmöglich einen Trade zu erwischen."
+
+Verified: `paper_follow_candidates()` in `bot/auto_discovery.py:309` was applying `ENTRY_TRADE_SEC=300` — copy-pasted from `bot/copy_trader.py:1892` where it makes sense because the live copy path scans every 60s. But `discovery_scan` (which calls `paper_follow_candidates`) runs every 3h, so 300/10800 = **2.78% theoretical coverage** per trade. Live snapshot pre-fix: **149 paper_trades / 24h across 40 candidates = 3.7 trades/candidate/day** — a trader with 15 trades/day would take 20 days to cross `PROMOTE_MIN_TRADES=50`.
+
+### Primary fix (commit `112160f`)
+
+Replaced the fixed 300s window with a per-candidate `last_paper_scan_ts` watermark stored on `trader_candidates`. Each scan captures BUYs strictly newer than the watermark, then advances it to the newest timestamp. Robust against any scan cadence. Plus `fetch_wallet_recent_trades` limit 10 → 50 so hyperactive traders aren't silently truncated.
+
+Files:
+- `database/db.py` — `ALTER TABLE` + `get_candidate_paper_scan_ts` / `set_candidate_paper_scan_ts` helpers.
+- `bot/auto_discovery.py` — watermark read/filter/advance logic in `paper_follow_candidates`. `ENTRY_TRADE_SEC` filter removed from this path.
+- `tests/test_paper_follow_stateful.py` — 5 TDD tests.
 - `bot/copy_trader.py` — **unchanged**. Live copy path still uses `ENTRY_TRADE_SEC=300` as intended.
 
-**Secondary bug noted but deferred**: `scheduler.add_job(discovery_scan, ...)` is being re-called at irregular intervals (15-30 min) per the log — root cause unclear, needs a separate investigation. The stateful watermark fix is robust against any scan cadence, so the primary fix ships independently.
+### Follow-up fix (commit `4bd46b3`)
 
-**Verify on server (post-deploy)**:
+Independent code review flagged 2 blockers + 3 highs:
+
+- **`add_paper_trade` had `INSERT OR IGNORE` but no UNIQUE constraint** → 91% of `paper_trades` rows (5312/5819) were duplicates pre-cleanup. Most of that "duplication" was Polymarket returning one logical trader decision as N separate partial-fill activities (e.g. 11 rows for one Vitality trade at microprices 0.81, 0.8100000026, 0.810000043, ...). Economically: 1 decision, collapsed correctly.
+- **`discovery_scan` lacked `max_instances=1`** and the job was being re-registered at irregular 15-30min intervals (root cause unidentified; candidates: auto-update.sh, vpn-watchdog.sh, settings-reload, systemd restart loop). Two concurrent scans would race on the same `last_ts` and double-insert.
+- **`get_/set_candidate_paper_scan_ts` opened separate connections** → stale concurrent writer could roll the watermark backwards.
+- **`newest_ts` advanced only on BUYs** → SELL-heavy windows caused next scan to re-read same tail.
+
+Fixes in `4bd46b3`:
+- `main.py:799` — `max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True` on the `discovery_scan` job.
+- `database/db.py::init_db` — new cleanup `DELETE` migration + `CREATE UNIQUE INDEX idx_paper_trades_open_dedup ON paper_trades(candidate_address, condition_id, side) WHERE status='open'`. Partial index so re-entry after close is still allowed.
+- `database/db.py::set_candidate_paper_scan_ts` — `SET last_paper_scan_ts = MAX(COALESCE(last_paper_scan_ts, 0), ?)` for monotonic-increasing guarantee.
+- `bot/auto_discovery.py::paper_follow_candidates` — reordered so `newest_ts` advances on every trade, not just BUYs.
+- `tests/test_paper_follow_stateful.py` — 5 new TDD tests (monotonic, UNIQUE blocks dup open, reentry after close allowed, different sides allowed, cleanup migration collapses dupes).
+
+Total 10/10 paper_follow tests pass + 93 full-suite pass + 1 pre-existing brain_dedup unrelated.
+
+### Live verify on our server (post-deploy)
+
+```
+02:46 scan: 47 unique paper_trades captured (first post-fix scan)
+03:02 scan: 2 new unique captures (second scan — different content, not identical)
+Zero duplicate groups in the 30-min observation window
+125 historical open dupe rows removed by the cleanup migration (5819 → 5694 total)
+21 of 41 active candidates have non-zero watermarks, monotonic advancing
+```
+
+Commands piff can run to verify the same on his side:
+
 ```sql
+-- 1. Watermark column exists and is populating
 SELECT address, status, last_paper_scan_ts FROM trader_candidates
  WHERE status IN ('observing','promoted')
  ORDER BY last_paper_scan_ts DESC LIMIT 10;
 
+-- 2. UNIQUE partial index was created
+SELECT sql FROM sqlite_master
+ WHERE type='index' AND name='idx_paper_trades_open_dedup';
+
+-- 3. No duplicate open rows remain
+SELECT candidate_address, condition_id, side, COUNT(*) n
+  FROM paper_trades WHERE status='open'
+  GROUP BY candidate_address, condition_id, side
+ HAVING n > 1;
+-- expect 0 rows
+
+-- 4. paper_trades growth rate (run 30 min after restart, then 3h later, compare)
 SELECT COUNT(*) FROM paper_trades
  WHERE created_at > datetime('now','-30 minutes');
 ```
 
-Expected 24h post-fix: paper_trades volume should grow ~5-10x vs. the 149/24h pre-fix baseline once each candidate has been scanned at least once.
+### Known separate issue NOT fixed here
+
+`database/db.py::get_candidate_stats` counts `SELECT COUNT(*) FROM paper_trades` — the cleanup only scoped to `WHERE status='open'`, so **5632 historical closed dupe rows** still contaminate `total` / `wins` / `losses` / `total_pnl` for candidates with pre-fix paper_trade history. Promotion-gate counts from those are inflated.
+
+**This must be fixed before flipping `AUTO_DISCOVERY_AUTO_PROMOTE=true`** — either change `get_candidate_stats` to use `COUNT(DISTINCT candidate_address, condition_id, side)` with proportional wins/losses/pnl dedup, or migrate historical closed dupes out. Separate PR, not in this session.
+
+### Expected empirical behavior post-fix
+
+- Per-scan capture should be **~30-80 unique rows** depending on trader activity (vs. old ~5 per scan).
+- paper_trades growth should be **~5-10x** pre-fix once each candidate has been scanned at least once.
+- Two consecutive 3h scan windows will no longer be identical — each picks up the trades that happened since the prior watermark.
+- No dup groups should ever appear again in the open-row set (UNIQUE partial index enforces it at the DB level).
 
 ## 2026-04-14 (latest) — Heal id=3547 Angels ghost + dashboard reads actual_size from DB
 
