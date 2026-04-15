@@ -56,14 +56,46 @@
     buildDrops();
     window.addEventListener('resize', buildDrops);
 
-    function draw(){
-      // Stronger trail fade (0.18 vs old 0.08) so old glyphs clear before
-      // the next frame stacks on top. Combined with the one-char-per-row
-      // gate below this keeps the canvas from forming vertical streaks.
-      ctx.fillStyle='rgba(6,6,10,0.18)';
+    // Hard-clear counter: every N frames we do a fully-opaque rect
+    // instead of the usual alpha fade, which resets any residual
+    // accumulation that the fractional fade leaves behind. At 80ms/frame
+    // this fires every ~12 seconds.
+    var HARD_CLEAR_EVERY = 150;   // ~12 s
+    var frameCounter = 0;
+
+    function hardClear(){
+      ctx.fillStyle='#06060a';
       ctx.fillRect(0,0,cvs.width,cvs.height);
+    }
+
+    // Tab-visibility: browsers throttle setInterval in inactive tabs
+    // so the fade stops running while the drops keep incrementing. When
+    // the tab becomes visible again the canvas can have a full frame of
+    // half-drawn state. Wipe on return so the rain restarts cleanly.
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden){
+        hardClear();
+        drops.forEach(function(d){d.lastRow=-999});
+      }
+    });
+
+    function draw(){
+      frameCounter++;
+      if(frameCounter >= HARD_CLEAR_EVERY){
+        // Periodic full reset — no residual build-up possible
+        hardClear();
+        frameCounter = 0;
+        drops.forEach(function(d){d.lastRow=-999});
+      } else {
+        // Stronger trail fade (0.28 vs old 0.18) so old glyphs clear
+        // aggressively before the next frame stacks on top. Combined
+        // with the one-char-per-row gate below AND the periodic hard
+        // clear above, the canvas can't accumulate lines over time.
+        ctx.fillStyle='rgba(6,6,10,0.28)';
+        ctx.fillRect(0,0,cvs.width,cvs.height);
+      }
       ctx.font=font+'px "Fira Code",monospace';
-      ctx.fillStyle='rgba(228,200,104,0.78)';  // gold-bright head
+      ctx.fillStyle='rgba(228,200,104,0.85)';  // gold-bright head
       for(var i=0;i<drops.length;i++){
         var d=drops[i];
         if(!d.active){
