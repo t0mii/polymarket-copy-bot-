@@ -252,6 +252,19 @@ MAX_RESOLVE_HOURS = int(os.getenv("MAX_RESOLVE_HOURS", "24"))
 # to be silently auto-followed. Now gated: default false, user must explicitly
 # enable OR add the wallet manually via dashboard/settings.
 AUTO_DISCOVERY_AUTO_PROMOTE = os.getenv('AUTO_DISCOVERY_AUTO_PROMOTE', 'false').lower() in ('true', '1', 'yes')
+# Scenario-D Phase B2 — paper resolution tracker config.
+# `PAPER_EVAL_MAX_HOURS` replaces the hardcoded 4h cutoff in
+# auto_discovery.close_paper_trades. Rows past this window get closed with
+# a real ws_price_tracker price, or force-closed with pnl=0 and
+# close_reason='abandoned' after `PAPER_EVAL_MAX_HOURS * 3` without a
+# price. Default 24h so most sports/esports markets actually resolve
+# before the time-cutoff path fires.
+PAPER_EVAL_MAX_HOURS = float(os.getenv('PAPER_EVAL_MAX_HOURS', '24'))
+# Gate for `bot.outcome_tracker.track_paper_outcomes`, the 30min
+# scheduler job that calls Gamma to update current_price + resolved_price
+# on open paper_trades. Flip to false in settings.env as an instant kill
+# switch if the tracker ever misbehaves.
+PAPER_RESOLUTION_TRACKING_ENABLED = os.getenv('PAPER_RESOLUTION_TRACKING_ENABLED', 'true').lower() in ('true', '1', 'yes')
 PAPER_MAX_DAYS = float(os.getenv("PAPER_MAX_DAYS", "7"))
 PAPER_MIN_DAYS = float(os.getenv('PAPER_MIN_DAYS', '3'))
 

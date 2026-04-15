@@ -363,14 +363,38 @@ def paper_follow_candidates():
 
 
 def close_paper_trades():
-    """Close paper trades mit realistischer PnL-Berechnung (echte Bet-Sizes)."""
+    """Close paper trades via time-budget + price availability.
+
+    Scenario-D Phase B2 refactor. Semantics:
+
+    - Rows with `is_resolved=1` are skipped (track_paper_outcomes already
+      handled them via real Gamma resolution data).
+    - Rows younger than `PAPER_EVAL_MAX_HOURS` are skipped (too early).
+    - Rows older than the budget with a live price from ws_price_tracker
+      are closed normally with pnl from shares × (price - entry) and
+      close_reason='time_cutoff'. (No `side == 'NO'` inversion needed
+      when the live ws price for the asset already reflects that side.)
+    - Rows older than the budget but without a live price are LEFT OPEN
+      and retried next cycle. The old `entry * 0.95` fake-loss fallback
+      is REMOVED — it injected ~5% fabricated losses into every unresolved
+      trade and poisoned paper_pnl across the pool.
+    - Rows older than `PAPER_EVAL_MAX_HOURS * 3` are force-closed with
+      pnl=0 and close_reason='abandoned' to prevent unbounded open-row
+      accumulation.
+    """
     from datetime import datetime, timedelta
 
+    max_hours = float(getattr(config, "PAPER_EVAL_MAX_HOURS", 24))
+    cutoff = (datetime.now() - timedelta(hours=max_hours)).strftime("%Y-%m-%d %H:%M:%S")
+    abandon_cutoff = (datetime.now() - timedelta(hours=max_hours * 3)).strftime("%Y-%m-%d %H:%M:%S")
+
     with db.get_connection() as conn:
-        cutoff = (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
         old_papers = conn.execute(
             "SELECT id, candidate_address, condition_id, side, entry_price, created_at "
-            "FROM paper_trades WHERE status = 'open' AND created_at < ?",
+            "FROM paper_trades "
+            "WHERE status = 'open' "
+            "  AND COALESCE(is_resolved, 0) = 0 "
+            "  AND created_at < ?",
             (cutoff,)
         ).fetchall()
 
@@ -378,6 +402,7 @@ def close_paper_trades():
         return
 
     closed = 0
+    abandoned = 0
     from bot.ws_price_tracker import price_tracker
     filters = _load_settings_filters()
 
@@ -385,50 +410,88 @@ def close_paper_trades():
         cid = p["condition_id"]
         entry = p["entry_price"] or 0.5
         side = (p["side"] or "YES").upper()
+        created_at_str = p["created_at"] or ""
 
-        price = price_tracker.get_price(cid, side)
-        # PATCH-038: close resolved markets instantly
+        price = None
+        try:
+            price = price_tracker.get_price(cid, side)
+        except Exception:
+            price = None
         if price is not None and price >= 0.99:
             price = 1.0
         elif price is not None and price <= 0.01:
             price = 0.0
-        elif price is None:
-            price = entry * 0.95
 
-        # Realistic PnL: shares * price_change
+        if price is None:
+            # No live price. Two outcomes:
+            #   (a) row is past the abandon threshold → force-close pnl=0
+            #   (b) row is within the retry window → leave open, try again
+            if created_at_str < abandon_cutoff:
+                with db.get_connection() as conn:
+                    cur = conn.execute(
+                        "UPDATE paper_trades SET "
+                        "  status = 'closed', pnl = 0, close_reason = 'abandoned', "
+                        "  closed_at = datetime('now','localtime') "
+                        "WHERE id = ? AND COALESCE(is_resolved, 0) = 0",
+                        (p["id"],),
+                    )
+                    if cur.rowcount > 0:
+                        # Rollup counts trade-count only; pnl=0 so pnl column unchanged.
+                        conn.execute(
+                            "UPDATE trader_candidates SET "
+                            "  paper_trades = paper_trades + 1 "
+                            "WHERE address = ?",
+                            (p["candidate_address"],),
+                        )
+                        abandoned += 1
+            continue
+
+        # Price available — close with real pnl.
         bet_size = _paper_bet_size(entry, filters)
         shares = bet_size / entry if entry > 0 else 0
 
+        # Side-inversion retained for the ws_price_tracker path because the
+        # cached WS price may be the YES-side mid even when the trader bought
+        # the opposite side. Paper_trades.side="NO" → flip the sign.
         if side == "NO":
             pnl = round(shares * (entry - price), 4)
         else:
             pnl = round(shares * (price - entry), 4)
 
         with db.get_connection() as conn:
-            conn.execute(
-                "UPDATE paper_trades SET status = 'closed', current_price = ?, pnl = ?, "
-                "closed_at = datetime('now','localtime') WHERE id = ?",
-                (price, pnl, p["id"])
+            cur = conn.execute(
+                "UPDATE paper_trades SET "
+                "  status = 'closed', current_price = ?, pnl = ?, "
+                "  close_reason = 'time_cutoff', "
+                "  closed_at = datetime('now','localtime') "
+                "WHERE id = ? AND COALESCE(is_resolved, 0) = 0",
+                (price, pnl, p["id"]),
             )
+            if cur.rowcount > 0:
+                if pnl > 0:
+                    conn.execute(
+                        "UPDATE trader_candidates SET "
+                        "  paper_trades = paper_trades + 1, "
+                        "  paper_wins = paper_wins + 1, "
+                        "  paper_pnl = paper_pnl + ? "
+                        "WHERE address = ?",
+                        (pnl, p["candidate_address"]),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE trader_candidates SET "
+                        "  paper_trades = paper_trades + 1, "
+                        "  paper_pnl = paper_pnl + ? "
+                        "WHERE address = ?",
+                        (pnl, p["candidate_address"]),
+                    )
+                closed += 1
 
-        with db.get_connection() as conn:
-            if pnl > 0:
-                conn.execute(
-                    "UPDATE trader_candidates SET paper_trades = paper_trades + 1, "
-                    "paper_wins = paper_wins + 1, paper_pnl = paper_pnl + ? WHERE address = ?",
-                    (pnl, p["candidate_address"])
-                )
-            else:
-                conn.execute(
-                    "UPDATE trader_candidates SET paper_trades = paper_trades + 1, "
-                    "paper_pnl = paper_pnl + ? WHERE address = ?",
-                    (pnl, p["candidate_address"])
-                )
-
-        closed += 1
-
-    if closed > 0:
-        logger.info("[DISCOVERY] Closed %d paper trades (realistic PnL, 4h+ old)", closed)
+    if closed > 0 or abandoned > 0:
+        logger.info(
+            "[DISCOVERY] Closed %d paper trades (time_cutoff), abandoned %d (past %dh*3 without price)",
+            closed, abandoned, int(max_hours),
+        )
 
 
 def check_promotions():

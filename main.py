@@ -194,6 +194,18 @@ def track_blocked_outcomes():
         logger.warning("Outcome tracker error: %s", e)
 
 
+def track_paper_outcomes_job():
+    """Scenario-D Phase B2: update open paper_trades with real Gamma
+    resolution data (every 30 min). Gated by config.PAPER_RESOLUTION_TRACKING_ENABLED."""
+    from bot.outcome_tracker import track_paper_outcomes
+    try:
+        n = track_paper_outcomes()
+        if n > 0:
+            logger.info("[PAPER_OUTCOME] Updated %d paper_trades rows", n)
+    except Exception as e:
+        logger.warning("Paper outcome tracker error: %s", e)
+
+
 def reconcile_db_vs_wallet():
     """Reconcile copy_trades open positions against actual on-chain wallet
     holdings. Detects DB_VS_WALLET_POSITION_DIVERGENCE: positions held on
@@ -753,6 +765,21 @@ def main():
         minutes=30,
         id="outcome_tracker",
         next_run_time=datetime.now() + timedelta(minutes=5),
+        max_instances=1, coalesce=True, misfire_grace_time=600,
+        replace_existing=True,
+    )
+    # Scenario-D Phase B2: paper-trade resolution tracker. Offset 15min
+    # from the blocked-outcome tracker so the two 30min jobs alternate
+    # (every ~15min one of them is running). max_instances=1 + coalesce
+    # prevent overlap on slow-Gamma cycles.
+    scheduler.add_job(
+        track_paper_outcomes_job,
+        "interval",
+        minutes=30,
+        id="paper_outcome_tracker",
+        next_run_time=datetime.now() + timedelta(minutes=20),
+        max_instances=1, coalesce=True, misfire_grace_time=600,
+        replace_existing=True,
     )
     # DB-vs-wallet reconciliation: detect ghost positions (on-chain not in
     # DB) and orphan rows (DB open not on chain). Log-only — no auto-fix.

@@ -379,6 +379,232 @@ class TestPaperTradesCleanupMigration(unittest.TestCase):
         finally:
             teardown_temp_db(path)
 
+    def test_close_paper_trades_respects_env_max_hours(self):
+        """Scenario-D Phase B2: close_paper_trades must honor
+        config.PAPER_EVAL_MAX_HOURS instead of the hardcoded 4h literal.
+        Rows younger than the window stay open; rows past it get closed."""
+        from tests.conftest_helpers import setup_temp_db, teardown_temp_db
+        from unittest.mock import patch
+        path = setup_temp_db()
+        try:
+            from database import db
+            import config
+            self._saved_hours = getattr(config, "PAPER_EVAL_MAX_HOURS", 24)
+            config.PAPER_EVAL_MAX_HOURS = 2
+            with db.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO trader_candidates (address, username, status) "
+                    "VALUES ('0xMAXH', 'maxh', 'observing')"
+                )
+                # Row 1: 3h old → past 2h window, should close
+                conn.execute(
+                    "INSERT INTO paper_trades "
+                    "(candidate_address, condition_id, market_question, side, "
+                    " entry_price, status, created_at, signature) "
+                    "VALUES ('0xMAXH', 'CID-OLD', 'Q?', 'YES', 0.55, 'open', "
+                    " datetime('now','localtime','-3 hours'), 'sig_old')"
+                )
+                # Row 2: 1h old → inside window, should stay open
+                conn.execute(
+                    "INSERT INTO paper_trades "
+                    "(candidate_address, condition_id, market_question, side, "
+                    " entry_price, status, created_at, signature) "
+                    "VALUES ('0xMAXH', 'CID-NEW', 'Q?', 'YES', 0.55, 'open', "
+                    " datetime('now','localtime','-1 hours'), 'sig_new')"
+                )
+
+            from bot import auto_discovery, ws_price_tracker
+            fake = type("FP", (), {
+                "get_price": lambda self, cid, side: 0.60,
+                "subscribe_condition": lambda self, cid: None,
+            })()
+            with patch.object(ws_price_tracker, "price_tracker", new=fake):
+                auto_discovery.close_paper_trades()
+
+            with db.get_connection() as conn:
+                old_row = conn.execute(
+                    "SELECT status, close_reason FROM paper_trades "
+                    "WHERE condition_id='CID-OLD'"
+                ).fetchone()
+                new_row = conn.execute(
+                    "SELECT status FROM paper_trades WHERE condition_id='CID-NEW'"
+                ).fetchone()
+            self.assertEqual(old_row["status"], "closed",
+                             "row past PAPER_EVAL_MAX_HOURS must close")
+            self.assertEqual(old_row["close_reason"], "time_cutoff")
+            self.assertEqual(new_row["status"], "open",
+                             "row inside window must stay open")
+        finally:
+            import config as _cfg
+            _cfg.PAPER_EVAL_MAX_HOURS = self._saved_hours
+            teardown_temp_db(path)
+
+    def test_close_paper_trades_no_fake_pnl_when_price_is_none(self):
+        """Scenario-D Phase B2: the `entry * 0.95` fake-loss fallback is
+        REMOVED. When ws_price_tracker returns None, an old row must STAY
+        OPEN (retry next cycle) — it must not be force-closed with a
+        fabricated 5% loss.
+
+        Row age is 5h, past the 2h PAPER_EVAL_MAX_HOURS window but NOT
+        past the 3x abandonment threshold (6h), so the expected behavior
+        is 'stay open, retry later', not 'force-close abandoned'."""
+        from tests.conftest_helpers import setup_temp_db, teardown_temp_db
+        from unittest.mock import patch
+        path = setup_temp_db()
+        try:
+            from database import db
+            import config
+            self._saved_hours = getattr(config, "PAPER_EVAL_MAX_HOURS", 24)
+            config.PAPER_EVAL_MAX_HOURS = 2
+            with db.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO trader_candidates (address, username, status) "
+                    "VALUES ('0xNOF', 'nof', 'observing')"
+                )
+                conn.execute(
+                    "INSERT INTO paper_trades "
+                    "(candidate_address, condition_id, market_question, side, "
+                    " entry_price, status, created_at, signature) "
+                    "VALUES ('0xNOF', 'CID-NP', 'Q?', 'YES', 0.55, 'open', "
+                    " datetime('now','localtime','-5 hours'), 'sig_np')"
+                )
+
+            from bot import auto_discovery, ws_price_tracker
+            fake = type("FP", (), {
+                "get_price": lambda self, cid, side: None,
+                "subscribe_condition": lambda self, cid: None,
+            })()
+            with patch.object(ws_price_tracker, "price_tracker", new=fake):
+                auto_discovery.close_paper_trades()
+
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT status, pnl, close_reason FROM paper_trades "
+                    "WHERE condition_id='CID-NP'"
+                ).fetchone()
+            self.assertEqual(row["status"], "open",
+                             "no price + no fake fallback => row stays open")
+            self.assertAlmostEqual(row["pnl"] or 0, 0, places=4,
+                                   msg="no fake pnl must be written")
+            self.assertEqual(row["close_reason"], "",
+                             "no close_reason since row stayed open")
+        finally:
+            import config as _cfg
+            _cfg.PAPER_EVAL_MAX_HOURS = self._saved_hours
+            teardown_temp_db(path)
+
+    def test_close_paper_trades_force_closes_after_triple_budget(self):
+        """Scenario-D Phase B2: to prevent unbounded open-row accumulation,
+        any row still open after PAPER_EVAL_MAX_HOURS*3 without a price
+        gets force-closed with pnl=0 and close_reason='abandoned'."""
+        from tests.conftest_helpers import setup_temp_db, teardown_temp_db
+        from unittest.mock import patch
+        path = setup_temp_db()
+        try:
+            from database import db
+            import config
+            self._saved_hours = getattr(config, "PAPER_EVAL_MAX_HOURS", 24)
+            config.PAPER_EVAL_MAX_HOURS = 2  # 3× = 6h abandonment threshold
+            with db.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO trader_candidates (address, username, status) "
+                    "VALUES ('0xABD', 'abd', 'observing')"
+                )
+                conn.execute(
+                    "INSERT INTO paper_trades "
+                    "(candidate_address, condition_id, market_question, side, "
+                    " entry_price, status, created_at, signature) "
+                    "VALUES ('0xABD', 'CID-AB', 'Q?', 'YES', 0.55, 'open', "
+                    " datetime('now','localtime','-7 hours'), 'sig_ab')"
+                )
+
+            from bot import auto_discovery, ws_price_tracker
+            fake = type("FP", (), {
+                "get_price": lambda self, cid, side: None,
+                "subscribe_condition": lambda self, cid: None,
+            })()
+            with patch.object(ws_price_tracker, "price_tracker", new=fake):
+                auto_discovery.close_paper_trades()
+
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT status, pnl, close_reason FROM paper_trades "
+                    "WHERE condition_id='CID-AB'"
+                ).fetchone()
+            self.assertEqual(row["status"], "closed",
+                             "row past 3× max_hours must be force-closed")
+            self.assertAlmostEqual(row["pnl"] or 0, 0, places=4,
+                                   msg="abandoned close has pnl=0, not fake loss")
+            self.assertEqual(row["close_reason"], "abandoned")
+        finally:
+            import config as _cfg
+            _cfg.PAPER_EVAL_MAX_HOURS = self._saved_hours
+            teardown_temp_db(path)
+
+    def test_close_paper_trades_skips_already_resolved_rows(self):
+        """Scenario-D Phase B2: the defensive `is_resolved=0` guard in the
+        SELECT ensures that even a race-condition row with `status='open'
+        AND is_resolved=1` (e.g. track_paper_outcomes marked is_resolved
+        but status update hasn't propagated for some reason) is NOT
+        re-processed by close_paper_trades, preventing rollup
+        double-counting."""
+        from tests.conftest_helpers import setup_temp_db, teardown_temp_db
+        from unittest.mock import patch
+        path = setup_temp_db()
+        try:
+            from database import db
+            import config
+            self._saved_hours = getattr(config, "PAPER_EVAL_MAX_HOURS", 24)
+            config.PAPER_EVAL_MAX_HOURS = 2
+            with db.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO trader_candidates (address, username, status, "
+                    " paper_trades, paper_wins, paper_pnl) "
+                    "VALUES ('0xSKR', 'skr', 'observing', 1, 1, 0.50)"
+                )
+                # Edge-case row: status='open' (not yet flipped to 'closed')
+                # but is_resolved=1 (tracker already marked resolution).
+                # close_paper_trades must NOT treat this as a fresh close.
+                conn.execute(
+                    "INSERT INTO paper_trades "
+                    "(candidate_address, condition_id, market_question, side, "
+                    " entry_price, status, pnl, resolved_price, is_resolved, "
+                    " close_reason, created_at, signature) "
+                    "VALUES ('0xSKR', 'CID-SK', 'Q?', 'YES', 0.55, 'open', "
+                    " 0.50, 0.95, 1, 'resolved_yes', "
+                    " datetime('now','localtime','-5 hours'), 'sig_sk')"
+                )
+
+            from bot import auto_discovery, ws_price_tracker
+            fake = type("FP", (), {
+                "get_price": lambda self, cid, side: 0.60,
+                "subscribe_condition": lambda self, cid: None,
+            })()
+            with patch.object(ws_price_tracker, "price_tracker", new=fake):
+                auto_discovery.close_paper_trades()
+
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT pnl, close_reason, is_resolved FROM paper_trades "
+                    "WHERE condition_id='CID-SK'"
+                ).fetchone()
+                cand = conn.execute(
+                    "SELECT paper_trades, paper_wins, paper_pnl "
+                    "FROM trader_candidates WHERE address='0xSKR'"
+                ).fetchone()
+            self.assertAlmostEqual(row["pnl"], 0.50, places=4,
+                                   msg="already-resolved row must not be touched")
+            self.assertEqual(row["close_reason"], "resolved_yes")
+            self.assertEqual(row["is_resolved"], 1)
+            # Rollup must not have been double-counted
+            self.assertEqual(cand["paper_trades"], 1)
+            self.assertEqual(cand["paper_wins"], 1)
+            self.assertAlmostEqual(cand["paper_pnl"], 0.50, places=4)
+        finally:
+            import config as _cfg
+            _cfg.PAPER_EVAL_MAX_HOURS = self._saved_hours
+            teardown_temp_db(path)
+
     def test_legacy_rows_survive_b0_migration(self):
         """Legacy rows inserted before B0 must survive init_db run and the
         new columns must come back as their declared defaults (empty/NULL/0),

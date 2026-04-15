@@ -2,6 +2,76 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — Scenario D Phase B2: paper resolution tracker
+
+Real-outcome-based paper PnL. Replaces the hardcoded 4h mark-to-market + `entry * 0.95` fake-loss fallback in `auto_discovery.close_paper_trades` with a two-path system:
+
+1. **`outcome_tracker.track_paper_outcomes()`** — new function, registered as a 30min apscheduler job at `main.py:paper_outcome_tracker`. Queries `paper_trades WHERE status='open' AND is_resolved=0`, calls the side-aware `get_market_price(cid, side=row.side)`, and either closes the row with real resolved-price pnl + `close_reason='resolved_yes'|'resolved_no'`, or just refreshes `current_price` for the dashboard view. Gated by env `PAPER_RESOLUTION_TRACKING_ENABLED=true`.
+2. **`close_paper_trades()` refactor** — uses env `PAPER_EVAL_MAX_HOURS=24` instead of hardcoded 4h; the `entry * 0.95` fake-loss fallback is **deleted**; rows without a ws_price_tracker price stay open and get retried next cycle; rows past `PAPER_EVAL_MAX_HOURS * 3` are force-closed with `pnl=0` and `close_reason='abandoned'` to prevent unbounded open-row accumulation. Also defensively skips `is_resolved=1` rows to avoid double-counting.
+
+### Bonus: side-aware `get_market_price` fixes a historical blocked_trades bug
+
+While refactoring `bot/outcome_tracker.py::_get_market_price` I noticed the function returned `outcomePrices[0]` **regardless of which outcome the trade was on**. For a market "Stars vs Sabres" with `outcomes=["Stars","Sabres"]` and `outcomePrices=["0.58","0.42"]`, a trade on "Sabres" was getting Stars' price. Silent data corruption affecting every multi-outcome blocked_trade on the 2nd outcome, taint depth historical.
+
+Fix: `get_market_price(cid, asset, side)` now takes optional `side`, matches it case-insensitively against the `outcomes` list, and returns the price for THAT outcome. Without `side` (blocked_trades compat path), returns outcomePrices[0] — same as before. With side (paper tracker path + any future caller that passes it), returns the correct per-side price.
+
+This fixes three bugs in one helper:
+- `conditionId` vs `condition_ids` Gamma param (fixed earlier today in b60df16)
+- Archived/resolved market handling (now two-tier fallback: default query → `archived=true`)
+- Multi-outcome side selection (this session)
+
+Plus a defensive `conditionId` match check: if Gamma returns a market whose conditionId does not match what we requested (case-insensitive), reject and return (None, False). Defense against future silent param regressions.
+
+### Also: `bot/outcome_tracker.py::_get_market_price` → `get_market_price` (public)
+
+Dropped the leading underscore so `main.py` + `auto_discovery.py` can import it cleanly. Internal call at `track_outcomes` (blocked_trades path) updated. No external callers existed before this session.
+
+### Tests
+
+New:
+- `tests/test_paper_outcome_tracker.py` (7 cases): resolved win/loss close paths, unresolved active market updates current_price only, null price leaves row untouched, tracking disabled is no-op, rollups update after resolution, idempotency — already-resolved rows are not double-counted.
+
+Extended:
+- `tests/test_outcome_tracker_gamma_param.py` (5 cases total, up from 1): condition_ids plural param, archived fallback, case-insensitive conditionId match, mismatched-conditionId rejection, side-aware outcome selection.
+- `tests/test_paper_follow_stateful.py::TestPaperTradesCleanupMigration` (+4 cases): PAPER_EVAL_MAX_HOURS respected, no fake pnl when price None, force-close after 3× budget, `is_resolved=1` rows skipped.
+
+**40/40 Phase-A+B0+B2 regression suite green.**
+
+### Migration / env / risk profile
+
+- **No schema change** (B0 already added the columns this feature populates).
+- **No live-trading touch**. `copy_trader.copy_followed_wallets` and its filter chain are not modified. All B2 changes live in the paper side of the pipeline.
+- **Env defaults safe-on**: `PAPER_EVAL_MAX_HOURS=24` (was hardcoded 4), `PAPER_RESOLUTION_TRACKING_ENABLED=true` (new). Both can be flipped in settings.env for instant rollback (hot-reload picks them up within 5s except for the scheduler interval which is process-lifetime).
+- **Worst case if tracker misbehaves**: too many Gamma API calls in a single cycle → rate limited → slow cycle → next cycle catches up. No cascading effect on live trading.
+- **Rollback**: `git revert <B2 commit>` + scp + restart. Or `PAPER_RESOLUTION_TRACKING_ENABLED=false` in settings.env for a code-less kill switch.
+
+### What B2 does NOT do (deferred)
+
+- **Phase B1** (paper-live filter symmetry) — paper still uses the legacy 5-filter chain in `paper_follow_candidates`. B2 gives paper real PnL data but paper is still testing the wrong filter-set. B1 next session.
+- **Phase γ probation tier** — auto-promoted traders still get NEUTRAL defaults. Probation tier (50% NEUTRAL bet size + $5 absolute cap, 14d / 20 trades graduation) comes with Phase D work.
+- **50-cid limit in `dashboard/app.py::api_paper_traders`** — not fixed in this commit. The tracker populating `current_price` means the dashboard path hits Gamma less often, but the cap is still there. Planned: dashboard reads current_price from DB and skips live Gamma calls entirely, once the tracker has been running long enough to prove it keeps data fresh.
+
+### Verification commands (post-deploy)
+
+```bash
+# Is the new scheduler job registered?
+ssh walter@10.0.0.20 'sudo journalctl -u polybot --since "1 minute ago" --no-pager 2>&1 | grep "paper_outcome_tracker"'
+
+# Force a manual run and inspect the result
+ssh walter@10.0.0.20 'cd /home/walter/polymarketscanner && venv/bin/python3 -c "
+from bot.outcome_tracker import track_paper_outcomes
+print(track_paper_outcomes())
+"'
+
+# Check how many paper_trades got populated
+ssh walter@10.0.0.20 'cd /home/walter/polymarketscanner && venv/bin/python3 -c "
+import sqlite3
+c = sqlite3.connect(\"database/scanner.db\"); c.row_factory = sqlite3.Row
+for r in c.execute(\"SELECT COUNT(*) n, COUNT(current_price) has_cp, COUNT(resolved_price) has_rp, SUM(CASE WHEN is_resolved=1 THEN 1 ELSE 0 END) resolved FROM paper_trades WHERE status=\\\"open\\\"\"):
+    print(dict(r))
+"'
+```
+
 ## 2026-04-15 — fix(gamma-api): correct filter param to `condition_ids` (plural, snake_case)
 
 Discovered while verifying the `4ac892a` cherry-pick (live unrealized PnL for paper traders). The cherry-picked code called `GET gamma-api/markets?conditionId=...` — and so did our own pre-existing `bot/outcome_tracker.py::_get_market_price`. Both were silently broken.
