@@ -2,6 +2,20 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — cherry-pick from piff-custom: dashboard trader-tier + followed-only filter
+
+Tiny UI-only cherry-pick from `piff-gitlab/piff-custom` into `dashboard/app.py`. Two hunks:
+
+1. `api_trader_stats` — only include addresses that are in the followed set when aggregating stats. Keeps non-followed candidate wallets out of the trader-stats view.
+2. `api_trader_performance` — add `tier` field per trader via `bot.auto_tuner._classify_trader` (STAR / SOLID / NEUTRAL / WEAK / TERRIBLE). Wrapped in `try/except → "NEUTRAL"` for defense in depth.
+
+**Explicitly skipped** from the same piff branch:
+- `bot/auto_tuner.py` — piff disabled STOP_LOSS_MAP auto-write (“User wants no stop-loss”). That is piff's user policy, not ours. Kept unchanged so our auto_tuner keeps writing stop-loss maps.
+- `main.py` — piff defined a `paper_scan()` function at the bottom of the file but the `scheduler.add_job(paper_scan, ...)` registration got lost in a later upstream merge. It's dead code in piff's HEAD. Skipped.
+- `settings.live.env` — new 184-line tracked snapshot of piff's live settings. Our `config.py` only reads `settings.env`, not `settings.live.env`, so the file is functionally inert, but importing it would pollute the git history with piff-specific config. Skipped.
+
+No functional trading-logic changes. Dashboard-only improvements.
+
 ## 2026-04-15 — Scenario D Phase A: paper_trades full signature dedup + sort-starvation fix + orphan cleanup
 
 ### What piff needs to do

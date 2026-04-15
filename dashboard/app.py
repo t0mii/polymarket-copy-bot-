@@ -930,8 +930,11 @@ def api_trader_stats():
     except Exception:
         pass
 
+    followed_addrs = set(trader_map.keys())
     for t in all_trades:
         addr = t["wallet_address"]
+        if followed_addrs and addr not in followed_addrs:
+            continue
         if addr not in trader_map:
             trader_map[addr] = {
                 "username": t["wallet_username"] or addr[:12],
@@ -1537,6 +1540,22 @@ def api_trader_performance():
                     loss_streak += 1
             d["win_streak"] = win_streak
             d["loss_streak"] = loss_streak
+            # Tier from auto_tuner classification (cherry-picked from piff-custom)
+            try:
+                from bot.auto_tuner import _classify_trader
+                s30 = conn.execute(
+                    "SELECT trades_count, total_pnl, winrate FROM trader_performance "
+                    "WHERE trader_name = ? AND period = %s" % repr("30d"), (name,)
+                ).fetchone()
+                pnl30 = s30["total_pnl"] if s30 else 0
+                wr30 = s30["winrate"] if s30 else 50
+                cnt30 = s30["trades_count"] if s30 else 0
+                d["tier"] = _classify_trader(
+                    d["total_pnl"], d["winrate"], d["trades_count"],
+                    pnl30, wr30
+                ).upper()
+            except Exception:
+                d["tier"] = "NEUTRAL"
             result.append(d)
     return jsonify({"traders": result})
 
