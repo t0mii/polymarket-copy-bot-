@@ -1485,13 +1485,23 @@ def api_ai_dismiss(rec_id):
 
 @app.route("/api/upgrade/trader-performance")
 def api_trader_performance():
-    """Performance aller Trader mit Status + 1d Daten + kopierte Trades."""
+    """Performance aller Trader mit Status + 1d Daten + kopierte Trades.
+
+    Only currently-followed wallets (wallets.followed=1) are returned.
+    Stale trader_performance rows for previously-promoted or
+    previously-followed traders that are no longer in FOLLOWED_TRADERS
+    are filtered out so the dashboard view matches settings.env state.
+    """
     with db.get_connection() as conn:
         perf = conn.execute(
             "SELECT tp.*, ts.status as trader_status, ts.bet_multiplier, ts.reason "
             "FROM trader_performance tp "
             "LEFT JOIN trader_status ts ON tp.trader_name = ts.trader_name "
-            "WHERE tp.period = '7d' AND tp.trader_name != 'imported' AND tp.trader_name != 'test' ORDER BY tp.total_pnl DESC"
+            "WHERE tp.period = '7d' "
+            "  AND tp.trader_name != 'imported' "
+            "  AND tp.trader_name != 'test' "
+            "  AND tp.trader_name IN (SELECT username FROM wallets WHERE followed = 1) "
+            "ORDER BY tp.total_pnl DESC"
         ).fetchall()
         result = []
         for row in perf:
