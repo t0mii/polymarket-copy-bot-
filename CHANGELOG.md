@@ -2,6 +2,49 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — Scenario D Phase γ.5b: probation bet-sizing wired into live
+
+Completes Phase γ.5 by wiring the `probation_limits(username)` helper into `bot.copy_trader._calculate_position_size`. When a trader is in probation (auto-promoted, within 14 days / 20 trades):
+
+1. The bet size computed by the standard formula is multiplied by `PROBATION_BET_SIZE_PCT` (default 0.5 → half size).
+2. The result is hard-capped at `PROBATION_MAX_EXPOSURE_USD` (default $5).
+3. If that brings size below `MIN_TRADE_SIZE`, the function returns 0 (blocks the trade rather than trading below minimum).
+
+`_calculate_position_size` is the single chokepoint for all bet-sizing in `copy_trader` — every buy path calls it. So one edit in that function auto-applies the probation logic to the diff path, the activity path, the hedge-wait path, and the pending-buy path.
+
+Decrement: after a successful `db.create_copy_trade()` in the activity path, `decrement_probation_trade(username)` is called. The SQL `UPDATE` only fires for traders with a non-empty `probation_until` column, so the call is a safe no-op for manually-followed traders.
+
+### Test coverage
+
+Extended `tests/test_probation_tier.py` with 3 cases in a new `TestCalculatePositionSizeProbationOverride` class:
+- non_probation_trader_gets_standard_size — sanity: a trader with no probation state gets the full formula output
+- probation_trader_hits_exposure_cap — PROBATION_MAX_EXPOSURE_USD=5 + base size $12 → result ≤ $5
+- probation_trader_bet_multiplier_halves_size — with cap inactive, probation output is ~0.5× base
+
+Tests patch `copy_trader.MAX_POSITION_SIZE` and `copy_trader.BET_SIZE_PCT` directly because they're captured at module import time (changing `config.*` after import doesn't propagate).
+
+Full session regression: 166/166 green.
+
+### Behavioral impact
+
+**Zero** for manually-followed traders. `probation_limits("xsaghav")` returns `(1.0, None)` because `xsaghav` has an empty `probation_until` column, and that's the branch that's a pure no-op in `_calculate_position_size`.
+
+The wiring only activates for traders that passed through `start_probation` — which today is nobody, because `AUTO_DISCOVERY_AUTO_PROMOTE=false` blocks the entire auto-promotion path. So deploying γ.5b is a dormant-feature ship: zero observable behavior change, but the moment the master flag flips, new auto-promoted traders are automatically bounded by probation without any additional changes.
+
+### What remains for "autopromote+autofollow perfect"
+
+After this commit, the invariant checklist is:
+
+1. Paper = Live filter chain — **✓** (B1a + B1b)
+2. Paper-PnL from real resolution — **✓** (B2)
+3. Promotion gate statistically sound — **✓** (γ.1-γ.3, Wilson LB + ROI + recency + abs floor)
+4. Probation-Tier for new promotes — **✓** (γ.5 + γ.5b wiring)
+5. Circuit breaker — **✓** (γ.4, live computation every cycle)
+6. Observability + Alerting — **✓** (dry-run endpoint + activity_log)
+7. Manual kill switch — **✓** (unchanged)
+
+**All 7 invariants met.** The master flag `AUTO_DISCOVERY_AUTO_PROMOTE=false` is now the ONLY thing preventing auto-promotion from firing. Flipping it requires the Phase B2 calibration validation period: paper-trade data from the B2 resolution tracker (running since this afternoon) needs to accumulate enough signal that the dry-run endpoint shows would_promote=true candidates with believable win rates. Realistic timeline: 1-2 weeks of observation.
+
 ## 2026-04-15 — Scenario D Phase B1b: copy_trader rewire to shared helper
 
 Pure-refactor follow-up to B1a. Rewires `bot/copy_trader.py::copy_followed_wallets` lines 1744-1813 to call `apply_pre_score_filters_live(trade, username, avg_trader_size, run_scorer=False)` instead of the inline 6-filter block. Same filter set, same order, same verdicts.

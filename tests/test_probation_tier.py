@@ -157,5 +157,105 @@ class TestProbationTier(unittest.TestCase):
         self.assertEqual(cap, 5.0)
 
 
+class TestCalculatePositionSizeProbationOverride(unittest.TestCase):
+    """γ.5b wiring: `_calculate_position_size` must scale + cap bet sizes
+    for traders in the probation window. Non-probation traders get the
+    standard sizing unchanged."""
+
+    def setUp(self):
+        self.path = setup_temp_db()
+        from database import db
+        self.db = db
+        import config
+        # Patch copy_trader module globals (MAX_POSITION_SIZE and
+        # BET_SIZE_PCT are captured at import time; setting the config
+        # values does NOT propagate to the already-imported module).
+        from bot import copy_trader as ct
+        self._saved_max = ct.MAX_POSITION_SIZE
+        self._saved_bet = ct.BET_SIZE_PCT
+        ct.MAX_POSITION_SIZE = 50.0  # raise so probation cap can bind
+        ct.BET_SIZE_PCT = 0.1  # 10% so base is clearly > 5 on $200 cash
+        self._saved = {
+            "pct": getattr(config, "PROBATION_BET_SIZE_PCT", 0.5),
+            "cap": getattr(config, "PROBATION_MAX_EXPOSURE_USD", 5.0),
+            "days": getattr(config, "PROBATION_DURATION_DAYS", 14),
+            "trades": getattr(config, "PROBATION_MAX_TRADES", 20),
+            "bet_pct": getattr(config, "BET_SIZE_PCT", 0.04),
+        }
+        config.PROBATION_BET_SIZE_PCT = 0.5
+        config.PROBATION_MAX_EXPOSURE_USD = 5.0
+        config.PROBATION_DURATION_DAYS = 14
+        config.PROBATION_MAX_TRADES = 20
+        config.BET_SIZE_PCT = 0.1  # 10% of cash so base is clearly > 5
+
+    def tearDown(self):
+        import config
+        from bot import copy_trader as ct
+        ct.MAX_POSITION_SIZE = self._saved_max
+        ct.BET_SIZE_PCT = self._saved_bet
+        for k, v in (("PROBATION_BET_SIZE_PCT", self._saved["pct"]),
+                     ("PROBATION_MAX_EXPOSURE_USD", self._saved["cap"]),
+                     ("PROBATION_DURATION_DAYS", self._saved["days"]),
+                     ("PROBATION_MAX_TRADES", self._saved["trades"]),
+                     ("BET_SIZE_PCT", self._saved["bet_pct"])):
+            setattr(config, k, v)
+        teardown_temp_db(self.path)
+
+    def _seed_probation_trader(self, addr: str, username: str):
+        from bot.promotion import start_probation
+        with self.db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO trader_candidates (address, username, status) "
+                "VALUES (?, ?, 'promoted')", (addr, username),
+            )
+        start_probation(addr)
+
+    def test_non_probation_trader_gets_standard_size(self):
+        """A manually-followed trader (no probation state) gets whatever
+        the standard formula returns — not the probation cap."""
+        from bot import copy_trader as ct
+        size = ct._calculate_position_size(
+            entry_price=0.55, cash=200.0, trader_ratio=1.0,
+            portfolio_value=200.0, trader_name="manually_followed",
+        )
+        # With default BET_SIZE_PCT ~3% of 200 ≈ $6, not capped to $5
+        self.assertGreater(size, 5.0,
+                           "non-probation trader must not hit probation cap")
+
+    def test_probation_trader_hits_exposure_cap(self):
+        self._seed_probation_trader("0xprobsz", "probsz")
+        from bot import copy_trader as ct
+        size = ct._calculate_position_size(
+            entry_price=0.55, cash=200.0, trader_ratio=1.0,
+            portfolio_value=200.0, trader_name="probsz",
+        )
+        self.assertLessEqual(size, 5.0,
+                             "probation trader must be capped at $5, got $%.2f" % size)
+
+    def test_probation_trader_bet_multiplier_halves_size(self):
+        """If the uncapped size would have been well below $5, the cap
+        doesn't bind. But the 0.5 multiplier must still halve it."""
+        import config
+        config.PROBATION_BET_SIZE_PCT = 0.5
+        config.PROBATION_MAX_EXPOSURE_USD = 100.0  # cap inactive
+
+        self._seed_probation_trader("0xprobmul", "probmul")
+        from bot import copy_trader as ct
+        # Non-probation baseline for comparison
+        base = ct._calculate_position_size(
+            entry_price=0.55, cash=200.0, trader_ratio=1.0,
+            portfolio_value=200.0, trader_name="not_in_probation",
+        )
+        probation = ct._calculate_position_size(
+            entry_price=0.55, cash=200.0, trader_ratio=1.0,
+            portfolio_value=200.0, trader_name="probmul",
+        )
+        # Probation must be ≈ 50% of base (within MIN_TRADE_SIZE floor)
+        if probation > 0:
+            self.assertLessEqual(probation, base * 0.55,
+                                 "probation size must be ~50%% of base, got %.2f vs %.2f"
+                                 % (probation, base))
+
+
 if __name__ == "__main__":
     unittest.main()

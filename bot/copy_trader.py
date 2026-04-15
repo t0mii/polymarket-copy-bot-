@@ -466,7 +466,37 @@ def _calculate_position_size(entry_price: float, cash: float, trader_ratio: floa
     # PATCH-030: if available < MIN_TRADE_SIZE, return 0 to block the trade
     if available < MIN_TRADE_SIZE:
         return 0
-    return round(max(MIN_TRADE_SIZE, min(size, available)), 2)
+    size = max(MIN_TRADE_SIZE, min(size, available))
+
+    # Scenario-D Phase γ.5b: probation-tier override.
+    # Auto-promoted traders start in a bounded-risk window for their
+    # first PROBATION_MAX_TRADES / PROBATION_DURATION_DAYS — whichever
+    # expires first. During the window their bet size is scaled by
+    # PROBATION_BET_SIZE_PCT (default 0.5 = 50% of NEUTRAL) and hard-
+    # capped at PROBATION_MAX_EXPOSURE_USD (default $5). Non-probation
+    # traders get (mult=1.0, cap=None) which is a no-op.
+    try:
+        from bot.promotion import probation_limits
+        _prob_mult, _prob_cap = probation_limits(trader_name)
+        if _prob_mult != 1.0 or _prob_cap is not None:
+            _pre = size
+            size = size * _prob_mult
+            if _prob_cap is not None and size > _prob_cap:
+                size = _prob_cap
+            if size < MIN_TRADE_SIZE:
+                logger.info(
+                    "[PROBATION] %s: capped size $%.2f below MIN_TRADE_SIZE $%.2f — blocking trade",
+                    trader_name, size, MIN_TRADE_SIZE)
+                return 0
+            logger.info(
+                "[PROBATION] %s: $%.2f -> $%.2f (mult=%.2f, cap=%s)",
+                trader_name, _pre, size, _prob_mult,
+                ("$%.2f" % _prob_cap) if _prob_cap is not None else "none")
+    except Exception as _pe:
+        # Never break live sizing on a probation-lookup error.
+        logger.debug("[PROBATION] sizing check error for %s: %s", trader_name, _pe)
+
+    return round(size, 2)
 
 
 CASH_FLOOR = config.CASH_FLOOR
@@ -2206,6 +2236,15 @@ def copy_followed_wallets():
                 total_invested += size
                 balance -= size  # Update balance to prevent over-investment
                 _cached_open_trades.append(trade)
+
+                # Scenario-D Phase γ.5b: decrement the trader's probation
+                # budget after a successful fresh copy_trade row. Non-
+                # probation traders are a no-op via the SQL WHERE clause.
+                try:
+                    from bot.promotion import decrement_probation_trade
+                    decrement_probation_trade(username)
+                except Exception:
+                    pass
 
                 if cid:
                     price_tracker.subscribe_condition(cid)
