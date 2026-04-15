@@ -1651,16 +1651,30 @@ def add_paper_trade(address: str, cid: str, question: str, side: str, price: flo
 
 
 def get_candidate_stats(address: str) -> dict:
-    """Paper-Trade-Stats fuer einen Kandidaten."""
+    """Paper-Trade-Stats fuer einen Kandidaten.
+
+    Scenario D Phase E.1 — respects `config.PROMOTE_STATS_CUTOFF`.
+    If the env var is set to an ISO datetime, rows closed before that
+    timestamp are excluded. Used to filter out pre-B2 fake-loss-
+    contaminated rows from the promotion gate without deleting them.
+    Empty cutoff (default) preserves pre-E.1 behavior exactly.
+    """
+    cutoff = (getattr(config, 'PROMOTE_STATS_CUTOFF', '') or '').strip()
+    base_sql = (
+        "SELECT COUNT(*) as total, "
+        "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins, "
+        "SUM(CASE WHEN pnl < 0 THEN 1 ELSE 0 END) as losses, "
+        "COALESCE(SUM(pnl), 0) as total_pnl "
+        "FROM paper_trades WHERE candidate_address = ? AND status = 'closed'"
+    )
+    if cutoff:
+        sql = base_sql + " AND closed_at >= ?"
+        params = (address, cutoff)
+    else:
+        sql = base_sql
+        params = (address,)
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) as total, "
-            "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins, "
-            "SUM(CASE WHEN pnl < 0 THEN 1 ELSE 0 END) as losses, "
-            "COALESCE(SUM(pnl), 0) as total_pnl "
-            "FROM paper_trades WHERE candidate_address = ? AND status = 'closed'",
-            (address,)
-        ).fetchone()
+        row = conn.execute(sql, params).fetchone()
         return dict(row) if row else {"total": 0, "wins": 0, "losses": 0, "total_pnl": 0}
 
 

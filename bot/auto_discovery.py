@@ -534,13 +534,25 @@ def check_promotions():
         except Exception:
             pass
 
-        # Newest paper_trade age (for the recency gate)
+        # Newest paper_trade age (for the recency gate).
+        # Scenario D Phase E.1 — respect PROMOTE_STATS_CUTOFF so the
+        # recency check agrees with get_candidate_stats on which rows
+        # "exist" for gate purposes.
+        _cutoff = (getattr(config, 'PROMOTE_STATS_CUTOFF', '') or '').strip()
         with db.get_connection() as _conn:
-            _newest_row = _conn.execute(
-                "SELECT MAX(created_at) AS newest "
-                "FROM paper_trades WHERE candidate_address=? AND status='closed'",
-                (cand["address"],),
-            ).fetchone()
+            if _cutoff:
+                _newest_row = _conn.execute(
+                    "SELECT MAX(created_at) AS newest "
+                    "FROM paper_trades WHERE candidate_address=? "
+                    "  AND status='closed' AND closed_at >= ?",
+                    (cand["address"], _cutoff),
+                ).fetchone()
+            else:
+                _newest_row = _conn.execute(
+                    "SELECT MAX(created_at) AS newest "
+                    "FROM paper_trades WHERE candidate_address=? AND status='closed'",
+                    (cand["address"],),
+                ).fetchone()
         newest_raw = _newest_row["newest"] if _newest_row else ""
         if newest_raw:
             try:

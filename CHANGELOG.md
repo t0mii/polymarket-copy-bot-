@@ -2,6 +2,128 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — Scenario D Phase E.1: stats-cutoff filter (planned, not yet shipped at top of CHANGELOG)
+
+**Status at entry-write time**: plan approved, memory updated, code change drafted but not yet committed. This section is the SPEC of what will ship. When the commit lands, replace "planned" with the commit SHA and the "Deploy / verify" block.
+
+### The problem this solves
+
+After shipping all of Phase A-γ today (11 commits, 166 tests green), a live audit revealed that **1559 historical `paper_trades` are all fake-loss-contaminated** from the pre-B2 `entry * 0.95` fallback code path. Every "closed" row has `pnl ≈ -0.05`, `current_price = entry_price * 0.95`, `close_reason = ''` — the classic fingerprint of the old code. The promotion gate's Wilson LB + WR thresholds are mathematically impossible to clear when every candidate's observed win rate is dominated by artificial losses.
+
+Three concrete blockers prevent the `AUTO_DISCOVERY_AUTO_PROMOTE` flip today:
+1. Fake-loss contamination (1559 rows) poisoning win-rate signal
+2. Stale `activity_log` promotion event from 2026-04-13 (orphan incident) trips the 7-day cooldown until ~2026-04-20
+3. Insufficient clean post-B2 data (only 2-3h of uncontaminated trades) — would take 1-2 weeks to clear `PROMOTE_MIN_PAPER_TRADES=100` organically
+
+### The fix (Phase E.1 code + E.2 env + E.3 SQL)
+
+**E.1 code change** — new env var `PROMOTE_STATS_CUTOFF` that acts as a non-destructive filter on the promotion-gate queries:
+
+- `config.py`:
+  ```python
+  PROMOTE_STATS_CUTOFF = os.getenv('PROMOTE_STATS_CUTOFF', '').strip()
+  ```
+  Empty string → filter inactive (backward-compat default).
+  ISO datetime string → `get_candidate_stats`, `compute_dry_run`, and `check_promotions`'s recency query all add `AND closed_at >= ?` to their WHERE clauses.
+
+- `database/db.py::get_candidate_stats` — conditionally append the filter
+- `bot/promotion.py::compute_dry_run` — same filter in the LEFT JOIN condition (so candidates with zero post-cutoff rows still appear with `n_trades=0`)
+- `bot/auto_discovery.py::check_promotions` — filter on the `MAX(created_at)` recency query
+- `tests/test_promotion_dryrun.py` — 3 new TDD cases (excludes pre-cutoff, empty = no filter, both paths agree)
+
+**Key property**: the 1559 contaminated rows stay in the `paper_trades` table as audit history. They're just ignored by the gate. Reversing the cutoff (unsetting the env var) puts them back in play instantly — zero data loss, zero destructive migration.
+
+**E.2 env change** — walter's `settings.env` gets a stepped-unlock override:
+```
+PROMOTE_STATS_CUTOFF=2026-04-15 17:19:00
+PROMOTE_MIN_PAPER_TRADES=30          # was 100 in config.py
+PROMOTE_MIN_WILSON_LOWER=0.55        # was 0.50 in config.py
+```
+
+The two relaxed thresholds make the first auto-promotion possible in 1-2 days instead of 1-2 weeks. All other gates stay strict (ROI ≥ 3%, abs_pnl ≥ $5, recency ≤ 14d). Safety rails unchanged (circuit breaker at $10 loss in 7d, probation tier at 50% bet + $5 cap + 14d/20-trade window). After the first successful auto-promotion graduates probation cleanly, these env overrides get removed and the `config.py` defaults (strict values) kick in.
+
+**E.3 SQL** — delete the stale cooldown row on walter:
+```sql
+DELETE FROM activity_log
+WHERE event_type='promotion' AND created_at < '2026-04-15';
+```
+Surgical: only pre-today promotion events. Snapshot the rows first for audit.
+
+### What piff needs to do on his server
+
+Piff's bot is a parallel instance running the same code in `main` branch against his own wallet + settings. To mirror Phase E.1 + E.2 + E.3 on piff's server:
+
+1. **`git pull`** to get the E.1 commit (SHA lands when committed)
+2. **Pre-deploy DB snapshot**:
+   ```bash
+   cp database/scanner.db database/scanner.db.bak.pre_phase_e.$(date +%s)
+   ```
+3. **Find piff's own B2 deploy minute** — run `git log --format='%h %ci %s' | grep -i 'Phase B2'` on piff's fork. The commit timestamp is the exact minute your paper_trades table started producing clean (non-fake-loss) rows. Use that as the cutoff value, NOT walter's `2026-04-15 17:19:00` (piff's deploy time is different).
+4. **Edit piff's `settings.env`** and add three lines:
+   ```
+   PROMOTE_STATS_CUTOFF=<piff-own-b2-deploy-minute-iso>
+   PROMOTE_MIN_PAPER_TRADES=30
+   PROMOTE_MIN_WILSON_LOWER=0.55
+   ```
+5. **Cooldown reset** (only if piff has stale `activity_log` promotion entries from before tonight):
+   ```bash
+   cd /path/to/piff/polymarketscanner && venv/bin/python3 -c "
+   import sqlite3
+   c = sqlite3.connect('database/scanner.db'); c.row_factory=sqlite3.Row
+   for r in c.execute(\"SELECT * FROM activity_log WHERE event_type='promotion'\").fetchall():
+       print(dict(r))
+   "
+   ```
+   If rows exist with stale dates, delete them the same way walter does:
+   ```bash
+   venv/bin/python3 -c "
+   import sqlite3
+   c = sqlite3.connect('database/scanner.db')
+   c.execute(\"DELETE FROM activity_log WHERE event_type='promotion' AND created_at < 'YYYY-MM-DD'\")
+   c.commit()
+   print('deleted', c.total_changes, 'rows')
+   "
+   ```
+   (Replace `YYYY-MM-DD` with whatever date piff deems the transition boundary.)
+6. **Restart polybot** so the new env vars are loaded and `init_db` runs any pending migrations (all the γ schema changes should already be applied from the Phase γ commit merge).
+7. **Verify via the dry-run endpoint**:
+   ```bash
+   curl -s http://localhost:8090/api/upgrade/promotion-dryrun | python3 -m json.tool
+   ```
+   Expected: `cooldown_active` is false, `circuit_breaker_halted` is false, `candidates` list shows piff's observing pool, most with `n_trades=0` because only post-cutoff data counts.
+
+8. **Observe 24-48h**. Hit the dry-run endpoint daily. When at least one candidate shows `would_promote=true`, manually sanity-check that candidate's strategy via the dashboard (`/brain` page has the new panel) and the `/api/brain/paper-traders` endpoint.
+
+9. **Flip the flag when ready** — independently from walter, on piff's own timeline. This is NOT synchronized across instances:
+   ```
+   # piff settings.env
+   AUTO_DISCOVERY_AUTO_PROMOTE=true
+   ```
+   Then `sudo systemctl restart polybot` (must restart — `config.AUTO_DISCOVERY_AUTO_PROMOTE` is captured at module load, not hot-reloaded).
+
+10. **Monitor the first auto-promotion** for 24-72h. Watch for `[PROBATION]` log lines, `probation_trades_left` countdown in trader_candidates, circuit breaker clearance, and no error tracebacks.
+
+**Rollback for piff** (any phase):
+- Cutoff filter off: `unset PROMOTE_STATS_CUTOFF` in settings.env + restart (hot-reload picks up most env changes within 5s but restart is safer)
+- Thresholds back to strict: remove `PROMOTE_MIN_PAPER_TRADES` + `PROMOTE_MIN_WILSON_LOWER` from settings.env
+- Flag off: `AUTO_DISCOVERY_AUTO_PROMOTE=false` + polybot restart
+- Full code rollback: `git revert <E.1 commit>` + push + pull on piff's fork + restart
+
+**Piff independence note**: piff's `FOLLOWED_TRADERS`, per-trader maps, wallet, and `settings.env` are fully independent from walter's. The SHARED artifact is the code in `main`. Piff should NOT copy walter's cutoff value directly — use piff's own B2 deploy timestamp. Piff can flip the flag on a different day than walter, observe different candidates get auto-promoted, and have different probation trajectories. That's expected and correct.
+
+### Tests
+
+New TDD cases in `tests/test_promotion_dryrun.py`:
+1. `test_cutoff_excludes_pre_cutoff_rows` — seed 10 rows before cutoff, 5 after, assert only 5 count
+2. `test_cutoff_empty_means_no_filter` — empty cutoff → all 15 count (backward compat)
+3. `test_cutoff_applies_to_both_get_candidate_stats_and_dry_run` — both paths agree on the filtered count
+
+Full session regression target: 169/169 green (166 current + 3 new).
+
+### Rollback / kill switches
+
+Same as any γ/E phase: `PROMOTE_STATS_CUTOFF=` (empty) in settings.env + restart disables the filter. Or `git revert <E.1 commit>` + scp + restart. Zero DB state changes so rollback is pure code + env.
+
 ## 2026-04-15 — dashboard: auto-promotion dry run panel (Phase γ.6 UI)
 
 Adds a live-refreshed dashboard panel that renders `/api/upgrade/promotion-dryrun` response data. Visible in `dashboard/templates/brain.html` between the Per-Trader Intelligence table and the Category Heatmap / Lifecycle Pipeline bottom grid.

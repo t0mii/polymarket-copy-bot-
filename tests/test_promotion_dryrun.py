@@ -157,5 +157,107 @@ class TestComputeDryRun(unittest.TestCase):
         self.assertTrue(result["circuit_breaker_halted"])
 
 
+class TestPromoteStatsCutoff(unittest.TestCase):
+    """Scenario D Phase E.1 — PROMOTE_STATS_CUTOFF env filter.
+
+    Non-destructive filter that excludes pre-cutoff paper_trades rows
+    from the promotion gate queries. Rows stay in the table (audit
+    trail), but `compute_dry_run`, `get_candidate_stats`, and
+    `check_promotions` ignore anything with `closed_at < cutoff`.
+    Default (empty cutoff) preserves the pre-E.1 behavior exactly.
+    """
+
+    def setUp(self):
+        self.path = setup_temp_db()
+        from database import db
+        self.db = db
+        import config
+        self._saved_cutoff = getattr(config, "PROMOTE_STATS_CUTOFF", "")
+
+    def tearDown(self):
+        import config
+        config.PROMOTE_STATS_CUTOFF = self._saved_cutoff
+        teardown_temp_db(self.path)
+
+    def _seed_row(self, addr: str, username: str, closed_days_ago: float,
+                  pnl: float = 0.10, cid_suffix: str = ""):
+        """Insert one closed paper_trade with explicit closed_at."""
+        cid = "cid_%s_%s_%s" % (username, closed_days_ago, cid_suffix)
+        with self.db.get_connection() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO trader_candidates (address, username, status) "
+                "VALUES (?, ?, 'observing')",
+                (addr, username),
+            )
+            conn.execute(
+                "INSERT INTO paper_trades "
+                "(candidate_address, condition_id, market_question, side, "
+                " entry_price, status, pnl, created_at, closed_at, signature) "
+                "VALUES (?, ?, 'Q', 'YES', 0.55, 'closed', ?, ?, ?, ?)",
+                (addr, cid, pnl, _ms_ago(closed_days_ago),
+                 _ms_ago(closed_days_ago), "sig_" + cid),
+            )
+
+    def test_empty_cutoff_means_no_filter_backward_compat(self):
+        import config
+        config.PROMOTE_STATS_CUTOFF = ""  # default / filter off
+        # Seed 15 closed rows at various ages
+        for i in range(10):
+            self._seed_row("0xa", "alice", closed_days_ago=10, cid_suffix="old%d" % i)
+        for i in range(5):
+            self._seed_row("0xa", "alice", closed_days_ago=1, cid_suffix="new%d" % i)
+
+        from bot.promotion import compute_dry_run
+        result = compute_dry_run()
+        alice = next(c for c in result["candidates"] if c["username"] == "alice")
+        self.assertEqual(alice["n_trades"], 15,
+                         "empty cutoff must count all rows (backward compat)")
+
+    def test_cutoff_excludes_pre_cutoff_rows_in_compute_dry_run(self):
+        import config
+        # Set cutoff to 5 days ago
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M:%S")
+        config.PROMOTE_STATS_CUTOFF = cutoff
+
+        # Seed: 10 rows at 10 days old (pre-cutoff), 5 rows at 1 day old (post-cutoff)
+        for i in range(10):
+            self._seed_row("0xa", "alice", closed_days_ago=10, cid_suffix="old%d" % i)
+        for i in range(5):
+            self._seed_row("0xa", "alice", closed_days_ago=1, cid_suffix="new%d" % i)
+
+        from bot.promotion import compute_dry_run
+        result = compute_dry_run()
+        alice = next(c for c in result["candidates"] if c["username"] == "alice")
+        self.assertEqual(alice["n_trades"], 5,
+                         "cutoff must exclude the 10 pre-cutoff rows, got n=%d" % alice["n_trades"])
+
+    def test_cutoff_also_applies_to_get_candidate_stats(self):
+        """`get_candidate_stats` is the production path used by
+        `check_promotions`. It must honor the same filter so the gate
+        and the dry-run endpoint agree on counts."""
+        import config
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M:%S")
+        config.PROMOTE_STATS_CUTOFF = cutoff
+
+        for i in range(10):
+            self._seed_row("0xa", "alice", closed_days_ago=10, cid_suffix="old%d" % i)
+        for i in range(5):
+            self._seed_row("0xa", "alice", closed_days_ago=1, cid_suffix="new%d" % i)
+
+        stats = self.db.get_candidate_stats("0xa")
+        self.assertEqual(stats["total"], 5,
+                         "get_candidate_stats must honor PROMOTE_STATS_CUTOFF, got %d" % stats["total"])
+
+        # Now also check compute_dry_run returns the same count — parity
+        from bot.promotion import compute_dry_run
+        result = compute_dry_run()
+        alice = next(c for c in result["candidates"] if c["username"] == "alice")
+        self.assertEqual(alice["n_trades"], stats["total"],
+                         "dry_run and get_candidate_stats must agree: %d vs %d"
+                         % (alice["n_trades"], stats["total"]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -273,9 +273,24 @@ def compute_dry_run(db_module=None) -> dict:
     if db_module is None:
         from database import db as db_module
 
+    import config as _config
     thresholds = _default_thresholds()
     cooldown_active, cooldown_reason = promotion_cooldown_active(db_module)
     breaker_halted, breaker_reason = compute_circuit_breaker_state(db_module)
+
+    # Scenario D Phase E.1 — stats cutoff filter. The cutoff moves
+    # into the LEFT JOIN condition (not the WHERE clause) so
+    # candidates with zero post-cutoff rows still appear in the
+    # output with n_trades=0 (the insufficient_trades branch of
+    # evaluate_promotion will reject them, which is the correct
+    # dry-run behavior).
+    cutoff = (getattr(_config, 'PROMOTE_STATS_CUTOFF', '') or '').strip()
+    if cutoff:
+        join_extra = " AND pt.closed_at >= ?"
+        join_params = (cutoff,)
+    else:
+        join_extra = ""
+        join_params = ()
 
     with db_module.get_connection() as conn:
         rows = conn.execute(
@@ -286,10 +301,11 @@ def compute_dry_run(db_module=None) -> dict:
             "  MAX(pt.created_at) AS newest_trade_at "
             "FROM trader_candidates tc "
             "LEFT JOIN paper_trades pt ON pt.candidate_address = tc.address "
-            "  AND pt.status = 'closed' "
+            "  AND pt.status = 'closed'" + join_extra + " "
             "WHERE tc.status IN ('observing', 'promoted') "
             "GROUP BY tc.address "
-            "ORDER BY total_pnl DESC"
+            "ORDER BY total_pnl DESC",
+            join_params,
         ).fetchall()
 
     from datetime import datetime

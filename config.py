@@ -287,6 +287,20 @@ PROBATION_MAX_EXPOSURE_USD = float(os.getenv('PROBATION_MAX_EXPOSURE_USD', '5.0'
 PROBATION_DURATION_DAYS  = float(os.getenv('PROBATION_DURATION_DAYS', '14'))
 PROBATION_MAX_TRADES     = int(os.getenv('PROBATION_MAX_TRADES', '20'))
 
+# Scenario-D Phase E.1 — stats cutoff filter.
+# Non-destructive filter for the promotion gate: when set to an ISO
+# datetime string, `get_candidate_stats`, `compute_dry_run`, and the
+# recency query in `check_promotions` all exclude paper_trades rows
+# with `closed_at < cutoff`. The rows stay in the table as audit
+# history; the gate just ignores them. Empty string (default) =
+# filter inactive, backward-compat behavior.
+#
+# On walter: set to the timestamp of the Phase B2 deploy (~2026-04-15
+# 17:19:00) so the 1559 historical fake-loss-contaminated rows from
+# the pre-B2 `entry * 0.95` fallback code are excluded from the gate.
+# Reversible: unset in settings.env → filter off → old rows count again.
+PROMOTE_STATS_CUTOFF     = os.getenv('PROMOTE_STATS_CUTOFF', '').strip()
+
 # Scenario-D Phase B2 — paper resolution tracker config.
 # `PAPER_EVAL_MAX_HOURS` replaces the hardcoded 4h cutoff in
 # auto_discovery.close_paper_trades. Rows past this window get closed with
