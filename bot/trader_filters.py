@@ -70,8 +70,19 @@ def apply_pre_score_filters(
     avg_trader_size: float,
     maps: dict,
     config_module=None,
+    run_scorer: bool = True,
 ) -> tuple:
-    """Run the 6 base decision filters + trade_scorer on a single trade."""
+    """Run the 6 base decision filters + (optionally) the trade_scorer.
+
+    `run_scorer=True` (default, used by paper) runs the full 7-step
+    chain including the ML scorer. `run_scorer=False` (used by live)
+    skips the scorer so copy_trader can keep its inline scorer call
+    at line 2152 unchanged — preserving live filter order as a pure
+    refactor. Without the flag, moving the scorer into the helper
+    would have shifted it BEFORE state-dependent filters (max_copies,
+    hedge, exposure, etc.), which is a semantic change we're not
+    ready to make.
+    """
     if config_module is None:
         import config as config_module
 
@@ -153,52 +164,60 @@ def apply_pre_score_filters(
                 "zero_risk: %s underdog at %.0fc" % (category, price * 100),
                 metadata)
 
-    # Filter 6: trade_scorer
-    try:
-        score_result = score_trade(
-            trader_name=trader_name,
-            condition_id=cid,
-            side=side,
-            entry_price=price,
-            market_question=question,
-            category=category,
-            event_slug=event_slug,
-            trader_size_usd=usdc_size,
-            spread=0.03,
-            hours_until_event=12,
-        )
-    except Exception as _e:
-        # Fail-open — matches copy_trader.py:932-934 behavior
-        score_result = {
-            "action": "EXECUTE",
-            "score": 50,
-            "components": {},
-            "reason": "scorer_error: %s" % _e,
-        }
+    # Filter 6: trade_scorer (optional — live skips via run_scorer=False
+    # and keeps its inline scorer call at copy_trader.py:2152)
+    if run_scorer:
+        try:
+            score_result = score_trade(
+                trader_name=trader_name,
+                condition_id=cid,
+                side=side,
+                entry_price=price,
+                market_question=question,
+                category=category,
+                event_slug=event_slug,
+                trader_size_usd=usdc_size,
+                spread=0.03,
+                hours_until_event=12,
+            )
+        except Exception as _e:
+            # Fail-open — matches copy_trader.py:932-934 behavior
+            score_result = {
+                "action": "EXECUTE",
+                "score": 50,
+                "components": {},
+                "reason": "scorer_error: %s" % _e,
+            }
 
-    action = score_result.get("action", "EXECUTE")
-    metadata["score_action"] = action
-    metadata["ml_score"] = score_result.get("score")
-    metadata["score_components"] = score_result.get("components", {})
+        action = score_result.get("action", "EXECUTE")
+        metadata["score_action"] = action
+        metadata["ml_score"] = score_result.get("score")
+        metadata["score_components"] = score_result.get("components", {})
 
-    if action == "BLOCK":
-        return (False,
-                "score_block: %s" % score_result.get("reason", "low_score"),
-                metadata)
-    if action == "QUEUE":
-        # Paper treats QUEUE as reject. Live callers inspect
-        # metadata.score_action == 'QUEUE' and enqueue instead of skipping.
-        return (False,
-                "score_queue: %s (paper rejects, live enqueues)" %
-                score_result.get("reason", "marginal"),
-                metadata)
+        if action == "BLOCK":
+            return (False,
+                    "score_block: %s" % score_result.get("reason", "low_score"),
+                    metadata)
+        if action == "QUEUE":
+            # Paper treats QUEUE as reject. Live callers inspect
+            # metadata.score_action == 'QUEUE' and enqueue instead of skipping.
+            return (False,
+                    "score_queue: %s (paper rejects, live enqueues)" %
+                    score_result.get("reason", "marginal"),
+                    metadata)
 
     return (True, "ok", metadata)
 
 
 def apply_pre_score_filters_live(trade: dict, trader_name: str,
-                                 avg_trader_size: float) -> tuple:
-    """Thin wrapper: reads per-trader maps from copy_trader module globals."""
+                                 avg_trader_size: float,
+                                 run_scorer: bool = True) -> tuple:
+    """Thin wrapper: reads per-trader maps from copy_trader module globals.
+
+    `run_scorer` defaults to True (paper mode). Live callers that want
+    to preserve the inline scorer at copy_trader.py:2152 pass False
+    explicitly so the helper skips its scorer call.
+    """
     from bot import copy_trader as ct
     import config as _config
     maps = {
@@ -214,4 +233,5 @@ def apply_pre_score_filters_live(trade: dict, trader_name: str,
         avg_trader_size=avg_trader_size,
         maps=maps,
         config_module=_config,
+        run_scorer=run_scorer,
     )

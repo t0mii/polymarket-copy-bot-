@@ -252,6 +252,51 @@ class TestApplyPreScoreFilters(unittest.TestCase):
         self.assertTrue(passed, "scorer error must fail-open, got: %s" % reason)
         self.assertEqual(meta["score_action"], "EXECUTE")
 
+    def test_run_scorer_false_skips_ml_check_entirely(self):
+        """When called with run_scorer=False, the helper returns passed=True
+        after the 6 base filters without calling the ML scorer at all.
+
+        This is the live path mode: live copy_trader keeps its inline
+        scorer call at line 2152, so the helper just needs to verify the
+        base filters match the old inline block. Adding the scorer
+        inside the helper would have moved it BEFORE state-dependent
+        filters, which is a semantic change we don't want for live.
+        """
+        from bot.trader_filters import apply_pre_score_filters
+        # A mock that would return BLOCK if called — test asserts it's NOT called
+        from unittest.mock import MagicMock
+        fake_scorer = MagicMock(return_value={
+            "action": "BLOCK", "score": 0, "components": {}, "reason": "test",
+        })
+        with patch("bot.trader_filters.score_trade", new=fake_scorer):
+            passed, reason, meta = apply_pre_score_filters(
+                trade=_trade(),
+                trader_name="xsaghav",
+                avg_trader_size=50.0,
+                maps=_empty_maps(),
+                config_module=_permissive_config(),
+                run_scorer=False,
+            )
+        self.assertTrue(passed, "run_scorer=False + clean trade must pass")
+        self.assertEqual(reason, "ok")
+        fake_scorer.assert_not_called()
+        self.assertIsNone(meta["score_action"],
+                          "score_action must stay None when scorer is skipped")
+
+    def test_run_scorer_false_still_applies_base_filters(self):
+        """run_scorer=False skips the scorer but NOT the 6 base filters."""
+        from bot.trader_filters import apply_pre_score_filters
+        cfg = _permissive_config()
+        cfg.MIN_TRADER_USD = 50.0
+        passed, reason, _ = apply_pre_score_filters(
+            trade=_trade(usdc_size=10), trader_name="xsaghav",
+            avg_trader_size=50.0, maps=_empty_maps(), config_module=cfg,
+            run_scorer=False,
+        )
+        self.assertFalse(passed,
+                         "base filters must still run when run_scorer=False")
+        self.assertTrue(reason.startswith("min_trader_usd"))
+
     def test_filters_run_in_canonical_order(self):
         """Category blacklist is filter 0 — it must fire before min_trader_usd
         even when both would independently reject."""

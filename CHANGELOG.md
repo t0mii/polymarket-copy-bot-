@@ -2,6 +2,29 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — Scenario D Phase B1b: copy_trader rewire to shared helper
+
+Pure-refactor follow-up to B1a. Rewires `bot/copy_trader.py::copy_followed_wallets` lines 1744-1813 to call `apply_pre_score_filters_live(trade, username, avg_trader_size, run_scorer=False)` instead of the inline 6-filter block. Same filter set, same order, same verdicts.
+
+### The `run_scorer=False` flag
+
+Without this flag, moving the scorer into the helper would have shifted it BEFORE live's state-dependent filters (max_copies, hedge_blocked, hedge_wait, cross_trader_dupe, event_full, match_full, market_too_long, event_timing). That's a semantic change even though the NET set of accepted trades is the same — it only shifts which filter labels a rejection in `blocked_trades.block_reason`.
+
+With `run_scorer=False`, live skips the scorer inside the helper. The existing inline scorer call at `copy_trader.py:2152` stays untouched, running after all state-dependent filters exactly as before. Pure refactor for live.
+
+Paper continues to call the helper with `run_scorer=True` (default), so paper gets the full 7-step chain (6 filters + scorer) while live gets 6 filters here + scorer inline later. Both evaluate the same trades through the same logic.
+
+### Tests — 2 new cases extending test_trader_filters.py
+
+- `test_run_scorer_false_skips_ml_check_entirely` — asserts score_trade is NOT called when run_scorer=False, passes clean trade
+- `test_run_scorer_false_still_applies_base_filters` — asserts the 6 base filters still fire when run_scorer=False
+
+Full session regression: 163/163 green.
+
+### Block-reason label stability
+
+A helper filter rejection produces a reason string like `"price_range: 85c outside 30-80c"`. The new rewire maps the prefix (before the first colon) back to the legacy `block_reason` label (`"price_range"`) so `filter_audit` and `blocked_trades` bucket counts stay stable across the refactor. The full reason goes into `detail`.
+
 ## 2026-04-15 — Scenario D Phase B1 (paper-side): shared trader_filters helper
 
 Paper path now calls the same decision-filter helper as live would — this fixes the root cause we identified in Phase 1: paper had 5 global filters + no ML scorer, live had 13 per-trader filters + ML. Paper was testing a fundamentally different bot than live.

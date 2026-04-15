@@ -1741,76 +1741,45 @@ def copy_followed_wallets():
                     logger.warning("[NO_REBUY] DB check failed, skipping trade conservatively: %s | %s", _nre, question[:40])
                     continue
 
-            # === RN1 SMART-FILTER ===
-            # 0) Category blacklist: skip blocked categories for this trader
-            if _is_category_blocked(username, question):
-                _cat = _detect_category(question)
-                logger.info("[FILTER] Category '%s' blocked for %s: %s", _cat, username, question[:40])
-                _log_block(username, question, cid, t.get("side", ""), t.get("price", 0),
-                           "category_blacklist", "category '%s' blocked" % _cat, "activity")
-                continue
-
-            # 1) Min Trader USD: per-trader override or global default
+            # === Scenario D Phase B1b — shared base-filter helper ===
+            # The 6 base decision filters (category_blacklist, min_trader_usd,
+            # conviction_ratio, max_fee_bps, price_range, zero_risk) are now
+            # delegated to `bot.trader_filters.apply_pre_score_filters_live`
+            # so paper_follow_candidates applies BYTE-IDENTICAL rules.
+            #
+            # run_scorer=False preserves live's existing filter order:
+            # the ML scorer still runs inline at line ~2152, AFTER the
+            # state-dependent filters (max_copies, hedge, exposure,
+            # event_full, market_too_long). This is a pure refactor for
+            # the live path — same filter set, same order, same verdicts.
             dollar_value = t.get("usdc_size", 0)
-            _min_usd = _MIN_TRADER_USD_MAP.get(username.lower(), config.MIN_TRADER_USD)
-            if dollar_value < _min_usd:
-                logger.info("[FILTER] Size $%.1f < $%.0f: %s",
-                            dollar_value, _min_usd, question[:40])
-                _log_block(username, question, cid, t.get("side", ""), t.get("price", 0),
-                           "min_trader_usd", "$%.1f < $%.0f min" % (dollar_value, _min_usd), "activity")
-                continue
-
-            # 2) Conviction ratio: skip low-conviction trades (arb noise filter)
-            _min_conv = _MIN_CONVICTION_MAP.get(username.lower(), config.MIN_CONVICTION_RATIO)
-            if _min_conv > 0 and avg_trader_size > 0:
-                _conv = dollar_value / avg_trader_size
-                if _conv < _min_conv:
-                    logger.info("[FILTER] Conviction %.1fx < %.1fx min for %s: %s",
-                                _conv, _min_conv, username, question[:40])
-                    _log_block(username, question, cid, t.get("side", ""), t.get("price", 0),
-                               "conviction_ratio", "%.1fx < %.1fx min" % (_conv, _min_conv), "activity")
-                    continue
-
-            # 2b) Fee check: log fee info, skip if MAX_FEE_BPS is set and exceeded
-            if cid:
-                try:
-                    from bot.order_executor import get_fee_rate
-                    _fee = get_fee_rate(cid, t["side"])
-                    t["_fee_bps"] = _fee  # store for later use in trade dict
-                    if _fee > 0:
-                        logger.info("[FEE] %dbps (%.1f%%) on: %s", _fee, _fee/100, question[:40])
-                    if config.MAX_FEE_BPS > 0 and _fee > config.MAX_FEE_BPS:
-                        logger.info("[FILTER] Fee %dbps > max %dbps, skipping: %s", _fee, config.MAX_FEE_BPS, question[:40])
-                        _log_block(username, question, cid, t.get("side", ""), t.get("price", 0),
-                                   "max_fee", "%dbps > %dbps max" % (_fee, config.MAX_FEE_BPS), "activity")
-                        continue
-                except Exception:
-                    pass  # fee lookup failed, don't block trade
-
-            # 3) Preis-Range-Filter: per-trader override via MIN/MAX_ENTRY_PRICE_MAP
             trader_price = t["price"]
-            _min_price = _MIN_ENTRY_PRICE_MAP.get(username.lower(), config.MIN_ENTRY_PRICE)
-            _max_price = _MAX_ENTRY_PRICE_MAP.get(username.lower(), config.MAX_ENTRY_PRICE)
-            if trader_price < _min_price or trader_price > _max_price:
-                logger.info("[FILTER] Preis %.0fc ausserhalb Range (%.0f-%.0fc): %s",
-                            trader_price * 100, _min_price * 100,
-                            _max_price * 100, question[:40])
-                _log_block(username, question, cid, t.get("side", ""), trader_price,
-                           "price_range", "%.0fc outside %.0f-%.0fc" % (trader_price*100, _min_price*100, _max_price*100), "activity")
+            from bot.trader_filters import apply_pre_score_filters_live
+            _passed_base, _base_reason, _base_meta = apply_pre_score_filters_live(
+                trade=t,
+                trader_name=username,
+                avg_trader_size=avg_trader_size,
+                run_scorer=False,
+            )
+            # Forward fee_bps into the trade dict for downstream sizing
+            if _base_meta.get("fee_bps") is not None:
+                t["_fee_bps"] = _base_meta["fee_bps"]
+            if not _passed_base:
+                # Map helper reason strings back to legacy block_reason
+                # labels so filter_audit buckets stay stable.
+                _reason_prefix = _base_reason.split(":", 1)[0] if ":" in _base_reason else _base_reason
+                _cat_detect_act = _base_meta.get("category", "") or ""
+                logger.info("[FILTER] %s: %s: %s", _reason_prefix, username, question[:40])
+                if _reason_prefix == "zero_risk":
+                    _log_block(username, question, cid, t.get("side", ""),
+                               t.get("price", 0), _reason_prefix, _base_reason,
+                               "activity", category=_cat_detect_act)
+                else:
+                    _log_block(username, question, cid, t.get("side", ""),
+                               t.get("price", 0), _reason_prefix, _base_reason,
+                               "activity")
                 continue
-            # Zero-risk category filter (esports underdogs resolve to 0)
-            _cat_detect_act = _detect_category(question)
-            if _is_zero_risk_block(_cat_detect_act, trader_price):
-                logger.info("[FILTER] zero_risk %s at %.0fc < %.0fc: %s",
-                            _cat_detect_act, trader_price*100,
-                            config.ZERO_RISK_MIN_PRICE*100, question[:40])
-                _log_block(username, question, cid, t.get("side", ""), trader_price,
-                           "zero_risk",
-                           "%s underdog at %.0fc < %.0fc threshold" % (
-                               _cat_detect_act, trader_price*100,
-                               config.ZERO_RISK_MIN_PRICE*100),
-                           "activity", category=_cat_detect_act)
-                continue
+            _cat_detect_act = _base_meta.get("category", "") or ""
 
             # 3) Max Kopien pro Markt: nicht X-mal denselben Markt kopieren
             if cid and db.count_copies_for_market(address, cid) >= _get_max_copies(username):
