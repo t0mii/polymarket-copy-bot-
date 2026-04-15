@@ -288,53 +288,38 @@ def paper_follow_candidates():
                 price = t.get("price", 0)
                 question = t.get("market_question", "")
 
-                # Filter 1: Price range (same as copy_trader)
-                if not _paper_price_ok(price, filters):
-                    continue
-
-                # Filter 2: Category blacklist (global)
-                if filters.get("detect_category"):
-                    cat = filters["detect_category"](question)
-                    global_bl = getattr(config, "GLOBAL_CATEGORY_BLACKLIST", "")
-                    if global_bl and cat and cat.lower() in global_bl.lower():
-                        continue
-
-                # PATCH-038: Additional filters for paper-trade realism
-                # Filter 3: Min Trader USD
-                usdc_size = t.get("usdc_size", 0) or 0
-                if usdc_size < config.MIN_TRADER_USD:
-                    continue
-
-                # Filter 4: Conviction ratio
-                if config.MIN_CONVICTION_RATIO > 0:
-                    buy_sizes = [x.get("usdc_size", 0) for x in trades if x.get("trade_type", "").upper() == "BUY" and x.get("usdc_size", 0) > 0]
-                    avg_size = (sum(buy_sizes) / len(buy_sizes)) if buy_sizes else config.DEFAULT_AVG_TRADER_SIZE
-                    if avg_size > 0 and (usdc_size / avg_size) < config.MIN_CONVICTION_RATIO:
-                        continue
-
-                # Filter 5: Zero-risk block (esports underdogs)
+                # Scenario-D Phase B1: paper-live filter symmetry.
+                # One shared helper (`bot/trader_filters.apply_pre_score_filters_live`)
+                # runs the same 6 decision filters + ML scorer here as
+                # `copy_trader.copy_followed_wallets` applies at 1744-1820.
+                # Before B1 this block had 5 global-only filters + no scorer,
+                # so paper was testing a fundamentally different bot than live.
+                # Now paper and live reject/accept IDENTICAL trades for the
+                # same input — and both use per-trader MIN/MAX_ENTRY_PRICE_MAP,
+                # CATEGORY_BLACKLIST, MIN_TRADER_USD_MAP, MIN_CONVICTION_MAP.
                 try:
-                    from bot.copy_trader import _is_zero_risk_block, _detect_category
-                    _paper_cat = _detect_category(question)
-                    if _is_zero_risk_block(_paper_cat, price):
-                        continue
-                except Exception:
-                    pass
-
-                # Filter 6 (staleness) removed 2026-04-15: replaced by the
-                # per-candidate last_paper_scan_ts watermark above. The live
-                # copy path in bot/copy_trader.py still uses ENTRY_TRADE_SEC
-                # because it scans every 60s and needs price freshness.
-
-                # Filter 7: Fee check
-                if config.MAX_FEE_BPS > 0:
-                    try:
-                        from bot.order_executor import get_fee_rate
-                        _fee = get_fee_rate(t["condition_id"], t.get("side", ""))
-                        if _fee > config.MAX_FEE_BPS:
-                            continue
-                    except Exception:
-                        pass
+                    _buy_sizes = [
+                        x.get("usdc_size", 0) for x in trades
+                        if x.get("trade_type", "").upper() == "BUY"
+                        and x.get("usdc_size", 0) > 0
+                    ]
+                    _avg_size = (sum(_buy_sizes) / len(_buy_sizes)) if _buy_sizes \
+                        else config.DEFAULT_AVG_TRADER_SIZE
+                    from bot.trader_filters import apply_pre_score_filters_live
+                    _trader_name = (cand.get("username") or address[:12])
+                    _passed, _reason, _meta = apply_pre_score_filters_live(
+                        trade=t,
+                        trader_name=_trader_name,
+                        avg_trader_size=_avg_size,
+                    )
+                except Exception as _fe:
+                    logger.debug("[PAPER] filter helper error for %s: %s — skipping",
+                                 address[:10], _fe)
+                    continue
+                if not _passed:
+                    logger.debug("[PAPER] filter reject %s: %s",
+                                 address[:10], _reason)
+                    continue
 
                 bet_size = _paper_bet_size(price, filters)
                 shares = bet_size / price if price > 0 else 0

@@ -2,6 +2,81 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-15 — Scenario D Phase B1 (paper-side): shared trader_filters helper
+
+Paper path now calls the same decision-filter helper as live would — this fixes the root cause we identified in Phase 1: paper had 5 global filters + no ML scorer, live had 13 per-trader filters + ML. Paper was testing a fundamentally different bot than live.
+
+B1 ships in two commits:
+
+- **B1a (this commit)** adds `bot/trader_filters.py::apply_pre_score_filters` and rewires `auto_discovery.paper_follow_candidates` to use it. **Live path untouched** in this commit so it's rollback-safe via pure git revert with zero DB state. The helper is validated by a 14-test parity suite that covers each filter branch in isolation.
+- **B1b (follow-up commit)** will rewire `copy_trader.copy_followed_wallets` to use the same helper. Pure refactor if the parity suite is comprehensive; if there's any unexpected divergence, it surfaces in B1a's paper observations first.
+
+### What the helper does
+
+`apply_pre_score_filters(trade, trader_name, avg_trader_size, maps, config_module)` runs these 6 filters in the exact order `copy_trader.py:1744-1820` uses:
+
+1. `category_blacklist` — per-trader map lookup, falls back to empty set
+2. `min_trader_usd` — per-trader map with global `MIN_TRADER_USD` fallback
+3. `conviction_ratio` — per-trader map with global `MIN_CONVICTION_RATIO` fallback, requires `avg_trader_size` input
+4. `max_fee_bps` — global `MAX_FEE_BPS`, calls `order_executor.get_fee_rate(cid, side)`, fail-open on exception (matches live's existing behavior at `copy_trader.py:1787-1788`)
+5. `price_range` — per-trader `_MIN/MAX_ENTRY_PRICE_MAP` with global fallback
+6. `zero_risk_block` — global `_is_zero_risk_block(category, price)` for esports-underdog markets
+7. `trade_scorer` — `bot.trade_scorer.score()` with the same (`spread=0.03, hours_until_event=12`) hardcoded defaults as `copy_trader.py:929-931`
+
+Returns `(passed, reason, metadata)`:
+- `passed=True` iff the scorer action is EXECUTE or BOOST
+- `reason='ok'` on pass; `'<filter_name>: <detail>'` on reject
+- `metadata` always carries `category`, `score_action`, `ml_score`, `fee_bps`
+
+Scorer BLOCK → `passed=False, reason='score_block: ...'`. Scorer QUEUE → `passed=False, reason='score_queue: (paper rejects, live enqueues)'` — live callers inspect `metadata.score_action` and enqueue instead of discarding; paper always rejects.
+
+The helper is fully isolated from module-level state: callers pass a `maps` dict + `config_module` parameter explicitly. Tests call the core directly with custom maps; production calls the thin wrapper `apply_pre_score_filters_live()` which reads the module globals `_CATEGORY_BLACKLIST`, `_MIN/MAX_ENTRY_PRICE_MAP`, `_MIN_TRADER_USD_MAP`, `_MIN_CONVICTION_MAP` from `bot.copy_trader`.
+
+### What the paper rewire does
+
+`auto_discovery.paper_follow_candidates` lines 288-337 were a 5-filter block that used global thresholds + no scorer. Replaced with:
+
+```python
+_avg_size = (sum(_buy_sizes) / len(_buy_sizes)) if _buy_sizes else config.DEFAULT_AVG_TRADER_SIZE
+_passed, _reason, _meta = apply_pre_score_filters_live(trade=t, trader_name=..., avg_trader_size=_avg_size)
+if not _passed:
+    continue
+```
+
+One single helper call with the trade dict + trader_name + computed avg_trader_size. Existing paper_follow regression tests (16) still pass, because `_permissive_filters()` in the test setup returns thresholds wide enough that nothing gets filtered out by the new chain either. The helper change adds the scorer call + per-trader maps — both are benign in the test's synthesized trades.
+
+### Immediate observable impact
+
+Before B1a: paper_trades accepted whatever passed the 5 global filters. Result was the contamination we saw on walter — candidates accumulating paper trades that live would have blocked.
+
+After B1a: paper_trades reflect what live WOULD actually copy. The per-trader maps start filtering paper exactly as they filter live. `ImJustKen` (n=106 WR=32%) would fail `low_win_rate` in the dry-run endpoint regardless, but the NEW paper trades after B1a deploy will be a much cleaner signal — we're now measuring the right bot.
+
+### Tests — 14 new cases, all TDD
+
+`tests/test_trader_filters.py`:
+1. happy_path_returns_passed_true
+2. category_blacklist_blocks
+3. min_trader_usd_global_blocks
+4. min_trader_usd_per_trader_map_overrides_global
+5. conviction_ratio_blocks
+6. max_fee_bps_blocks
+7. price_range_per_trader_map_blocks_high
+8. price_range_per_trader_map_blocks_low
+9. zero_risk_blocks_esports_underdog
+10. scorer_block_action_rejects_trade
+11. scorer_queue_action_rejects_trade_but_flags_queue
+12. scorer_boost_action_passes
+13. scorer_error_defaults_to_execute (fail-open)
+14. filters_run_in_canonical_order (order assertion)
+
+Full session regression: 161/161 passing.
+
+### What B1a does NOT do (deferred)
+
+- **Live path rewire**: `copy_trader.copy_followed_wallets` still has its inline 6-filter block. B1b will replace lines 1744-1820 with a single helper call. Deferred to a follow-up commit so we can first observe paper behavior under the new chain and verify zero unexpected divergence.
+- **Probation bet-sizing**: `probation_limits(username)` helper exists (Phase γ.5) but `copy_trader` doesn't call it yet. Wiring comes in a separate commit with shadow canary.
+- **AUTO_DISCOVERY_AUTO_PROMOTE flag**: still false. Nothing auto-promotes.
+
 ## 2026-04-15 — Scenario D Phase γ/D: auto-promotion safety infrastructure
 
 Build-before-need infrastructure for the eventual `AUTO_DISCOVERY_AUTO_PROMOTE=true` flip. **Zero live-trading touch, zero behavior change while the flag stays false**. Everything here is code + DB columns + dashboard endpoint that sits dormant until activation, at which point the promotion path becomes dramatically safer than the legacy `n>=50 AND wr>=55% AND pnl>0` gate.
