@@ -1722,6 +1722,11 @@ def get_brain_decisions(limit: int = 50) -> list:
         return [dict(r) for r in rows]
 
 
+def count_brain_decisions() -> int:
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM brain_decisions").fetchone()[0]
+
+
 # === Trade Scorer Helpers ===
 
 def log_trade_score(condition_id: str, trader_name: str, side: str, entry_price: float,
@@ -1775,7 +1780,8 @@ def get_score_range_performance() -> list:
         rows = conn.execute(
             "SELECT "
             "CASE "
-            "  WHEN score_total < 40 THEN '0-39' "
+            "  WHEN score_total < 20 THEN '0-19' "
+            "  WHEN score_total < 40 THEN '20-39' "
             "  WHEN score_total < 60 THEN '40-59' "
             "  WHEN score_total < 80 THEN '60-79' "
             "  ELSE '80-100' "

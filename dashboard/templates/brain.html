@@ -1831,7 +1831,7 @@ function renderScorer(){
 function renderBuckets(scores){
   var box=$('#scoreBuckets');if(!box)return;
   while(box.firstChild)box.removeChild(box.firstChild);
-  var buckets=[['40-59',40,60],['60-79',60,80],['80-100',80,101]];
+  var buckets=[['0-19',0,20],['20-39',20,40],['40-59',40,60],['60-79',60,80],['80-100',80,101]];
   var rows=(scores&&scores.buckets)||scores||[];
   // Normalize: backend may return array of {bucket,n,wins,pnl}
   var byLabel={};
@@ -2745,7 +2745,7 @@ async function refresh(){
 
   // Merge decisions + blocked + ticker events into unified stream
   var merged=[];
-  (decisions||[]).forEach(function(d){merged.push(normDecision(d))});
+  (decItems||[]).forEach(function(d){merged.push(normDecision(d))});
   if(Array.isArray(blocked))blocked.forEach(function(b){merged.push(normBlocked(b))});
   else if(blocked&&blocked.blocked_trades)blocked.blocked_trades.forEach(function(b){merged.push(normBlocked(b))});
   else if(blocked&&blocked.trades)blocked.trades.forEach(function(b){merged.push(normBlocked(b))});
@@ -2759,7 +2759,7 @@ async function refresh(){
   // Live decision funnel: recompute counts off the fresh streamEvents buffer
   updateFunnel();
 
-  renderCoreMini(status,mlInfo,decisions,traders,followed);
+  renderCoreMini(status,mlInfo,decItems,traders,followed);
   renderCandidates(candidates);
   renderPaperSummary(paper);
   renderPaperTrades(paperTradesList);
@@ -2771,7 +2771,8 @@ async function refresh(){
   if(!totScored&&Array.isArray(scores))totScored=scores.reduce(function(a,b){return a+(b.n||b.count||0)},0);
   setCounter('scored',totScored||0);
 
-  var totDec=(decisions&&decisions.length)||0;
+  var decItems=(decisions&&decisions.items)||decisions||[];
+  var totDec=(decisions&&decisions.total)||(decItems&&decItems.length)||0;
   setCounter('decisions',totDec);
 
   // Prefer live eligible count over the training-time snapshot so the
@@ -2783,12 +2784,12 @@ async function refresh(){
   setCounter('candidates',cands);
 
   // Brain state
-  var stateInfo=inferState(decisions,mlInfo);
+  var stateInfo=inferState(decItems,mlInfo);
   setBrainState(stateInfo[0],stateInfo[1]);
 
   // Uptime / cycle labels
   $('#heroUptime').textContent='\u221E';
-  $('#heroLastCycle').textContent=decisions&&decisions[0]?viennaTime(decisions[0].created_at||''):'--';
+  $('#heroLastCycle').textContent=decItems&&decItems[0]?viennaTime(decItems[0].created_at||''):'--';
   $('#heroNextCycle').textContent='~2h cycle';
   $('#heroPerfSince').textContent='2026-04-13';
 
@@ -2796,10 +2797,10 @@ async function refresh(){
   renderFeatures(mlInfo);
   renderScorer();
   renderBuckets(scores);
-  renderActionCounts(decisions);
+  renderActionCounts(decItems);
   renderTraderTable(traders,tuner);
   renderCategoryHeatmap(cats);
-  allDecisions=decisions||[];
+  allDecisions=decItems||[];
   renderPipeline(lc);
   renderPaper(paper);
   renderFilterPrecision(filterPrec);

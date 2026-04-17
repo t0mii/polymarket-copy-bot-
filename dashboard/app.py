@@ -1190,10 +1190,11 @@ def api_equity_curve():
 
 @app.route("/api/brain/decisions")
 def api_brain_decisions():
-    """Recent brain engine decisions."""
+    """Recent brain engine decisions with total count."""
     limit = request.args.get("limit", 50, type=int)
     decisions = db.get_brain_decisions(limit)
-    return jsonify(decisions)
+    total = db.count_brain_decisions()
+    return jsonify({"items": decisions, "total": total})
 
 @app.route("/api/brain/scores")
 def api_brain_scores():
