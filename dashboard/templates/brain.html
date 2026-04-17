@@ -2724,7 +2724,9 @@ function renderPromotionDryRun(data){
 async function refresh(){
   var status=await fetchJSON('/api/upgrade/status');
   var mlInfo=await fetchJSON('/api/upgrade/ml-info');
-  var decisions=await fetchJSON('/api/brain/decisions?limit=200');
+  var _decRaw=await fetchJSON('/api/brain/decisions?limit=200');
+  var decItems=(_decRaw&&_decRaw.items)||_decRaw||[];
+  var decTotal=(_decRaw&&_decRaw.total)||(decItems&&decItems.length)||0;
   var scores=await fetchJSON('/api/brain/scores');
   var lc=await fetchJSON('/api/brain/lifecycle');
   var traders=await fetchJSON('/api/upgrade/trader-performance');
@@ -2771,9 +2773,7 @@ async function refresh(){
   if(!totScored&&Array.isArray(scores))totScored=scores.reduce(function(a,b){return a+(b.n||b.count||0)},0);
   setCounter('scored',totScored||0);
 
-  var decItems=(decisions&&decisions.items)||decisions||[];
-  var totDec=(decisions&&decisions.total)||(decItems&&decItems.length)||0;
-  setCounter('decisions',totDec);
+  setCounter('decisions',decTotal);
 
   // Prefer live eligible count over the training-time snapshot so the
   // counter reflects new closes as they happen (not just at 6h retrain).
