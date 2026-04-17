@@ -77,6 +77,9 @@ Weil selbst Profis manchmal Mist machen. Deshalb hat der Bot ein ganzes System a
 - **Two-Model ML System** (2026-04-14) — `ml_copy` trainiert nur auf copy_trades fuer Live-Entscheidungen, `ml_block` trainiert nur auf blocked_trades fuer Filter-Audit. Self-disabling edge gate: ml_copy adjustments greifen nur wenn Modell die Baseline schlaegt
 - **Filter Precision Audit** (2026-04-14) — Pro Filter-Reason misst ob Regeln echte Winner blocken oder korrekt Verlierer aussortieren. Magnitude-aware via verified per-(trader, category) $PnL — WR-basierte LOOSEN-Empfehlung wird von Ground-Truth-Dollar-Daten ueberschrieben wenn asymmetric
 - **Trader Lifecycle** — Automatischer Lebenszyklus: DISCOVERED → OBSERVING → PAPER_FOLLOW → LIVE_FOLLOW → PAUSED → KICKED. Findet, testet und promoted neue Trader selbstaendig
+- **Auto-Discovery + Promotion** (2026-04-15) — Scenario D: scannt Polymarket nach profitablen Tradern, paper-traded sie, promoted automatisch bei bewiesenem Edge (Wilson LB ≥ 0.55, ROI ≥ 3%, n ≥ 30). Safety Rails: Probation-Tier (50% Bet, $5 Cap, 20 Trades), Circuit Breaker (-$10 Verlust = Halt), 7-Tage Cooldown zwischen Promotions
+- **Sell-Retry mit Dust-Cleanup** (2026-04-16) — Max 3 Retry-Versuche bei fehlgeschlagenem Sell, danach Close als Dust-Position statt Endlos-Loop
+- **Auto-Tuner Staged Rollout** (2026-04-17) — `AUTO_TUNER_MODE=readonly` loggt Tier-Empfehlungen basierend auf verified PnL als brain_decisions. `active` schreibt Settings. `disabled` macht nichts
 - **Autonomous Trading** — Eigene Trades basierend auf Momentum + AI Divergence Signalen. Startet im Paper-Modus, wird bei bewiesener Performance automatisch auf Live promoted
 
 ---
@@ -259,23 +262,25 @@ Eine Website auf deinem Server die in Echtzeit zeigt was passiert:
 
 Der Bot optimiert sich alle 2 Stunden selbst. Keine manuelle Anpassung noetig.
 
-> **WICHTIG:** Brain Engine + Auto-Tuner schreiben automatisch in
-> `settings.env`. Auto-managed Maps die bei jedem Brain-Cycle (alle 2h)
-> ueberschrieben werden: `BET_SIZE_MAP`, `TRADER_EXPOSURE_MAP`,
-> `MIN/MAX_ENTRY_PRICE_MAP`, `MIN_TRADER_USD_MAP`, `TAKE_PROFIT_MAP`,
-> `STOP_LOSS_MAP`, `MAX_COPIES_PER_MARKET_MAP`, `HEDGE_WAIT_TRADERS`,
-> `MIN_CONVICTION_RATIO_MAP`, `AVG_TRADER_SIZE_MAP`.
+> **AUTO_TUNER_MODE** steuert ob der Auto-Tuner Settings aendert:
 >
-> **Manual-only (piff-philosophy, NICHT auto-written)**:
-> `CATEGORY_BLACKLIST_MAP`, `FOLLOWED_TRADERS`. Auto-pause/throttle/kick
-> sind ebenfalls disabled. Brain und Auto-Tuner berechnen Empfehlungen
-> und loggen sie (als `BLACKLIST_RECOMMENDED` in `brain_decisions` und
-> als `[TUNER] Would blacklist (DISABLED, manual): ...` im log) aber
-> schreiben nicht in settings.env. User manage diese Felder manuell.
+> | Mode | Verhalten |
+> |------|-----------|
+> | `disabled` | Tuner laeuft nicht (Default) |
+> | `readonly` | Berechnet Empfehlungen, loggt als `TUNER_RECOMMENDATION` in brain_decisions, schreibt NICHT in settings.env |
+> | `active` | Berechnet + schreibt alle Maps in settings.env |
 >
-> Initialwerte bleiben in `settings.example.env` als Fallback bis Brain
-> echte Daten hat. Nach einem `settings.env` Update muss `polybot`
-> restartet werden damit der laufende Prozess die neuen Werte liest.
+> **Auto-managed Maps (bei `active` mode):** `BET_SIZE_MAP`,
+> `TRADER_EXPOSURE_MAP`, `MIN/MAX_ENTRY_PRICE_MAP`, `MIN_TRADER_USD_MAP`,
+> `TAKE_PROFIT_MAP`, `STOP_LOSS_MAP`, `MAX_COPIES_PER_MARKET_MAP`,
+> `HEDGE_WAIT_TRADERS`, `MIN_CONVICTION_RATIO_MAP`.
+>
+> **Manual-only (piff-philosophy, NICHT auto-written, egal welcher Mode)**:
+> `CATEGORY_BLACKLIST_MAP`, `FOLLOWED_TRADERS`.
+>
+> Im `readonly` Mode sieht man die Empfehlungen im Brain-Dashboard unter
+> "Brain Decisions" mit Source-Tag `[verified_only]` oder `[all_trades_fallback]`
+> damit klar ist ob echte Wallet-Daten oder Formula-PnL verwendet wurden.
 
 ### Verified P&L (Datenqualitaet)
 
@@ -285,9 +290,10 @@ statt der Formel-basierten DB-`pnl_realized` (die durch Drag/Fees um
 ~10.3% vom Wallet-Wert abweichen kann).
 
 `get_trader_rolling_pnl()` returnt verified-only Stats wenn ein Trader
->= 10 Trades mit `usdc_received` UND `actual_size` im Zeitfenster hat.
-Sonst Fallback auf alle Trades (less accurate). Der Source-Mode steht
-in der return dict (`source: verified_only` oder `all_trades_fallback`).
+>= 3 Trades mit `usdc_received` UND `actual_size` im Zeitfenster hat
+(min_verified=3 seit 2026-04-17). Sonst Fallback auf alle Trades (less
+accurate). Der Source-Mode steht in der return dict (`source:
+verified_only` oder `all_trades_fallback`).
 
 Ohne diesen Fix wuerde KING7777777 als WEAK-Tier eingestuft (DB sagt
 $+7), obwohl seine 11 verifizierten Trades $+48.62 mit 81.8% WR zeigen

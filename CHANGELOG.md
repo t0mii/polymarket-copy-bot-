@@ -2,6 +2,36 @@
 
 Session-level notes. For full commit history see `git log`.
 
+## 2026-04-17 — Brain Dashboard fixes + Betting Optimization + Auto-Tuner staged rollout
+
+### Bug fixes
+- **NO-side current_price double-inversion** — `update_copy_positions` invertierte den schon side-spezifischen `curPrice` von `fetch_wallet_positions` nochmal → DB speicherte YES-Preis für NO-Trades. Fix: Inversion entfernt, `_yes_price` nur für Resolve-Logik. Verified: id=3145 korrigierte sich von 0.6551→0.4600 nach einem Zyklus.
+- **Score Buckets leer (n=0/1/0)** — `get_score_range_performance()` jointe über `trade_id` (nur 1/4975 verlinkt). Fix: nutzt `outcome_pnl` direkt → 1612 Trades sichtbar.
+- **trade_id Linkage fehlte** — Nach `create_copy_trade()` wurde `trade_scores.trade_id` nie zurückgeschrieben. Fix: `db.link_trade_score()` + Aufruf im Scorer-Pfad.
+- **Score Bucket API-Keys** — API gab `total`/`total_pnl` zurück, JS erwartete `n`/`pnl`. Aligned.
+- **Brain Decisions Zähler** — Zeigte 200 (Fetch-Limit) statt 635 (Total). Fix: API gibt `{items, total}` zurück.
+- **Brain Page blank** — 17 sequentielle `await fetchJSON()` Calls → 2+ Minuten Load (paper-traders 30s timeout). Fix: `Promise.all` für parallele Fetches → ~30s.
+- **Filter Precision Timeout** — 633k blocked_trades → >20s synchroner Compute. Fix: 10min In-Memory Cache.
+
+### Betting Optimization (settings.env on walter)
+- `MAX_POSITION_SIZE`: $2 → **$4**
+- xsaghav/sovereign: `BET_SIZE_MAP` 1%/3% → **4%** ($3.59/Trade statt $0.89/$2.00)
+- KING: `CATEGORY_BLACKLIST_MAP` erweitert um `cs` (war -$9.17 bei 0% WR)
+- Jargs: `BET_SIZE_MAP` 2% → **1%** (-19% ROI)
+- `MIN_ENTRY_PRICE_MAP`: xsaghav+sovereign von 30c → **20c** (20-40c Bucket ist profitabelster)
+
+### Auto-Tuner Staged Rollout
+- `AUTO_TUNER_MODE` env var: `disabled` | `readonly` | `active`
+- `readonly` deployed on walter: Tuner berechnet verified-PnL-basierte Tier-Empfehlungen und loggt als `TUNER_RECOMMENDATION` brain_decisions
+- `min_verified=3` statt 10 für aggressivere Nutzung von Wallet-verifizierten PnL-Daten
+- Source-Tag `[verified_only]` / `[all_trades_fallback]` in jeder Empfehlung
+
+### What piff needs to do
+1. `git pull` — 8 neue Commits seit gestern
+2. Score Buckets: sein Dashboard zeigt jetzt auch die echten Daten (1600+ Trades statt 0)
+3. `AUTO_TUNER_MODE=readonly` in settings.env wenn er Tuner-Empfehlungen sehen will
+4. Browser Hard-Refresh (Ctrl+Shift+R) für die neuen JS-Änderungen
+
 ## 2026-04-16 — Merge piff's 14-bug code audit + fix 2 issues in his patch
 
 Cherry-picked `187c04c` from piff-custom. 14 verified bugs from full code audit (11 agents, 6 areas). Plus our 4 planned fixes (side-unaware fallback guard, resolved_flat, dryrun exception handler, cutoff validation) which piff implemented first.
