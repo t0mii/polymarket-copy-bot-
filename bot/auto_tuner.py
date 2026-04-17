@@ -309,16 +309,18 @@ def auto_tune():
 
     classifications = {}
     for name in trader_names:
-        s7 = db.get_trader_rolling_pnl(name, 7)
-        s30 = db.get_trader_rolling_pnl(name, 30)
+        s7 = db.get_trader_rolling_pnl(name, 7, min_verified=3)
+        s30 = db.get_trader_rolling_pnl(name, 30, min_verified=3)
         cnt7 = s7.get("cnt", 0) or 0
         wins7 = s7.get("wins", 0) or 0
         pnl7 = s7.get("total_pnl", 0) or 0
         wr7 = round(wins7 / cnt7 * 100, 1) if cnt7 > 0 else 50
+        src7 = s7.get("source", "unknown")
         cnt30 = s30.get("cnt", 0) or 0
         wins30 = s30.get("wins", 0) or 0
         pnl30 = s30.get("total_pnl", 0) or 0
         wr30 = round(wins30 / cnt30 * 100, 1) if cnt30 > 0 else 50
+        src30 = s30.get("source", "unknown")
 
         tier = _classify_trader(pnl7, wr7, cnt7, pnl30, wr30, portfolio_value=portfolio_value)
         blacklist = _get_category_blacklist(name)
@@ -326,6 +328,7 @@ def auto_tune():
         classifications[name] = {
             "tier": tier, "pnl_7d": pnl7, "wr_7d": wr7, "trades_7d": cnt7,
             "pnl_30d": pnl30, "wr_30d": wr30, "trades_30d": cnt30,
+            "source_7d": src7, "source_30d": src30,
             "blacklist": blacklist,
         }
 
@@ -510,9 +513,10 @@ def auto_tune():
     if mode == "readonly":
         for name, data in classifications.items():
             tier = data["tier"]
-            detail = "tier=%s bet=%.2f exp=%.2f | 7d: %dt %.1f%%WR $%.2f" % (
+            detail = "tier=%s bet=%.2f exp=%.2f | 7d: %dt %.1f%%WR $%.2f [%s] | 30d: %dt $%.2f [%s]" % (
                 tier, bet_map.get(name, 0), exposure_map.get(name, 0),
-                data["trades_7d"], data["wr_7d"], data["pnl_7d"])
+                data["trades_7d"], data["wr_7d"], data["pnl_7d"], data.get("source_7d", "?"),
+                data["trades_30d"], data["pnl_30d"], data.get("source_30d", "?"))
             db.log_brain_decision(
                 "TUNER_RECOMMENDATION", name, detail, "", summary)
         logger.info("[TUNER] READONLY — logged %d recommendations: %s",

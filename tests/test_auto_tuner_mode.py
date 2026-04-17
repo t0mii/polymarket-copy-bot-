@@ -70,5 +70,36 @@ class TestAutoTunerMode(unittest.TestCase):
             config.AUTO_TUNER_MODE = orig
 
 
+    def test_readonly_uses_verified_pnl_source(self):
+        """Recommendations must be based on verified PnL, not formula."""
+        import config
+        orig = getattr(config, "AUTO_TUNER_MODE", "disabled")
+        config.AUTO_TUNER_MODE = "readonly"
+        try:
+            with self.db.get_connection() as conn:
+                conn.execute(
+                    "UPDATE copy_trades SET "
+                    "  usdc_received = actual_size + pnl_realized, "
+                    "  closed_at = datetime('now', 'localtime') "
+                    "WHERE wallet_username = 'alice' AND actual_size IS NOT NULL"
+                )
+            from bot.auto_tuner import auto_tune
+            with patch("bot.auto_tuner._read_settings",
+                       return_value="BET_SIZE_MAP=\nTRADER_EXPOSURE_MAP=\n"), \
+                 patch("bot.settings_lock.write_settings"):
+                auto_tune()
+            with self.db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT reason FROM brain_decisions "
+                    "WHERE action='TUNER_RECOMMENDATION' AND target='alice' "
+                    "ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            self.assertIsNotNone(row)
+            self.assertIn("verified", row["reason"],
+                          "recommendation must show verified source, got: %s" % row["reason"])
+        finally:
+            config.AUTO_TUNER_MODE = orig
+
+
 if __name__ == "__main__":
     unittest.main()
