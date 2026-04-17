@@ -284,7 +284,6 @@ def api_live_data():
             _actual_size = _open_match.get("actual_size") if _open_match else None
             _show_size = round(_actual_size, 2) if _actual_size else (round(_db_size, 2) if _db_size else round(iv, 2))
             _show_entry = _actual_entry or _db_entry or ap
-            # PnL: shares × (current_price - entry_price)
             _shares = _show_size / _show_entry if _show_entry > 0 else 0
             _show_pnl = round(_shares * (cp - _show_entry), 2) if _shares > 0 else round(cv - iv, 2)
 
