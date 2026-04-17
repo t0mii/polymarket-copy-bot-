@@ -271,7 +271,17 @@ def _update_blacklist_setting(content, new_map):
 
 
 def auto_tune():
-    """Analysiere alle Trader und passe ALLE Settings an."""
+    """Analysiere alle Trader und passe ALLE Settings an.
+
+    Respects AUTO_TUNER_MODE:
+      disabled — return immediately
+      readonly — compute + log recommendations to brain_decisions, no write
+      active   — compute + write to settings.env
+    """
+    mode = getattr(config, "AUTO_TUNER_MODE", "disabled").strip().lower()
+    if mode == "disabled":
+        return
+
     with db.get_connection() as conn:
         traders = conn.execute(
             "SELECT DISTINCT wallet_username FROM copy_trades "
@@ -491,17 +501,28 @@ def auto_tune():
         logger.info("[TUNER] Would blacklist (DISABLED, manual): %s",
                     dict(sorted(blacklist_map.items())))
 
+    # Build summary for both modes
+    changes = []
+    for name, data in sorted(classifications.items(), key=lambda x: x[1]["pnl_7d"], reverse=True):
+        changes.append("%s=%s($%.0f)" % (name, data["tier"].upper(), data["pnl_7d"]))
+    summary = " | ".join(changes)
+
+    if mode == "readonly":
+        for name, data in classifications.items():
+            tier = data["tier"]
+            detail = "tier=%s bet=%.2f exp=%.2f | 7d: %dt %.1f%%WR $%.2f" % (
+                tier, bet_map.get(name, 0), exposure_map.get(name, 0),
+                data["trades_7d"], data["wr_7d"], data["pnl_7d"])
+            db.log_brain_decision(
+                "TUNER_RECOMMENDATION", name, detail, "", summary)
+        logger.info("[TUNER] READONLY — logged %d recommendations: %s",
+                    len(classifications), summary)
+        return
+
     if content != old_content:
         from bot.settings_lock import write_settings
         write_settings(content)
-        changes = []
-        for name, data in sorted(classifications.items(), key=lambda x: x[1]["pnl_7d"], reverse=True):
-            changes.append("%s=%s($%.0f)" % (name, data["tier"].upper(), data["pnl_7d"]))
-        summary = " | ".join(changes)
         logger.info("[TUNER] Settings updated: %s", summary)
-
-        # Hot-reload: copy_trader._reload_maps() picks up mtime change within
-        # one scan cycle (~5s). No restart needed; no warning.
         logger.info("[TUNER] Settings written — copy_trader will reload on next scan")
     else:
         logger.info("[TUNER] No changes needed")

@@ -310,6 +310,11 @@ if _raw_cutoff:
         _raw_cutoff = ""
 PROMOTE_STATS_CUTOFF     = _raw_cutoff
 
+# Auto-tuner mode: disabled | readonly | active
+# readonly: computes optimal settings, logs to brain_decisions, doesn't write
+# active: computes + writes to settings.env
+AUTO_TUNER_MODE          = os.getenv('AUTO_TUNER_MODE', 'disabled').strip().lower()
+
 # Scenario-D Phase B2 — paper resolution tracker config.
 # `PAPER_EVAL_MAX_HOURS` replaces the hardcoded 4h cutoff in
 # auto_discovery.close_paper_trades. Rows past this window get closed with
